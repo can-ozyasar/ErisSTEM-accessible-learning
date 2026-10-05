@@ -25,7 +25,7 @@ def test_worker_processes_claimed_job(tmp_path: Path):
 
     documents = DocumentStore(store.sessions)
     assert process_one(store, source_root, tmp_path / "derived", documents) is True
-    assert (tmp_path / "derived" / f"{checksum}.text-layer.json").exists()
+    assert list((tmp_path / "derived").glob(f"{checksum}.*.text-layer.json"))
     assert store.list_recent()[0].id == job.id
     assert store.list_recent()[0].status == "succeeded"
     assert documents.get(f"source-{checksum[:16]}")["blocks"][0]["status"] == "review_required"

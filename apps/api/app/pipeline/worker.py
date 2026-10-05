@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -12,7 +13,10 @@ from .pdf_text_layer import PdfSafetyError, extract_text_layer
 def write_text_layer(result, output_dir: Path) -> Path:
     """Ara çıktıyı atomik olarak özel türetilmiş veri dizinine yazar."""
     output_dir.mkdir(parents=True, exist_ok=True)
-    destination = output_dir / f"{result.source_checksum}.text-layer.json"
+    pages = sorted({block.source.page for block in result.blocks})
+    scope = "all" if len(pages) == result.page_count else "pages-" + "-".join(map(str, pages))
+    scope_id = hashlib.sha256(scope.encode()).hexdigest()[:12]
+    destination = output_dir / f"{result.source_checksum}.{scope_id}.text-layer.json"
     temporary = destination.with_suffix(".tmp")
     temporary.write_text(
         json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"

@@ -222,6 +222,12 @@ class DocumentStore:
                 else (record.published_payload if published else record.draft_payload)
             )
 
+    def list_drafts(self) -> list[dict]:
+        with self.sessions() as session:
+            return list(
+                session.scalars(select(ContentDocument.draft_payload).order_by(ContentDocument.id))
+            )
+
     def save_draft(self, payload: dict) -> None:
         with self.sessions.begin() as session:
             record = session.get(ContentDocument, payload["id"])

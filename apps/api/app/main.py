@@ -102,6 +102,18 @@ class QueueJobResponse(BaseModel):
     created: bool
 
 
+class TeacherDocumentSummary(BaseModel):
+    id: str
+    title: str
+    published_revision: int
+    review_required_count: int
+
+
+class ReviewQueueItem(BaseModel):
+    document_id: str
+    block: Block
+
+
 SAMPLE_CHECKSUM = hashlib.sha256(b"synthetic-geometry-page-v1").hexdigest()
 demo_document = Document(
     id="synthetic-geometry-01",
@@ -242,12 +254,31 @@ def read_draft(document_id: str, _: Role = teacher_role):
     return get_document(document_id)
 
 
-@app.get("/v1/teacher/review-queue", response_model=list[Block])
+@app.get("/v1/teacher/documents", response_model=list[TeacherDocumentSummary])
+def list_teacher_documents(_: Role = teacher_role):
+    documents = [Document.model_validate(payload) for payload in document_store.list_drafts()]
+    return [
+        TeacherDocumentSummary(
+            id=item.id,
+            title=item.title,
+            published_revision=item.published_revision,
+            review_required_count=sum(block.status == "review_required" for block in item.blocks),
+        )
+        for item in documents
+    ]
+
+
+@app.get("/v1/teacher/review-queue", response_model=list[ReviewQueueItem])
 def review_queue(_: Role = teacher_role):
-    return sorted(
-        (b for b in get_document(demo_document.id).blocks if b.status == "review_required"),
-        key=lambda b: b.validation.confidence,
-    )
+    items = []
+    for payload in document_store.list_drafts():
+        document = Document.model_validate(payload)
+        items.extend(
+            ReviewQueueItem(document_id=document.id, block=block)
+            for block in document.blocks
+            if block.status == "review_required"
+        )
+    return sorted(items, key=lambda item: item.block.validation.confidence)
 
 
 @app.put("/v1/teacher/documents/{document_id}/blocks/{block_id}", response_model=Block)

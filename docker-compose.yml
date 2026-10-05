@@ -8,10 +8,26 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    networks: [internal]
+  worker:
+    build: ./apps/api
+    command: ["python", "-m", "app.pipeline.queue_worker", "--source-root", "/private/meb", "--output-dir", "/private/derived"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://eristem:eristem@db:5432/eristem
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./data/meb:/private/meb:ro
+      - ./data/derived:/private/derived
+    mem_limit: 1g
+    cpus: 1.0
+    networks: [internal]
   web:
     build: ./apps/web
     ports: ["5173:80"]
     depends_on: [api]
+    networks: [internal]
   db:
     image: postgres:16-alpine
     environment:
@@ -24,5 +40,9 @@ services:
       timeout: 3s
       retries: 10
     volumes: ["postgres_data:/var/lib/postgresql/data"]
+    networks: [internal]
 volumes:
   postgres_data:
+networks:
+  internal:
+    internal: true

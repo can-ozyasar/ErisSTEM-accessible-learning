@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import time
 from pathlib import Path
 
 from ..job_store import DocumentStore, JobStore, make_session_factory
@@ -37,12 +38,18 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="ErişSTEM kuyruk worker'ı")
     parser.add_argument("--source-root", type=Path, default=Path("data/meb"))
     parser.add_argument("--output-dir", type=Path, default=Path("data/derived"))
+    parser.add_argument("--poll-seconds", type=float, default=2.0)
+    parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
     sessions = make_session_factory()
-    processed = process_one(
-        JobStore(sessions), args.source_root, args.output_dir, DocumentStore(sessions)
-    )
-    print("processed" if processed else "idle")
+    store, documents = JobStore(sessions), DocumentStore(sessions)
+    while True:
+        processed = process_one(store, args.source_root, args.output_dir, documents)
+        print("processed" if processed else "idle")
+        if args.once:
+            break
+        if not processed:
+            time.sleep(args.poll_seconds)
     return 0
 
 

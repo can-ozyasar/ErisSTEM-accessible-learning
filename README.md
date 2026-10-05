@@ -42,6 +42,12 @@ cd apps/api
 python -m app.pipeline.queue_worker --source-root ../../data/meb --output-dir ../../data/derived
 ```
 
+Yetkili operatör bir kaynağı checksum ile kuyruğa ekler; öğrenci bu işlemi yapamaz:
+
+```bash
+python -m app.pipeline.enqueue_source --input ../../data/meb/kitap.pdf --source-root ../../data/meb
+```
+
 ## Sınırlar
 
 - Öğrencinin dosya yükleme endpoint'i yoktur.
@@ -94,6 +100,12 @@ To process one queued job (the worker consumes only administrator-created jobs):
 ```bash
 cd apps/api
 python -m app.pipeline.queue_worker --source-root ../../data/meb --output-dir ../../data/derived
+```
+
+An authorised operator queues a local source with its checksum; students cannot perform this action:
+
+```bash
+python -m app.pipeline.enqueue_source --input ../../data/meb/book.pdf --source-root ../../data/meb
 ```
 
 ## Boundaries

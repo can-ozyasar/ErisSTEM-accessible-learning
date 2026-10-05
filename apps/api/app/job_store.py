@@ -21,6 +21,8 @@ from sqlalchemy import (
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
+from .migrations import apply_postgres_migrations
+
 
 class Base(DeclarativeBase):
     pass
@@ -77,6 +79,7 @@ def database_url() -> str:
 
 def make_session_factory(url: str | None = None) -> sessionmaker[Session]:
     engine = create_engine(url or database_url(), pool_pre_ping=True)
+    apply_postgres_migrations(engine)
     Base.metadata.create_all(engine)
     # Sadece yerel geliştirme DB'si için geriye dönük küçük şema yükseltmesi.
     # Üretim PostgreSQL'i apps/api/migrations/0002_processing_job_source_path.sql ile yükseltilir.

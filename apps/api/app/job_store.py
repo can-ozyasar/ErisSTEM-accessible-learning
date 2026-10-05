@@ -8,7 +8,16 @@ from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint, create_engine, inspect, select
+from sqlalchemy import (
+    JSON,
+    DateTime,
+    Integer,
+    String,
+    UniqueConstraint,
+    create_engine,
+    inspect,
+    select,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -26,7 +35,9 @@ class JobStatus(StrEnum):
 
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
-    __table_args__ = (UniqueConstraint("source_checksum", "pipeline_version", name="uq_job_source_pipeline"),)
+    __table_args__ = (
+        UniqueConstraint("source_checksum", "pipeline_version", name="uq_job_source_pipeline"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -37,6 +48,24 @@ class ProcessingJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     last_error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
+class ContentDocument(Base):
+    __tablename__ = "content_documents"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    draft_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    published_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+
+
+class DocumentAudit(Base):
+    __tablename__ = "document_audit"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(20), nullable=False)
+    action: Mapped[str] = mapped_column(String(80), nullable=False)
+    block_id: Mapped[str | None] = mapped_column(String(100))
+    detail: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
 def database_url() -> str:
@@ -108,7 +137,9 @@ class JobStore:
 
     def list_recent(self) -> list[ProcessingJob]:
         with self.sessions() as session:
-            return list(session.scalars(select(ProcessingJob).order_by(ProcessingJob.created_at.desc())))
+            return list(
+                session.scalars(select(ProcessingJob).order_by(ProcessingJob.created_at.desc()))
+            )
 
     def claim_next(self) -> ProcessingJob | None:
         """Bir worker'ın işlemesi için sıradaki işi sahiplenir."""
@@ -142,3 +173,72 @@ class JobStore:
             job.status = status
             job.last_error_code = error_code
             job.updated_at = datetime.now(UTC)
+
+
+class DocumentStore:
+    def __init__(self, sessions: sessionmaker[Session]):
+        self.sessions = sessions
+
+    def ensure(self, payload: dict) -> None:
+        with self.sessions.begin() as session:
+            if session.get(ContentDocument, payload["id"]):
+                return
+            published = {
+                **payload,
+                "blocks": [b for b in payload["blocks"] if b["status"] == "published"],
+            }
+            session.add(
+                ContentDocument(
+                    id=payload["id"], draft_payload=payload, published_payload=published
+                )
+            )
+
+    def reset_for_test(self, payload: dict) -> None:
+        with self.sessions.begin() as session:
+            session.query(DocumentAudit).delete()
+            session.query(ContentDocument).delete()
+        self.ensure(payload)
+
+    def get(self, document_id: str, published: bool = False) -> dict | None:
+        with self.sessions() as session:
+            record = session.get(ContentDocument, document_id)
+            return (
+                None
+                if record is None
+                else (record.published_payload if published else record.draft_payload)
+            )
+
+    def save_draft(self, payload: dict) -> None:
+        with self.sessions.begin() as session:
+            record = session.get(ContentDocument, payload["id"])
+            if record is None:
+                raise LookupError("Belge bulunamadı")
+            record.draft_payload = payload
+
+    def publish(self, payload: dict) -> None:
+        with self.sessions.begin() as session:
+            record = session.get(ContentDocument, payload["id"])
+            if record is None:
+                raise LookupError("Belge bulunamadı")
+            record.draft_payload = payload
+            record.published_payload = payload
+
+    def add_audit(
+        self, document_id: str, actor_role: str, action: str, block_id: str | None, detail: str
+    ) -> None:
+        with self.sessions.begin() as session:
+            session.add(
+                DocumentAudit(
+                    id=str(uuid4()),
+                    document_id=document_id,
+                    at=datetime.now(UTC),
+                    actor_role=actor_role,
+                    action=action,
+                    block_id=block_id,
+                    detail=detail,
+                )
+            )
+
+    def audit(self) -> list[DocumentAudit]:
+        with self.sessions() as session:
+            return list(session.scalars(select(DocumentAudit).order_by(DocumentAudit.at)))

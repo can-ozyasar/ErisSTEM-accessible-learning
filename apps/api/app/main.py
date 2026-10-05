@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from pathlib import PurePosixPath
 from typing import Literal
 
@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
 from .auth import Role, require_roles
-from .job_store import JobStore, ProcessingJob, make_session_factory
+from .job_store import DocumentStore, JobStore, ProcessingJob, make_session_factory
 
 
 class SourceCoordinate(BaseModel):
@@ -98,17 +98,66 @@ class QueueJobResponse(BaseModel):
 
 
 SAMPLE_CHECKSUM = hashlib.sha256(b"synthetic-geometry-page-v1").hexdigest()
-document = Document(
+demo_document = Document(
     id="synthetic-geometry-01",
     title="Sentetik geometri: dik üçgen",
     license_notice="Sentetik demo içeriğidir; MEB kaynağı değildir.",
     blocks=[
-        Block(id="heading-1", kind="heading", reading_order=1, text="Dik üçgende Pisagor bağıntısı", status="published", source=SourceCoordinate(page=1, bbox=(72, 72, 500, 102), source_checksum=SAMPLE_CHECKSUM, extraction_step="pdf-text-layer"), validation=Validation(schema_passed=True, render_score=1, source_agreement=1, confidence=1)),
-        Block(id="paragraph-1", kind="paragraph", reading_order=2, text="Kenar uzunlukları a, b ve hipotenüs c olan dik üçgende ilişki aşağıdaki formülle verilir.", status="published", source=SourceCoordinate(page=1, bbox=(72, 116, 520, 154), source_checksum=SAMPLE_CHECKSUM, extraction_step="pdf-text-layer"), validation=Validation(schema_passed=True, render_score=1, source_agreement=1, confidence=.98)),
-        Block(id="formula-1", kind="formula-display", reading_order=3, latex="a^2 + b^2 = c", mathml="<math><msup><mi>a</mi><mn>2</mn></msup><mo>+</mo><msup><mi>b</mi><mn>2</mn></msup><mo>=</mo><mi>c</mi></math>", status="review_required", source=SourceCoordinate(page=1, bbox=(180, 180, 420, 225), source_checksum=SAMPLE_CHECKSUM, extraction_step="formula-ocr-fallback"), validation=Validation(schema_passed=True, render_score=.63, source_agreement=.51, confidence=.42, reasons=["Hipotenüs üssü OCR sonucunda kayıp olabilir."])),
+        Block(
+            id="heading-1",
+            kind="heading",
+            reading_order=1,
+            text="Dik üçgende Pisagor bağıntısı",
+            status="published",
+            source=SourceCoordinate(
+                page=1,
+                bbox=(72, 72, 500, 102),
+                source_checksum=SAMPLE_CHECKSUM,
+                extraction_step="pdf-text-layer",
+            ),
+            validation=Validation(
+                schema_passed=True, render_score=1, source_agreement=1, confidence=1
+            ),
+        ),
+        Block(
+            id="paragraph-1",
+            kind="paragraph",
+            reading_order=2,
+            text="Kenar uzunlukları a, b ve hipotenüs c olan dik üçgende ilişki aşağıdaki formülle verilir.",
+            status="published",
+            source=SourceCoordinate(
+                page=1,
+                bbox=(72, 116, 520, 154),
+                source_checksum=SAMPLE_CHECKSUM,
+                extraction_step="pdf-text-layer",
+            ),
+            validation=Validation(
+                schema_passed=True, render_score=1, source_agreement=1, confidence=0.98
+            ),
+        ),
+        Block(
+            id="formula-1",
+            kind="formula-display",
+            reading_order=3,
+            latex="a^2 + b^2 = c",
+            mathml="<math><msup><mi>a</mi><mn>2</mn></msup><mo>+</mo><msup><mi>b</mi><mn>2</mn></msup><mo>=</mo><mi>c</mi></math>",
+            status="review_required",
+            source=SourceCoordinate(
+                page=1,
+                bbox=(180, 180, 420, 225),
+                source_checksum=SAMPLE_CHECKSUM,
+                extraction_step="formula-ocr-fallback",
+            ),
+            validation=Validation(
+                schema_passed=True,
+                render_score=0.63,
+                source_agreement=0.51,
+                confidence=0.42,
+                reasons=["Hipotenüs üssü OCR sonucunda kayıp olabilir."],
+            ),
+        ),
     ],
 )
-audit_log: list[AuditEntry] = []
 
 
 any_role = Depends(require_roles(Role.STUDENT, Role.TEACHER, Role.REVIEWER, Role.ADMIN))
@@ -118,9 +167,10 @@ admin_role = Depends(require_roles(Role.ADMIN))
 
 
 def get_document(document_id: str) -> Document:
-    if document_id != document.id:
+    payload = document_store.get(document_id)
+    if payload is None:
         raise HTTPException(status_code=404, detail="Belge bulunamadı")
-    return document
+    return Document.model_validate(payload)
 
 
 def validate_formula(update: Correction) -> None:
@@ -140,6 +190,8 @@ app.add_middleware(
     allow_headers=["Content-Type", "X-Role"],
 )
 job_store = JobStore(make_session_factory())
+document_store = DocumentStore(job_store.sessions)
+document_store.ensure(demo_document.model_dump(mode="json"))
 
 
 def job_response(job: ProcessingJob, created: bool) -> QueueJobResponse:
@@ -174,8 +226,10 @@ def list_processing_jobs(_: Role = admin_role):
 
 @app.get("/v1/student/documents/{document_id}", response_model=Document)
 def read_published(document_id: str, _: Role = any_role):
-    source = get_document(document_id)
-    return source.model_copy(update={"blocks": [b for b in source.blocks if b.status == "published"]})
+    payload = document_store.get(document_id, published=True)
+    if payload is None:
+        raise HTTPException(status_code=404, detail="Belge bulunamadı")
+    return Document.model_validate(payload)
 
 
 @app.get("/v1/teacher/documents/{document_id}", response_model=Document)
@@ -185,7 +239,10 @@ def read_draft(document_id: str, _: Role = teacher_role):
 
 @app.get("/v1/teacher/review-queue", response_model=list[Block])
 def review_queue(_: Role = teacher_role):
-    return sorted((b for b in document.blocks if b.status == "review_required"), key=lambda b: b.validation.confidence)
+    return sorted(
+        (b for b in get_document(demo_document.id).blocks if b.status == "review_required"),
+        key=lambda b: b.validation.confidence,
+    )
 
 
 @app.put("/v1/teacher/documents/{document_id}/blocks/{block_id}", response_model=Block)
@@ -195,13 +252,22 @@ def correct_block(document_id: str, block_id: str, update: Correction, role: Rol
     if block is None or block.kind != "formula-display":
         raise HTTPException(status_code=404, detail="Formül bulunamadı")
     if block.revision != update.expected_revision:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="İçerik değişti; tekrar yükleyin")
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="İçerik değişti; tekrar yükleyin"
+        )
     validate_formula(update)
     block.latex, block.mathml = update.latex, update.mathml
     block.status = "approved"
     block.revision += 1
-    block.validation = Validation(schema_passed=True, render_score=1, source_agreement=1, confidence=1, reasons=["Öğretmen düzeltmesi"])
-    audit_log.append(AuditEntry(at=datetime.now(UTC), actor_role=role, action="formula_corrected", block_id=block.id, detail=update.reason))
+    block.validation = Validation(
+        schema_passed=True,
+        render_score=1,
+        source_agreement=1,
+        confidence=1,
+        reasons=["Öğretmen düzeltmesi"],
+    )
+    document_store.save_draft(source.model_dump(mode="json"))
+    document_store.add_audit(source.id, role, "formula_corrected", block.id, update.reason)
     return block
 
 
@@ -210,15 +276,29 @@ def publish(document_id: str, role: Role = reviewer_role):
     source = get_document(document_id)
     pending = [b.id for b in source.blocks if b.status == "review_required"]
     if pending:
-        raise HTTPException(status_code=422, detail={"message": "Denetim bekleyen öğeler var", "block_ids": pending})
+        raise HTTPException(
+            status_code=422, detail={"message": "Denetim bekleyen öğeler var", "block_ids": pending}
+        )
     for block in source.blocks:
         if block.status == "approved":
             block.status = "published"
     source.published_revision += 1
-    audit_log.append(AuditEntry(at=datetime.now(UTC), actor_role=role, action="document_published", detail=f"revision={source.published_revision}"))
+    document_store.publish(source.model_dump(mode="json"))
+    document_store.add_audit(
+        source.id, role, "document_published", None, f"revision={source.published_revision}"
+    )
     return source
 
 
 @app.get("/v1/audit", response_model=list[AuditEntry])
 def audit(_: Role = reviewer_role):
-    return audit_log
+    return [
+        AuditEntry(
+            at=item.at,
+            actor_role=item.actor_role,
+            action=item.action,
+            block_id=item.block_id,
+            detail=item.detail,
+        )
+        for item in document_store.audit()
+    ]

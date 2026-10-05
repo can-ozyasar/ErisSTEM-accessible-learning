@@ -14,7 +14,9 @@ def write_text_layer(result, output_dir: Path) -> Path:
     output_dir.mkdir(parents=True, exist_ok=True)
     destination = output_dir / f"{result.source_checksum}.text-layer.json"
     temporary = destination.with_suffix(".tmp")
-    temporary.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.write_text(
+        json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     temporary.replace(destination)
     return destination
 

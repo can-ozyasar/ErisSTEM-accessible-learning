@@ -79,7 +79,9 @@ def extract_text_layer(path: Path, source_root: Path) -> ExtractedDocument:
 
     with pdf:
         if pdf.is_encrypted:
-            raise PdfSafetyError("Şifreli PDF işlenmez; yetkili kullanıcıdan şifresiz kaynak istenir")
+            raise PdfSafetyError(
+                "Şifreli PDF işlenmez; yetkili kullanıcıdan şifresiz kaynak istenir"
+            )
         if pdf.page_count < 1 or pdf.page_count > MAX_PAGES:
             raise PdfSafetyError(f"PDF sayfa sayısı 1 ile {MAX_PAGES} arasında olmalı")
         page_count = pdf.page_count

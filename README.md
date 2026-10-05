@@ -17,6 +17,8 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 docker compose up --build
 ```
 
+Linux'ta worker'ın türetilmiş private dosyaları size ait kalması için gerekirse Compose'u şu değişkenlerle başlatın: `LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build`.
+
 API: `http://localhost:8000/docs` · Web: `http://localhost:5173`
 
 Yerelde:
@@ -76,6 +78,8 @@ This repository contains **no MEB PDFs, page images, or converted real textbook 
 ```bash
 docker compose up --build
 ```
+
+On Linux, if needed, start Compose with `LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build` so private derived files remain owned by your local user.
 
 API: `http://localhost:8000/docs` · Web: `http://localhost:5173`
 

@@ -8,3 +8,10 @@ coverage/
 *.pyc
 *.egg-info/
 data/private/
+# Telifli MEB kaynakları ve bu kaynaklardan türetilen artefact'lar yalnız yerelde kalır.
+data/meb/
+data/derived/
+*.pdf
+*.epub
+*.brf
+*.db

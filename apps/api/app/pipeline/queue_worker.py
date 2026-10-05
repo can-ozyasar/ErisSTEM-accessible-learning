@@ -19,13 +19,20 @@ def process_one(
     if job is None:
         return False
     try:
-        result = extract_text_layer(source_root / job.source_relative_path, source_root)
+        pages = (
+            None
+            if job.selected_pages == "all"
+            else {int(value) for value in job.selected_pages.split(",")}
+        )
+        result = extract_text_layer(source_root / job.source_relative_path, source_root, pages)
         if result.source_checksum != job.source_checksum:
             store.fail(job.id, "source_checksum_mismatch")
             return True
         write_text_layer(result, output_dir)
         if documents is not None:
-            documents.create_draft(draft_from_text_layer(result, "İçe aktarılan kaynak taslağı"))
+            documents.create_draft(
+                draft_from_text_layer(result, "İçe aktarılan kaynak taslağı", job.selected_pages)
+            )
         store.finish(job.id)
     except PdfSafetyError:
         store.fail(job.id, "pdf_safety_error")

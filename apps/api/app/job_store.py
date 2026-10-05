@@ -38,12 +38,18 @@ class JobStatus(StrEnum):
 class ProcessingJob(Base):
     __tablename__ = "processing_jobs"
     __table_args__ = (
-        UniqueConstraint("source_checksum", "pipeline_version", name="uq_job_source_pipeline"),
+        UniqueConstraint(
+            "source_checksum",
+            "pipeline_version",
+            "selected_pages",
+            name="uq_job_source_pipeline_scope",
+        ),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
     source_relative_path: Mapped[str] = mapped_column(String(512), nullable=False)
+    selected_pages: Mapped[str] = mapped_column(String(1000), nullable=False, default="all")
     pipeline_version: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=JobStatus.QUEUED)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -82,7 +88,7 @@ def make_session_factory(url: str | None = None) -> sessionmaker[Session]:
     apply_postgres_migrations(engine)
     Base.metadata.create_all(engine)
     # Sadece yerel geliştirme DB'si için geriye dönük küçük şema yükseltmesi.
-    # Üretim PostgreSQL'i apps/api/migrations/0002_processing_job_source_path.sql ile yükseltilir.
+    # Üretim PostgreSQL'i apps/api/migrations/ ile yükseltilir.
     if engine.dialect.name == "sqlite":
         columns = {column["name"] for column in inspect(engine).get_columns("processing_jobs")}
         if "source_relative_path" not in columns:
@@ -90,7 +96,25 @@ def make_session_factory(url: str | None = None) -> sessionmaker[Session]:
                 connection.exec_driver_sql(
                     "ALTER TABLE processing_jobs ADD COLUMN source_relative_path VARCHAR(512)"
                 )
+        if "selected_pages" not in columns:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "ALTER TABLE processing_jobs ADD COLUMN selected_pages VARCHAR(1000) DEFAULT 'all'"
+                )
     return sessionmaker(engine, expire_on_commit=False)
+
+
+def normalize_selected_pages(selected_pages: str | None) -> str:
+    """Sayfa seçimini deterministik iş idempotency anahtarına dönüştürür."""
+    if selected_pages is None or selected_pages.strip().lower() == "all":
+        return "all"
+    try:
+        pages = sorted({int(value.strip()) for value in selected_pages.split(",")})
+    except ValueError as exc:
+        raise ValueError("Seçili sayfalar virgülle ayrılmış pozitif tam sayılar olmalı") from exc
+    if not pages or pages[0] < 1:
+        raise ValueError("Seçili sayfalar pozitif tam sayılar olmalı")
+    return ",".join(map(str, pages))
 
 
 class JobStore:
@@ -98,14 +122,20 @@ class JobStore:
         self.sessions = sessions
 
     def enqueue(
-        self, source_checksum: str, source_relative_path: str, pipeline_version: str
+        self,
+        source_checksum: str,
+        source_relative_path: str,
+        pipeline_version: str,
+        selected_pages: str | None = None,
     ) -> tuple[ProcessingJob, bool]:
-        """Aynı kaynak+sürüm için mevcut işi döndürür; yeni işi yalnız bir kez oluşturur."""
+        """Aynı kaynak+sürüm+sayfa kapsamı için mevcut işi döndürür."""
+        selected_pages = normalize_selected_pages(selected_pages)
         with self.sessions() as session:
             existing = session.scalar(
                 select(ProcessingJob).where(
                     ProcessingJob.source_checksum == source_checksum,
                     ProcessingJob.pipeline_version == pipeline_version,
+                    ProcessingJob.selected_pages == selected_pages,
                 )
             )
             if existing is not None:
@@ -115,6 +145,7 @@ class JobStore:
                 id=str(uuid4()),
                 source_checksum=source_checksum,
                 source_relative_path=source_relative_path,
+                selected_pages=selected_pages,
                 pipeline_version=pipeline_version,
                 status=JobStatus.QUEUED,
                 attempts=0,
@@ -132,6 +163,7 @@ class JobStore:
                     select(ProcessingJob).where(
                         ProcessingJob.source_checksum == source_checksum,
                         ProcessingJob.pipeline_version == pipeline_version,
+                        ProcessingJob.selected_pages == selected_pages,
                     )
                 )
                 if existing is None:  # Beklenmeyen bir bütünlük hatasını gizleme.

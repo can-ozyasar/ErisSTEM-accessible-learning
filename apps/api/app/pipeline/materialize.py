@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import hashlib
+
 from .pdf_text_layer import ExtractedDocument
 
 
-def draft_from_text_layer(result: ExtractedDocument, title: str) -> dict:
+def draft_from_text_layer(
+    result: ExtractedDocument, title: str, selected_pages: str = "all"
+) -> dict:
+    """İş kapsamını belge kimliğine dahil ederek farklı pilotları ayırır."""
+    scope_suffix = (
+        ""
+        if selected_pages == "all"
+        else f"-{hashlib.sha256(selected_pages.encode()).hexdigest()[:12]}"
+    )
     return {
-        "id": f"source-{result.source_checksum[:16]}",
+        "id": f"source-{result.source_checksum[:16]}{scope_suffix}",
         "title": title,
         "license_notice": "Yerel yetkili kaynak taslağıdır; öğretmen onayı olmadan yayımlanmaz.",
         "published_revision": 0,

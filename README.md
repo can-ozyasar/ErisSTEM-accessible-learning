@@ -44,10 +44,10 @@ cd apps/api
 python -m app.pipeline.queue_worker --source-root ../../data/meb --output-dir ../../data/derived
 ```
 
-Yetkili operatör bir kaynağı checksum ile kuyruğa ekler; öğrenci bu işlemi yapamaz:
+Yetkili operatör bir kaynağı checksum ve öğretmen tarafından seçilmiş sayfa kapsamıyla kuyruğa ekler; öğrenci bu işlemi yapamaz. Aynı kaynak, pipeline sürümü ve sayfa seti tekrar eklenirse mevcut iş döner; farklı sayfa seti ayrı bir taslak oluşturur:
 
 ```bash
-python -m app.pipeline.enqueue_source --input ../../data/meb/kitap.pdf --source-root ../../data/meb
+python -m app.pipeline.enqueue_source --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 13,16,37
 ```
 
 Önce tüm kitabı dönüştürmek yerine private sayfa envanteri çıkarın; seçilecek sayfalar bu envanter ve öğretmen kapsam kararına göre kuyruğa alınacaktır:
@@ -112,10 +112,10 @@ cd apps/api
 python -m app.pipeline.queue_worker --source-root ../../data/meb --output-dir ../../data/derived
 ```
 
-An authorised operator queues a local source with its checksum; students cannot perform this action:
+An authorised operator queues a local source with its checksum and teacher-selected page scope; students cannot perform this action. Re-submitting the same source, pipeline version, and page set reuses the job, while a different page set creates a separate draft:
 
 ```bash
-python -m app.pipeline.enqueue_source --input ../../data/meb/book.pdf --source-root ../../data/meb
+python -m app.pipeline.enqueue_source --input ../../data/meb/book.pdf --source-root ../../data/meb --pages 13,16,37
 ```
 
 Before converting an entire book, generate a private page inventory. Selected pages will be queued after teacher scope review:

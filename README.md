@@ -50,6 +50,12 @@ Yetkili operatör bir kaynağı checksum ile kuyruğa ekler; öğrenci bu işlem
 python -m app.pipeline.enqueue_source --input ../../data/meb/kitap.pdf --source-root ../../data/meb
 ```
 
+Önce tüm kitabı dönüştürmek yerine private sayfa envanteri çıkarın; seçilecek sayfalar bu envanter ve öğretmen kapsam kararına göre kuyruğa alınacaktır:
+
+```bash
+python -m app.pipeline.inventory --input ../../data/meb/kitap.pdf --source-root ../../data/meb --output ../../data/derived/kitap-inventory.json
+```
+
 ## Sınırlar
 
 - Öğrencinin dosya yükleme endpoint'i yoktur.
@@ -110,6 +116,12 @@ An authorised operator queues a local source with its checksum; students cannot 
 
 ```bash
 python -m app.pipeline.enqueue_source --input ../../data/meb/book.pdf --source-root ../../data/meb
+```
+
+Before converting an entire book, generate a private page inventory. Selected pages will be queued after teacher scope review:
+
+```bash
+python -m app.pipeline.inventory --input ../../data/meb/book.pdf --source-root ../../data/meb --output ../../data/derived/book-inventory.json
 ```
 
 ## Boundaries

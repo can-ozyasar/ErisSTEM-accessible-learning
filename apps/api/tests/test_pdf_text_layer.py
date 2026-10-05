@@ -50,3 +50,13 @@ def test_rejects_non_pdf_magic_bytes(tmp_path: Path):
 
     with pytest.raises(PdfSafetyError, match="magic-byte"):
         extract_text_layer(bad_pdf, source_root)
+
+
+def test_allows_official_textbook_size_budget(tmp_path: Path, monkeypatch):
+    source_root = tmp_path / "meb"
+    source_root.mkdir()
+    pdf_path = source_root / "kitap.pdf"
+    create_pdf(pdf_path)
+    # Sınır değeri testte küçültülür; gerçek kodun kabul aralığı 75 MiB'tir.
+    monkeypatch.setattr("app.pipeline.pdf_text_layer.MAX_BYTES", pdf_path.stat().st_size)
+    assert extract_text_layer(pdf_path, source_root).page_count == 1

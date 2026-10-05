@@ -9,6 +9,16 @@ from pathlib import Path
 from .pdf_text_layer import PdfSafetyError, extract_text_layer
 
 
+def write_text_layer(result, output_dir: Path) -> Path:
+    """Ara çıktıyı atomik olarak özel türetilmiş veri dizinine yazar."""
+    output_dir.mkdir(parents=True, exist_ok=True)
+    destination = output_dir / f"{result.source_checksum}.text-layer.json"
+    temporary = destination.with_suffix(".tmp")
+    temporary.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+    temporary.replace(destination)
+    return destination
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ErişSTEM PDF metin katmanı çıkarıcısı")
     parser.add_argument("--input", type=Path, required=True, help="data/meb altındaki PDF")
@@ -19,12 +29,7 @@ def main() -> int:
         result = extract_text_layer(args.input, args.source_root)
     except PdfSafetyError as exc:
         parser.error(str(exc))
-    args.output_dir.mkdir(parents=True, exist_ok=True)
-    destination = args.output_dir / f"{result.source_checksum}.text-layer.json"
-    temporary = destination.with_suffix(".tmp")
-    temporary.write_text(json.dumps(result.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
-    temporary.replace(destination)
-    print(destination)
+    print(write_text_layer(result, args.output_dir))
     return 0
 
 

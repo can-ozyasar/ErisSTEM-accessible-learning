@@ -4,6 +4,7 @@ import hashlib
 import re
 from datetime import UTC, datetime
 from enum import StrEnum
+from pathlib import PurePosixPath
 from typing import Annotated, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
@@ -81,12 +82,22 @@ class AuditEntry(BaseModel):
 
 class QueueJobRequest(BaseModel):
     source_checksum: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    source_relative_path: str = Field(min_length=5, max_length=512)
     pipeline_version: str = Field(min_length=1, max_length=80, pattern=r"^[a-zA-Z0-9._-]+$")
+
+    @field_validator("source_relative_path")
+    @classmethod
+    def valid_source_relative_path(cls, value: str) -> str:
+        path = PurePosixPath(value)
+        if path.is_absolute() or ".." in path.parts or path.suffix.lower() != ".pdf":
+            raise ValueError("Kaynak yolu data/meb altında göreli bir PDF yolu olmalı")
+        return path.as_posix()
 
 
 class QueueJobResponse(BaseModel):
     id: str
     source_checksum: str
+    source_relative_path: str
     pipeline_version: str
     status: str
     attempts: int
@@ -154,6 +165,7 @@ def job_response(job: ProcessingJob, created: bool) -> QueueJobResponse:
     return QueueJobResponse(
         id=job.id,
         source_checksum=job.source_checksum,
+        source_relative_path=job.source_relative_path,
         pipeline_version=job.pipeline_version,
         status=job.status,
         attempts=job.attempts,
@@ -168,7 +180,9 @@ def health(_: Role = any_role):
 
 @app.post("/v1/admin/processing-jobs", response_model=QueueJobResponse, status_code=201)
 def queue_processing_job(request: QueueJobRequest, _: Role = admin_role):
-    job, created = job_store.enqueue(request.source_checksum, request.pipeline_version)
+    job, created = job_store.enqueue(
+        request.source_checksum, request.source_relative_path, request.pipeline_version
+    )
     return job_response(job, created)
 
 

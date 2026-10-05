@@ -26,10 +26,7 @@ def test_teacher_correction_then_reviewer_publish():
 
 
 def test_only_admin_can_queue_and_duplicate_job_is_reused():
-    payload = {
-        "source_checksum": hashlib.sha256(uuid4().bytes).hexdigest(),
-        "pipeline_version": "text-layer-v1",
-    }
+    payload = {"source_checksum": hashlib.sha256(uuid4().bytes).hexdigest(), "source_relative_path": "matematik/kitap.pdf", "pipeline_version": "text-layer-v1"}
     denied = client.post("/v1/admin/processing-jobs", headers={"X-Role": "teacher"}, json=payload)
     first = client.post("/v1/admin/processing-jobs", headers={"X-Role": "admin"}, json=payload)
     second = client.post("/v1/admin/processing-jobs", headers={"X-Role": "admin"}, json=payload)

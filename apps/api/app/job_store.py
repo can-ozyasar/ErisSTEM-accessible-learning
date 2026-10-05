@@ -8,7 +8,7 @@ from enum import StrEnum
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Integer, String, UniqueConstraint, create_engine, select
+from sqlalchemy import DateTime, Integer, String, UniqueConstraint, create_engine, inspect, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
 
@@ -30,6 +30,7 @@ class ProcessingJob(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     source_checksum: Mapped[str] = mapped_column(String(64), nullable=False)
+    source_relative_path: Mapped[str] = mapped_column(String(512), nullable=False)
     pipeline_version: Mapped[str] = mapped_column(String(80), nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default=JobStatus.QUEUED)
     attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
@@ -48,6 +49,15 @@ def database_url() -> str:
 def make_session_factory(url: str | None = None) -> sessionmaker[Session]:
     engine = create_engine(url or database_url(), pool_pre_ping=True)
     Base.metadata.create_all(engine)
+    # Sadece yerel geliştirme DB'si için geriye dönük küçük şema yükseltmesi.
+    # Üretim PostgreSQL'i apps/api/migrations/0002_processing_job_source_path.sql ile yükseltilir.
+    if engine.dialect.name == "sqlite":
+        columns = {column["name"] for column in inspect(engine).get_columns("processing_jobs")}
+        if "source_relative_path" not in columns:
+            with engine.begin() as connection:
+                connection.exec_driver_sql(
+                    "ALTER TABLE processing_jobs ADD COLUMN source_relative_path VARCHAR(512)"
+                )
     return sessionmaker(engine, expire_on_commit=False)
 
 
@@ -55,7 +65,9 @@ class JobStore:
     def __init__(self, sessions: sessionmaker[Session]):
         self.sessions = sessions
 
-    def enqueue(self, source_checksum: str, pipeline_version: str) -> tuple[ProcessingJob, bool]:
+    def enqueue(
+        self, source_checksum: str, source_relative_path: str, pipeline_version: str
+    ) -> tuple[ProcessingJob, bool]:
         """Aynı kaynak+sürüm için mevcut işi döndürür; yeni işi yalnız bir kez oluşturur."""
         with self.sessions() as session:
             existing = session.scalar(
@@ -70,6 +82,7 @@ class JobStore:
             job = ProcessingJob(
                 id=str(uuid4()),
                 source_checksum=source_checksum,
+                source_relative_path=source_relative_path,
                 pipeline_version=pipeline_version,
                 status=JobStatus.QUEUED,
                 attempts=0,
@@ -96,3 +109,36 @@ class JobStore:
     def list_recent(self) -> list[ProcessingJob]:
         with self.sessions() as session:
             return list(session.scalars(select(ProcessingJob).order_by(ProcessingJob.created_at.desc())))
+
+    def claim_next(self) -> ProcessingJob | None:
+        """Bir worker'ın işlemesi için sıradaki işi sahiplenir."""
+        with self.sessions.begin() as session:
+            job = session.scalar(
+                select(ProcessingJob)
+                .where(ProcessingJob.status == JobStatus.QUEUED)
+                .order_by(ProcessingJob.created_at)
+                .with_for_update(skip_locked=True)
+            )
+            if job is None:
+                return None
+            job.status = JobStatus.RUNNING
+            job.attempts += 1
+            job.updated_at = datetime.now(UTC)
+            return job
+
+    def finish(self, job_id: str) -> None:
+        self._set_terminal_status(job_id, JobStatus.SUCCEEDED, None)
+
+    def fail(self, job_id: str, error_code: str) -> None:
+        self._set_terminal_status(job_id, JobStatus.FAILED, error_code)
+
+    def _set_terminal_status(self, job_id: str, status: JobStatus, error_code: str | None) -> None:
+        with self.sessions.begin() as session:
+            job = session.get(ProcessingJob, job_id)
+            if job is None:
+                raise LookupError("İş bulunamadı")
+            if job.status != JobStatus.RUNNING:
+                raise RuntimeError("İş running durumda değil")
+            job.status = status
+            job.last_error_code = error_code
+            job.updated_at = datetime.now(UTC)

@@ -35,6 +35,13 @@ cd apps/api
 python -m app.pipeline.worker --input ../../data/meb/kitap.pdf --source-root ../../data/meb --output-dir ../../data/derived
 ```
 
+Kuyruğa alınmış tek işi işlemek için (worker yalnız yönetici tarafından oluşturulmuş işleri tüketir):
+
+```bash
+cd apps/api
+python -m app.pipeline.queue_worker --source-root ../../data/meb --output-dir ../../data/derived
+```
+
 ## Sınırlar
 
 - Öğrencinin dosya yükleme endpoint'i yoktur.
@@ -80,6 +87,13 @@ To extract the text layer of an authorised local PDF (output remains under `data
 ```bash
 cd apps/api
 python -m app.pipeline.worker --input ../../data/meb/book.pdf --source-root ../../data/meb --output-dir ../../data/derived
+```
+
+To process one queued job (the worker consumes only administrator-created jobs):
+
+```bash
+cd apps/api
+python -m app.pipeline.queue_worker --source-root ../../data/meb --output-dir ../../data/derived
 ```
 
 ## Boundaries

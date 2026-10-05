@@ -3,22 +3,15 @@ from __future__ import annotations
 import hashlib
 import re
 from datetime import UTC, datetime
-from enum import StrEnum
 from pathlib import PurePosixPath
-from typing import Annotated, Literal
+from typing import Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, status
+from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, field_validator
 
+from .auth import Role, require_roles
 from .job_store import JobStore, ProcessingJob, make_session_factory
-
-
-class Role(StrEnum):
-    STUDENT = "student"
-    TEACHER = "teacher"
-    REVIEWER = "reviewer"
-    ADMIN = "admin"
 
 
 class SourceCoordinate(BaseModel):
@@ -116,18 +109,6 @@ document = Document(
     ],
 )
 audit_log: list[AuditEntry] = []
-
-
-def require_roles(*roles: Role):
-    def dependency(x_role: Annotated[str | None, Header()] = None) -> Role:
-        try:
-            role = Role(x_role or "student")
-        except ValueError as exc:
-            raise HTTPException(status_code=401, detail="Geçersiz rol") from exc
-        if role not in roles:
-            raise HTTPException(status_code=403, detail="Bu işlem için yetkiniz yok")
-        return role
-    return dependency
 
 
 any_role = Depends(require_roles(Role.STUDENT, Role.TEACHER, Role.REVIEWER, Role.ADMIN))

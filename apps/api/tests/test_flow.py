@@ -14,6 +14,18 @@ def test_student_never_receives_unreviewed_formula():
     assert [block["id"] for block in response.json()["blocks"]] == ["heading-1", "paragraph-1"]
 
 
+def test_missing_development_identity_is_rejected():
+    response = client.get("/v1/student/documents/synthetic-geometry-01")
+    assert response.status_code == 401
+
+
+def test_development_role_header_is_disabled_in_production(monkeypatch):
+    monkeypatch.setenv("APP_ENV", "production")
+    response = client.get("/health", headers={"X-Role": "student"})
+    assert response.status_code == 503
+    monkeypatch.delenv("APP_ENV", raising=False)
+
+
 def test_teacher_correction_then_reviewer_publish():
     draft = client.get("/v1/teacher/documents/synthetic-geometry-01", headers={"X-Role": "teacher"}).json()
     formula = next(item for item in draft["blocks"] if item["id"] == "formula-1")

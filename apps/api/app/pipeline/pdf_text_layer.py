@@ -70,7 +70,9 @@ def _read_and_validate(path: Path, source_root: Path) -> tuple[Path, bytes]:
     return safe_path, content
 
 
-def extract_text_layer(path: Path, source_root: Path) -> ExtractedDocument:
+def extract_text_layer(
+    path: Path, source_root: Path, selected_pages: set[int] | None = None
+) -> ExtractedDocument:
     """İzinli bir yerel PDF'den metin bloklarını ve koordinatlarını çıkarır."""
     _, content = _read_and_validate(path, source_root)
     checksum = hashlib.sha256(content).hexdigest()
@@ -86,10 +88,14 @@ def extract_text_layer(path: Path, source_root: Path) -> ExtractedDocument:
             )
         if pdf.page_count < 1 or pdf.page_count > MAX_PAGES:
             raise PdfSafetyError(f"PDF sayfa sayısı 1 ile {MAX_PAGES} arasında olmalı")
+        if selected_pages and (min(selected_pages) < 1 or max(selected_pages) > pdf.page_count):
+            raise PdfSafetyError("Seçili sayfa PDF sayfa sınırlarının dışında")
         page_count = pdf.page_count
         blocks: list[ExtractedBlock] = []
         order = 0
         for page_index, page in enumerate(pdf, start=1):
+            if selected_pages and page_index not in selected_pages:
+                continue
             raw_blocks = page.get_text("blocks", sort=True)
             for x0, y0, x1, y1, text, *_ in raw_blocks:
                 normalized = " ".join(text.split())

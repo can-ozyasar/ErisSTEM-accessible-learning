@@ -26,9 +26,11 @@ def main() -> int:
     parser.add_argument("--input", type=Path, required=True, help="data/meb altındaki PDF")
     parser.add_argument("--source-root", type=Path, default=Path("data/meb"))
     parser.add_argument("--output-dir", type=Path, default=Path("data/derived"))
+    parser.add_argument("--pages", help="Virgülle ayrılmış PDF sayfa numaraları; örnek: 13,16,37")
     args = parser.parse_args()
     try:
-        result = extract_text_layer(args.input, args.source_root)
+        pages = {int(value) for value in args.pages.split(",")} if args.pages else None
+        result = extract_text_layer(args.input, args.source_root, pages)
     except PdfSafetyError as exc:
         parser.error(str(exc))
     print(write_text_layer(result, args.output_dir))

@@ -60,3 +60,16 @@ def test_allows_official_textbook_size_budget(tmp_path: Path, monkeypatch):
     # Sınır değeri testte küçültülür; gerçek kodun kabul aralığı 75 MiB'tir.
     monkeypatch.setattr("app.pipeline.pdf_text_layer.MAX_BYTES", pdf_path.stat().st_size)
     assert extract_text_layer(pdf_path, source_root).page_count == 1
+
+
+def test_extracts_only_explicitly_selected_pages(tmp_path: Path):
+    source_root = tmp_path / "meb"
+    source_root.mkdir()
+    pdf_path = source_root / "kitap.pdf"
+    document = pymupdf.open()
+    for text in ("Birinci", "İkinci"):
+        document.new_page().insert_text((72, 72), text)
+    document.save(pdf_path)
+    document.close()
+    result = extract_text_layer(pdf_path, source_root, {2})
+    assert [block.source.page for block in result.blocks] == [2]

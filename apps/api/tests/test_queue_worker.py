@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pymupdf
 
-from app.job_store import JobStore, make_session_factory
+from app.job_store import DocumentStore, JobStore, make_session_factory
 from app.pipeline.queue_worker import process_one
 
 
@@ -23,10 +23,12 @@ def test_worker_processes_claimed_job(tmp_path: Path):
     store = JobStore(make_session_factory(f"sqlite:///{tmp_path / 'jobs.db'}"))
     job, _ = store.enqueue(checksum, "kitap.pdf", "text-layer-v1")
 
-    assert process_one(store, source_root, tmp_path / "derived") is True
+    documents = DocumentStore(store.sessions)
+    assert process_one(store, source_root, tmp_path / "derived", documents) is True
     assert (tmp_path / "derived" / f"{checksum}.text-layer.json").exists()
     assert store.list_recent()[0].id == job.id
     assert store.list_recent()[0].status == "succeeded"
+    assert documents.get(f"source-{checksum[:16]}")["blocks"][0]["status"] == "review_required"
 
 
 def test_worker_fails_when_checksum_does_not_match(tmp_path: Path):

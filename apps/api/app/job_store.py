@@ -193,6 +193,20 @@ class DocumentStore:
                 )
             )
 
+    def create_draft(self, payload: dict) -> None:
+        """Worker çıktısını yalnız taslak olarak saklar; yayımlanmış içerik boş başlar."""
+        with self.sessions.begin() as session:
+            record = session.get(ContentDocument, payload["id"])
+            if record is None:
+                empty_published = {**payload, "blocks": []}
+                session.add(
+                    ContentDocument(
+                        id=payload["id"], draft_payload=payload, published_payload=empty_published
+                    )
+                )
+            else:
+                record.draft_payload = payload
+
     def reset_for_test(self, payload: dict) -> None:
         with self.sessions.begin() as session:
             session.query(DocumentAudit).delete()

@@ -65,6 +65,11 @@ class Correction(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class Approval(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+    expected_revision: int = Field(ge=1)
+
+
 class AuditEntry(BaseModel):
     at: datetime
     actor_role: Role
@@ -268,6 +273,27 @@ def correct_block(document_id: str, block_id: str, update: Correction, role: Rol
     )
     document_store.save_draft(source.model_dump(mode="json"))
     document_store.add_audit(source.id, role, "formula_corrected", block.id, update.reason)
+    return block
+
+
+@app.post("/v1/teacher/documents/{document_id}/blocks/{block_id}/approve", response_model=Block)
+def approve_text_block(
+    document_id: str, block_id: str, approval: Approval, role: Role = teacher_role
+):
+    source = get_document(document_id)
+    block = next((item for item in source.blocks if item.id == block_id), None)
+    if block is None:
+        raise HTTPException(status_code=404, detail="Blok bulunamadı")
+    if block.kind == "formula-display":
+        raise HTTPException(status_code=422, detail="Formül öğretmen düzeltme akışından geçmeli")
+    if block.status != "review_required":
+        raise HTTPException(status_code=409, detail="Blok denetim beklemiyor")
+    if block.revision != approval.expected_revision:
+        raise HTTPException(status_code=409, detail="İçerik değişti; tekrar yükleyin")
+    block.status = "approved"
+    block.revision += 1
+    document_store.save_draft(source.model_dump(mode="json"))
+    document_store.add_audit(source.id, role, "text_block_approved", block.id, approval.reason)
     return block
 
 

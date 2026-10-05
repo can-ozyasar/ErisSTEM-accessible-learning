@@ -5,6 +5,8 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app, demo_document, document_store
+from app.pipeline.materialize import draft_from_text_layer
+from app.pipeline.pdf_text_layer import ExtractedBlock, ExtractedDocument, SourceCoordinate
 
 client = TestClient(app)
 
@@ -32,6 +34,32 @@ def test_development_role_header_is_disabled_in_production(monkeypatch):
     response = client.get("/health", headers={"X-Role": "student"})
     assert response.status_code == 503
     monkeypatch.delenv("APP_ENV", raising=False)
+
+
+def test_teacher_can_approve_materialized_text_but_not_formula():
+    checksum = "c" * 64
+    extracted = ExtractedDocument(
+        checksum,
+        1,
+        [
+            ExtractedBlock(
+                "p1-b1",
+                "paragraph",
+                1,
+                "Doğrulanacak metin",
+                SourceCoordinate(1, (1, 1, 2, 2), checksum),
+            )
+        ],
+    )
+    draft = draft_from_text_layer(extracted, "Taslak")
+    document_store.create_draft(draft)
+    response = client.post(
+        f"/v1/teacher/documents/{draft['id']}/blocks/p1-b1/approve",
+        headers={"X-Role": "teacher"},
+        json={"reason": "Kaynak kutusuyla karşılaştırıldı.", "expected_revision": 1},
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "approved"
 
 
 def test_teacher_correction_then_reviewer_publish():

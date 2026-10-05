@@ -33,6 +33,17 @@ function TeacherReview() {
   return <main className="teacher"><h1>Öğretmen denetimi</h1><p role="status">{message}</p>{item && <div className="review-grid"><section aria-labelledby="source-title"><h2 id="source-title">Kaynak kanıtı</h2><p>Sayfa {item.source.page}; PDF kutusu: {item.source.bbox.join(", ")}</p><p>İşlem: {item.source.extraction_step}. Güven: %{Math.round(item.validation.confidence * 100)}.</p><p>{item.validation.reasons.join(" ")}</p></section>{item.kind === "formula-display" ? <form onSubmit={save} aria-labelledby="edit-title"><h2 id="edit-title">Erişilebilir formülü düzelt</h2><label htmlFor="latex">LaTeX</label><textarea id="latex" value={latex} onChange={event => setLatex(event.target.value)} required /><p>MathML, sunucuda şema kontrolünden geçer; ham HTML yayımlanmaz.</p><button type="submit">Düzeltmeyi kaydet</button></form> : <section aria-labelledby="approve-title"><h2 id="approve-title">Metin denetimi</h2><p>{item.text}</p><button type="button" onClick={approve}>Metni onayla</button></section>}</div>}</main>;
 }
 
-const teacherMode = new URLSearchParams(window.location.search).get("mode") === "teacher";
-createRoot(document.getElementById("root")!).render(teacherMode ? <TeacherReview /> : <Reader />);
+type TeacherDocument = { id: string; title: string; published_revision: number; review_required_count: number };
+
+function ReviewerPublish() {
+  const [documents, setDocuments] = useState<TeacherDocument[]>([]);
+  const [message, setMessage] = useState("Yayınlanabilir belgeler yükleniyor.");
+  const load = () => fetch(`${API}/v1/teacher/documents`, { headers: { "X-Role": "reviewer" } }).then(r => r.json()).then((items: TeacherDocument[]) => { setDocuments(items); setMessage(items.length ? "Belge seçin." : "Belge bulunamadı."); }).catch(() => setMessage("Belge listesi yüklenemedi."));
+  useEffect(() => { load(); }, []);
+  const publish = async (id: string) => { const result = await fetch(`${API}/v1/reviewer/documents/${id}/publish`, { method: "POST", headers: { "X-Role": "reviewer" } }); setMessage(result.ok ? "Belge yayımlandı." : "Yayın engellendi: denetim bekleyen içerikleri kontrol edin."); if (result.ok) load(); };
+  return <main className="teacher"><h1>Onaylayıcı yayın paneli</h1><p role="status">{message}</p><ul>{documents.map(document => <li key={document.id}><h2>{document.title}</h2><p>Yayın sürümü: {document.published_revision}. Denetim bekleyen blok: {document.review_required_count}.</p><button type="button" disabled={document.review_required_count > 0} onClick={() => publish(document.id)}>Yayımla</button></li>)}</ul></main>;
+}
+
+const mode = new URLSearchParams(window.location.search).get("mode");
+createRoot(document.getElementById("root")!).render(mode === "teacher" ? <TeacherReview /> : mode === "reviewer" ? <ReviewerPublish /> : <Reader />);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

@@ -24,5 +24,6 @@ def test_extracts_grid_and_axis_candidates_with_source_coordinates(tmp_path: Pat
     kinds = {candidate.kind for candidate in result.candidates}
     assert "rectilinear-grid-candidate" in kinds
     assert "perpendicular-axis-candidate" in kinds
+    assert sum(candidate.kind == "rectilinear-grid-candidate" for candidate in result.candidates) == 1
     assert all(candidate.source.page == 1 for candidate in result.candidates)
     assert all(candidate.publication_status == "requires-benchmark-and-review" for candidate in result.candidates)

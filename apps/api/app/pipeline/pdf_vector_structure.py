@@ -125,12 +125,42 @@ def _intersects(horizontal: LineRun, vertical: LineRun) -> bool:
 def _grid_candidates(runs: list[LineRun]) -> list[tuple[tuple[float, float, float, float], dict[str, int]]]:
     horizontals = [run for run in runs if run.orientation == "horizontal"]
     verticals = [run for run in runs if run.orientation == "vertical"]
-    edges = [(horizontal, vertical) for horizontal in horizontals for vertical in verticals if _intersects(horizontal, vertical)]
+    horizontal_edges: dict[int, set[int]] = defaultdict(set)
+    vertical_edges: dict[int, set[int]] = defaultdict(set)
+    for horizontal_index, horizontal in enumerate(horizontals):
+        for vertical_index, vertical in enumerate(verticals):
+            if _intersects(horizontal, vertical):
+                horizontal_edges[horizontal_index].add(vertical_index)
+                vertical_edges[vertical_index].add(horizontal_index)
     candidates = []
-    for horizontal, vertical in edges:
-        related_h = [candidate for candidate in horizontals if _intersects(candidate, vertical)]
-        related_v = [candidate for candidate in verticals if _intersects(horizontal, candidate)]
-        if len(related_h) < 2 or len(related_v) < 2:
+    visited_horizontals: set[int] = set()
+    visited_verticals: set[int] = set()
+    for seed in horizontal_edges:
+        if seed in visited_horizontals:
+            continue
+        component_horizontals = set()
+        component_verticals = set()
+        pending_horizontals = [seed]
+        while pending_horizontals:
+            horizontal_index = pending_horizontals.pop()
+            if horizontal_index in component_horizontals:
+                continue
+            component_horizontals.add(horizontal_index)
+            visited_horizontals.add(horizontal_index)
+            for vertical_index in horizontal_edges[horizontal_index]:
+                if vertical_index in component_verticals:
+                    continue
+                component_verticals.add(vertical_index)
+                visited_verticals.add(vertical_index)
+                pending_horizontals.extend(vertical_edges[vertical_index] - component_horizontals)
+        related_h = [horizontals[index] for index in component_horizontals]
+        related_v = [verticals[index] for index in component_verticals]
+        edge_count = sum(len(horizontal_edges[index] & component_verticals) for index in component_horizontals)
+        possible_edges = len(related_h) * len(related_v)
+        # A sparse set of perpendicular decorations is not a table grid. This
+        # is intentionally conservative; the threshold is benchmarked, not a
+        # publication-confidence claim.
+        if len(related_h) < 2 or len(related_v) < 2 or edge_count / possible_edges < 0.5:
             continue
         x0, x1 = min(run.coordinate for run in related_v), max(run.coordinate for run in related_v)
         y0, y1 = min(run.coordinate for run in related_h), max(run.coordinate for run in related_h)
@@ -139,13 +169,14 @@ def _grid_candidates(runs: list[LineRun]) -> list[tuple[tuple[float, float, floa
         candidates.append(
             (
                 _round_bbox((x0, y0, x1, y1)),
-                {"horizontal_runs": len(related_h), "vertical_runs": len(related_v)},
+                {
+                    "horizontal_runs": len(related_h),
+                    "vertical_runs": len(related_v),
+                    "intersections": edge_count,
+                },
             )
         )
-    unique = {}
-    for bbox, evidence in candidates:
-        unique[bbox] = evidence
-    return sorted(unique.items())
+    return sorted(candidates)
 
 
 def _axis_candidates(runs: list[LineRun]) -> list[tuple[tuple[float, float, float, float], dict[str, int]]]:

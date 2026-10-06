@@ -25,9 +25,13 @@ T4 (CC 7.x) için vLLM seçilmez; resmi dokümantasyon bu kartlarda zaman aşım
 
 1. Notebook **Internet** ayarını yalnız bu ilk model indirmesi için açın ve GPU olarak T4 seçili kalsın.
 2. Yeni bir kod hücresine `paddleocr_vl_runner.py` dosyasının tamamını yapıştırıp çalıştırın. Dosyanın sonundaki koruma bloğu notebook'ta `main()` fonksiyonunu zaten bir kez çağırır; ayrıca çağırmayın.
-3. Yalnız aşağıdaki özetleri paylaşın: `run_metadata.json`, `run_records.json` içindeki `status` sayıları ve terminal hatası varsa hata metni. `results/` içeriğini, PDF'yi veya sayfa görüntülerini paylaşmayın.
+3. Yalnız aşağıdaki özetleri paylaşın: `run_metadata.json`, `run_records.json` içindeki `status` sayıları ve `structural_report.json` içindeki `by_kind` alanı. `results/` içeriğini, PDF'yi veya sayfa görüntülerini paylaşmayın.
 
 Runner terminale yalnız `[n/18] İşleniyor/Tamamlandı/Başarısız` durum satırlarını yazar. Bu satırlar belge içeriği içermez; süreç takibi için güvenle paylaşılabilir.
+
+`structural_report.json` ham MEB metni ya da görüntüsü içermez. Her örnek için yalnız beklenen yapı sinyalinin (ör. formül, tablo veya grafik) varlığı, yapı etiketlerinin sayısı ve bbox sayısı bulunur. Bu rapor **doğruluk skoru değildir**: doğru model seçimi için sonraki aşamada yalnız az sayıdaki Gold örneğinin doğrulanmış beklenen değerleriyle içerik metrikleri hesaplanır.
+
+Her koşum, konfigürasyon kimliği altında (`runs/paddleocr-vl-1.6-transformers-chart-v1/`) saklanır. Aynı konfigürasyon yeniden başlatılırsa yalnız o konfigürasyonun yarım kalmış private artefact'ları temizlenir; önceki Docling ve Paddle smoke-test sonuçları silinmez.
 
 Başarılı koşum sonunda `run_records.json` 18 kaydın her biri için private artefact dosya yollarını ve SHA-256 değerlerini tutar. Boş `expected` alanları varken sonuç yine bilinçli olarak `blocked_missing_gold_annotations` kalır: bu, model seçimini varsayıma göre yapmamızı engeller.
 

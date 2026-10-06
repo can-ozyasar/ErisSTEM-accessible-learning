@@ -86,17 +86,20 @@ def main() -> None:
     pages_dir.mkdir(exist_ok=True)
     results_dir.mkdir(exist_ok=True)
     records: list[dict[str, object]] = []
+    total = len(manifest["items"])
 
     # Komut satırı aracı sayfa başına yeni bir süreç/model kurar. Resmi Python
     # API'si modeli bir kez GPU'ya alır; aşağıdaki tüm sayfalar aynı pipeline'ı
     # kullanır. Bu, benchmark'ın hem daha hızlı hem de tekrar üretilebilir olmasını sağlar.
     pipeline = PaddleOCRVL(engine="transformers")
+    print(f"PaddleOCR-VL hazır. {total} private Gold örneği işlenecek; model bir kez yüklendi.")
 
-    for item in manifest["items"]:
+    for position, item in enumerate(manifest["items"], start=1):
         item_id = item["id"]
         one_page = pages_dir / f"{item_id}.pdf"
         result_dir = results_dir / item_id
         page_pdf(pdf, item["page"], one_page)
+        print(f"[{position}/{total}] İşleniyor: {item_id} ({item['kind']}, PDF sayfası {item['page']})")
         try:
             # Tek sayfalık PDF'nin sonucu tek bir PaddleOCRVLResult olur. JSON ve
             # Markdown private result_dir altında tutulur; terminale ham içerik yazılmaz.
@@ -115,6 +118,7 @@ def main() -> None:
                     "artefacts": artefacts_for(result_dir),
                 }
             )
+            print(f"[{position}/{total}] Tamamlandı: {item_id}")
         except Exception as error:  # Her Gold örneği diğerlerinden bağımsız kayda geçer.
             records.append(
                 {
@@ -125,6 +129,7 @@ def main() -> None:
                     "error": str(error),
                 }
             )
+            print(f"[{position}/{total}] Başarısız: {item_id} ({type(error).__name__})")
 
     metadata = {
         "candidate": "paddleocr-vl",
@@ -146,6 +151,8 @@ def main() -> None:
         json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8"
     )
     shutil.rmtree(pages_dir)
+    completed = sum(record["status"] == "completed" for record in records)
+    print(f"Bitti: {completed}/{total} tamamlandı. Özet: {OUTPUT / 'run_metadata.json'}")
 
 
 if __name__ == "__main__":

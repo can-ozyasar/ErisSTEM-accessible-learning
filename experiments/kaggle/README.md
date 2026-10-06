@@ -27,6 +27,8 @@ T4 (CC 7.x) için vLLM seçilmez; resmi dokümantasyon bu kartlarda zaman aşım
 2. Yeni bir kod hücresine `paddleocr_vl_runner.py` dosyasının tamamını yapıştırıp çalıştırın. Dosyanın sonundaki koruma bloğu notebook'ta `main()` fonksiyonunu zaten bir kez çağırır; ayrıca çağırmayın.
 3. Yalnız aşağıdaki özetleri paylaşın: `run_metadata.json`, `run_records.json` içindeki `status` sayıları ve terminal hatası varsa hata metni. `results/` içeriğini, PDF'yi veya sayfa görüntülerini paylaşmayın.
 
+Runner terminale yalnız `[n/18] İşleniyor/Tamamlandı/Başarısız` durum satırlarını yazar. Bu satırlar belge içeriği içermez; süreç takibi için güvenle paylaşılabilir.
+
 Başarılı koşum sonunda `run_records.json` 18 kaydın her biri için private artefact dosya yollarını ve SHA-256 değerlerini tutar. Boş `expected` alanları varken sonuç yine bilinçli olarak `blocked_missing_gold_annotations` kalır: bu, model seçimini varsayıma göre yapmamızı engeller.
 
 For a T4 (CC 7.x), this runner deliberately avoids vLLM. It uses the official Transformers engine for the full document-parsing pipeline and records only private output artefact paths and SHA-256 checksums. Keep the model-download Internet setting temporary, and never publish PDFs, page images, annotations, or `results/` outputs.

@@ -16,4 +16,14 @@ python -m app.pipeline.benchmark --manifest ../../data/derived/gold.json --input
 
 Boş `expected` alanları sonucu `blocked_missing_gold_annotations` yapar; bu, ölçüm yokken model seçilmesini engeller. Docling veya PaddleOCR-VL kurulu değilse sonuç `unavailable` olarak kayda geçer. Model yalnız Gold metrikleri yayın eşiğini geçerse iş hattına alınır.
 
+Grafik/tablo aday sayfaları önce private vektör/gömülü-görüntü envanterinden geçirilir:
+
+```bash
+python -m app.pipeline.pdf_vector_evidence --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 51 91 --output ../../data/derived/vector-evidence.json
+```
+
+Bu çıktı yalnız kaynak koordinatlı yönlendirme kanıtıdır; tablo veya grafik verisi değildir. `vector-geometry-available` sonucu vektör tabanlı çıkarıcı benchmark'ına, `embedded-image-needs-visual-extraction` sonucu görsel model benchmark'ına yönlenir.
+
 Real MEB PDFs and Gold annotations never enter Git. A private manifest holds `page`, `kind`, and human-verified `expected` values. Empty annotations block measurement; unavailable model packages are recorded as unavailable rather than treated as results.
+
+Chart/table candidate pages first pass through the private vector/embedded-image inventory. Its output is routing evidence with source coordinates, not table or chart data. `vector-geometry-available` routes to a vector-based extractor benchmark; `embedded-image-needs-visual-extraction` routes to a visual-model benchmark.

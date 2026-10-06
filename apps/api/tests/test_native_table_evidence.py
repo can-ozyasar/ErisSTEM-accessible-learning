@@ -5,6 +5,7 @@ from pathlib import Path
 import pymupdf
 
 from app.pipeline.native_table_evidence import (
+    _tokenize,
     extract_native_table_evidence,
     score_native_table_agreement,
 )
@@ -80,3 +81,7 @@ def test_source_checksum_mismatch_is_blocked(tmp_path: Path):
     report = score_native_table_agreement([_draft("b" * 64)], evidence)
 
     assert report["records"][0]["decision"] == "blocked-source-mismatch"
+
+
+def test_math_tokenizer_normalizes_latex_and_prime_variants():
+    assert _tokenize(r"A′ \cup B \notin C") == ["a", "prime", "∪", "b", "∉", "c"]

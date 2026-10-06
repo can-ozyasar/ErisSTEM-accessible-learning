@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -179,11 +180,22 @@ def safe_error_code(error: Exception) -> str:
 
 
 def normalized_tokens(value: str) -> list[str]:
-    return [
-        token
-        for token in " ".join(unicodedata.normalize("NFKC", value).casefold().split()).split()
-        if token
-    ]
+    """Normalise benign notation differences without discarding maths operators."""
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    for latex, symbol in (
+        (r"\notin", "∉"),
+        (r"\subseteq", "⊆"),
+        (r"\subset", "⊂"),
+        (r"\emptyset", "∅"),
+        (r"\varnothing", "∅"),
+        (r"\setminus", "∖"),
+        (r"\cup", "∪"),
+        (r"\cap", "∩"),
+        (r"\in", "∈"),
+    ):
+        normalized = normalized.replace(latex, symbol)
+    normalized = normalized.translate(str.maketrans({"∖": "\\", "′": " prime ", "’": " prime ", "'": " prime "}))
+    return re.findall(r"[\w]+|[∪∩∅∈∉⊆⊂\\=+\-/]", normalized, flags=re.UNICODE)
 
 
 def native_source_agreement(drafts: list[dict], evidence_path: Path) -> dict:
@@ -230,6 +242,7 @@ def native_source_agreement(drafts: list[dict], evidence_path: Path) -> dict:
         if not isinstance(expected, list) or not all(isinstance(token, str) for token in expected):
             records.append({"region_id": region_id, "source_matches": True, "decision": "blocked-invalid-native-evidence"})
             continue
+        expected = [token for value in expected for token in normalized_tokens(value)]
         overlap = sum((Counter(expected) & Counter(actual)).values())
         precision = overlap / len(actual) if actual else 0.0
         recall = overlap / len(expected) if expected else 0.0
@@ -252,6 +265,7 @@ def native_source_agreement(drafts: list[dict], evidence_path: Path) -> dict:
         "report_type": "native-table-agreement-proxy-v1",
         "contains_document_content": False,
         "not_a_gold_accuracy_score": True,
+        "tokenization": "mathematical-canonical-v2",
         "status": "completed",
         "records": records,
     }

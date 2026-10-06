@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import unicodedata
 from collections import Counter
 from dataclasses import asdict, dataclass
@@ -58,11 +59,22 @@ def _asset_source(asset: dict) -> SourceCoordinate:
 
 
 def _tokenize(value: str) -> list[str]:
-    return [
-        token
-        for token in " ".join(unicodedata.normalize("NFKC", value).casefold().split()).split()
-        if token
-    ]
+    """Normalise benign notation differences without discarding maths operators."""
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    for latex, symbol in (
+        (r"\notin", "∉"),
+        (r"\subseteq", "⊆"),
+        (r"\subset", "⊂"),
+        (r"\emptyset", "∅"),
+        (r"\varnothing", "∅"),
+        (r"\setminus", "∖"),
+        (r"\cup", "∪"),
+        (r"\cap", "∩"),
+        (r"\in", "∈"),
+    ):
+        normalized = normalized.replace(latex, symbol)
+    normalized = normalized.translate(str.maketrans({"∖": "\\", "′": " prime ", "’": " prime ", "'": " prime "}))
+    return re.findall(r"[\w]+|[∪∩∅∈∉⊆⊂\\=+\-/]", normalized, flags=re.UNICODE)
 
 
 def _words_in_region(page: pymupdf.Page, bbox: tuple[float, float, float, float]) -> list[str]:
@@ -143,7 +155,8 @@ def score_native_table_agreement(drafts: list[dict], evidence_document: dict) ->
             records.append({"region_id": candidate.source.region_id, "source_matches": False, "decision": "blocked-source-mismatch"})
             continue
         actual = [token for cell in candidate.cells for token in _tokenize(cell.text)]
-        precision, recall, f1 = _multiset_f1(evidence["tokens"], actual)
+        expected = [token for value in evidence["tokens"] for token in _tokenize(value)]
+        precision, recall, f1 = _multiset_f1(expected, actual)
         records.append(
             {
                 "region_id": candidate.source.region_id,
@@ -162,6 +175,7 @@ def score_native_table_agreement(drafts: list[dict], evidence_document: dict) ->
         "report_type": "native-table-agreement-proxy-v1",
         "contains_document_content": False,
         "not_a_gold_accuracy_score": True,
+        "tokenization": "mathematical-canonical-v2",
         "records": records,
     }
 

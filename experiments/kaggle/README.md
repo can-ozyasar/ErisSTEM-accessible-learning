@@ -51,4 +51,6 @@ The runner processes only the checksum-verified private crop, never a full PDF. 
 
 When the private Dataset includes `native-table-evidence-v1.json`, the runner also creates a content-free native-source token-agreement proxy. This is deliberately not a Gold accuracy score, a model-selection decision, or a publishing decision; it only prioritises disagreements for later Gold review.
 
+If the mathematical token normaliser changes, `rescore_native_agreement.py` re-scores the existing private `table_drafts.json` without downloading or running the model again. Share only its content-free report.
+
 Do not publish the MEB PDF, page images, annotations, or notebook outputs. Qwen3-VL 4B QLoRA is explicitly out of scope until Docling/Paddle baselines fail the recorded Gold gates.

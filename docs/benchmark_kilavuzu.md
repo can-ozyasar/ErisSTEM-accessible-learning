@@ -66,6 +66,8 @@ python -m app.pipeline.pdf_visual_regions --input ../../data/meb/kitap.pdf --sou
 
 Görsel model sonucu yalnız sıkı JSON tablo/grafik şemasına doğrulanarak kabul edilir. HTML, serbest Markdown veya doğrudan UI render'ı kabul edilmez; her taslak `source_checksum`, sayfa ve bbox ile eşleşmelidir.
 
+Bir model tablo işaretlemesi döndürürse bu işaretleme yalnız private adaptörde veri olarak ayrıştırılır; `td/th` metinleri sıkı JSON hücre şemasına geçirilir. Model HTML'si asla tarayıcıya veya öğrenci API'sine verilmez. Ayrıştırılamayan, kapanmamış veya tablo olmayan işaretleme reddedilir.
+
 Real MEB PDFs and Gold annotations never enter Git. A private manifest holds `page`, `kind`, and human-verified `expected` values. Empty annotations block measurement; unavailable model packages are recorded as unavailable rather than treated as results.
 
 Chart/table candidate pages first pass through the private vector/embedded-image inventory. Its output is routing evidence with source coordinates, not table or chart data. `vector-geometry-available` routes to a vector-based extractor benchmark; `embedded-image-needs-visual-extraction` routes to a visual-model benchmark.
@@ -81,3 +83,5 @@ Unless at least 50% of a grid's cells are safely bound, its route cannot become 
 A page can contain both vectors and embedded images. The private region-level routing plan sends vector candidates and non-overlapping images to separate benchmark routes. `vector-geometry-benchmark` identifies structured-extraction candidates, while `visual-model-benchmark` identifies PaddleOCR-VL or another benchmark-approved fallback. Every route still requires schema validation and teacher review.
 
 The visual route renders only the routed source region as a private crop; it never exports a complete PDF page or source document. Visual-model output is accepted only through strict JSON table/chart schemas. HTML, free Markdown, and direct UI rendering are rejected; every draft must match its source checksum, page, and bbox.
+
+If a model returns table markup, the private adapter parses it only as data and moves td/th text into the strict JSON cell schema. Model HTML is never sent to a browser or student API. Non-table, malformed, or unclosed markup is rejected.

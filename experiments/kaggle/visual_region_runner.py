@@ -12,6 +12,7 @@ import json
 import shutil
 import subprocess
 import sys
+import unicodedata
 import zipfile
 from collections import Counter
 from html.parser import HTMLParser
@@ -23,6 +24,8 @@ RUN_ID = "paddleocr-vl-1.6-transformers-table-gold-regions-v1"
 OUTPUT = Path("/kaggle/working/eristem-private-visual-region-benchmark") / "runs" / RUN_ID
 SCHEMA_VERSION = "visual-table-draft-v1"
 MAX_MARKUP_CHARS = 200_000
+NATIVE_EVIDENCE_FILENAME = "native-table-evidence-v1.json"
+HIGH_SOURCE_AGREEMENT_F1 = 0.98
 
 
 class TableMarkupError(ValueError):
@@ -175,6 +178,85 @@ def safe_error_code(error: Exception) -> str:
     return type(error).__name__
 
 
+def normalized_tokens(value: str) -> list[str]:
+    return [
+        token
+        for token in " ".join(unicodedata.normalize("NFKC", value).casefold().split()).split()
+        if token
+    ]
+
+
+def native_source_agreement(drafts: list[dict], evidence_path: Path) -> dict:
+    """Produce a content-free agreement proxy; this is never a Gold accuracy score."""
+    try:
+        document = json.loads(evidence_path.read_text(encoding="utf-8"))
+        items = document["evidence"]
+        if document.get("schema_version") != "native-table-evidence-v1" or not isinstance(items, list):
+            raise ValueError("invalid_evidence_schema")
+        evidence = {item["region_id"]: item for item in items}
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError):
+        return {
+            "report_type": "native-table-agreement-proxy-v1",
+            "contains_document_content": False,
+            "not_a_gold_accuracy_score": True,
+            "status": "blocked-invalid-native-evidence",
+            "records": [],
+        }
+    drafts_by_id = {draft.get("source", {}).get("region_id"): draft for draft in drafts}
+    records = []
+    for region_id, item in evidence.items():
+        draft = drafts_by_id.get(region_id)
+        if not isinstance(draft, dict):
+            records.append({"region_id": region_id, "decision": "missing-draft"})
+            continue
+        source, expected_source = draft.get("source"), item.get("source")
+        source_matches = (
+            isinstance(source, dict)
+            and isinstance(expected_source, dict)
+            and source.get("page") == expected_source.get("page")
+            and source.get("source_checksum") == expected_source.get("source_checksum")
+            and list(source.get("bbox", [])) == list(expected_source.get("bbox", []))
+        )
+        if not source_matches:
+            records.append({"region_id": region_id, "source_matches": False, "decision": "blocked-source-mismatch"})
+            continue
+        expected = item.get("tokens")
+        actual = [
+            token
+            for cell in draft.get("cells", [])
+            if isinstance(cell, dict) and isinstance(cell.get("text"), str)
+            for token in normalized_tokens(cell["text"])
+        ]
+        if not isinstance(expected, list) or not all(isinstance(token, str) for token in expected):
+            records.append({"region_id": region_id, "source_matches": True, "decision": "blocked-invalid-native-evidence"})
+            continue
+        overlap = sum((Counter(expected) & Counter(actual)).values())
+        precision = overlap / len(actual) if actual else 0.0
+        recall = overlap / len(expected) if expected else 0.0
+        f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
+        records.append(
+            {
+                "region_id": region_id,
+                "source_matches": True,
+                "token_precision": precision,
+                "token_recall": recall,
+                "token_f1": f1,
+                "decision": (
+                    "high-source-agreement-proxy-needs-gold"
+                    if f1 >= HIGH_SOURCE_AGREEMENT_F1
+                    else "low-source-agreement-needs-review"
+                ),
+            }
+        )
+    return {
+        "report_type": "native-table-agreement-proxy-v1",
+        "contains_document_content": False,
+        "not_a_gold_accuracy_score": True,
+        "status": "completed",
+        "records": records,
+    }
+
+
 def adapt_table(markup: str, asset: dict) -> dict:
     if not markup or len(markup) > MAX_MARKUP_CHARS:
         raise TableMarkupError("invalid_markup_length")
@@ -272,6 +354,21 @@ def main() -> None:
 
     (OUTPUT / "table_drafts.json").write_text(json.dumps(drafts, ensure_ascii=False, indent=2), encoding="utf-8")
     (OUTPUT / "region_records.json").write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
+    evidence_path = manifest_path.parent / NATIVE_EVIDENCE_FILENAME
+    agreement = (
+        native_source_agreement(drafts, evidence_path)
+        if evidence_path.is_file()
+        else {
+            "report_type": "native-table-agreement-proxy-v1",
+            "contains_document_content": False,
+            "not_a_gold_accuracy_score": True,
+            "status": "not-provided",
+            "records": [],
+        }
+    )
+    (OUTPUT / "native_agreement_report.json").write_text(
+        json.dumps(agreement, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     (OUTPUT / "run_metadata.json").write_text(
         json.dumps(
             {
@@ -282,6 +379,7 @@ def main() -> None:
                 "input_private": True,
                 "schema_version": SCHEMA_VERSION,
                 "publication": "blocked_pending_teacher_review",
+                "native_agreement_proxy_status": agreement["status"],
             },
             ensure_ascii=False,
             indent=2,

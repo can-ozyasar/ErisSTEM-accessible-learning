@@ -85,6 +85,15 @@ python -m app.pipeline.visual_table_benchmark \
   --output ../../data/private/paddle/table-gold-report.json
 ```
 
+Gold hazırlığına yardımcı olmak için, aynı kaynak koordinatlarında PDF'nin native metin katmanından private token kanıtı çıkarılabilir. Bu yalnız VLM ile kaynak arasında uyuşmazlık bulmak için bir proxy'dir; Gold doğruluk skoru, model onayı veya yayın kararı değildir.
+
+```bash
+python -m app.pipeline.native_table_evidence extract \
+  --input ../../data/meb/kitap.pdf --source-root ../../data/meb \
+  --regions ../../data/private/visual-regions.json \
+  --output ../../data/private/native-table-evidence-v1.json
+```
+
 Real MEB PDFs and Gold annotations never enter Git. A private manifest holds `page`, `kind`, and human-verified `expected` values. Empty annotations block measurement; unavailable model packages are recorded as unavailable rather than treated as results.
 
 Chart/table candidate pages first pass through the private vector/embedded-image inventory. Its output is routing evidence with source coordinates, not table or chart data. `vector-geometry-available` routes to a vector-based extractor benchmark; `embedded-image-needs-visual-extraction` routes to a visual-model benchmark.
@@ -106,3 +115,5 @@ The visual route renders only the routed source region as a private crop; it nev
 If a model returns table markup, the private adapter parses it only as data and moves td/th text into the strict JSON cell schema. Model HTML is never sent to a browser or student API. Non-table, malformed, or unclosed markup is rejected.
 
 The P46 visual-table run proves only that the formatting/schema path works; one sample never approves a model. A private `visual-table-gold-v1` manifest holds the source region (`region_id`, checksum, page and bbox) and human-verified cells. Metrics are not calculated unless draft and Gold sources match exactly. Fewer than three Gold table samples automatically produce `blocked_insufficient_gold_samples`; with enough samples, every cell, role and text must match exactly before a candidate can be approved for production use. A successful benchmark never removes teacher review.
+
+To assist Gold preparation, private native-text token evidence can be extracted from the PDF at the same source coordinates. It is an agreement proxy for locating VLM/source disagreements only; it is not a Gold accuracy score, a model approval, or a publishing decision.

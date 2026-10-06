@@ -39,14 +39,16 @@ For a T4 (CC 7.x), this runner deliberately avoids vLLM. It uses the official Tr
 
 ## Görsel bölge tablo deneyi / Visual-region table experiment
 
-Private görsel bölge Dataset yolu: `/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-visual-regions-p51-v1`.
+Mevcut üçlü private görsel bölge Dataset yolu: `/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-table-gold-regions-v1`.
 
 1. Private Notebook'ta T4 ve yalnız model indirme süresince Internet etkin olmalıdır.
 2. `visual_region_runner.py` dosyasının tamamını yeni bir hücreye yapıştırıp bir kez çalıştırın.
-3. Yalnız `run_metadata.json` ve `region_records.json` içeriğini paylaşın. `table_drafts.json`, `results/`, görsel crop veya model işaretlemesini paylaşmayın.
+3. Yalnız `run_metadata.json`, `region_records.json` ve `native_agreement_report.json` içeriğini paylaşın. `table_drafts.json`, `results/`, görsel crop, native kanıt veya model işaretlemesini paylaşmayın.
 
 Runner, tam PDF yerine yalnız checksum ile doğrulanan private crop'ı işler. Modelin tablo işaretlemesi doğrudan HTML olarak kullanılmaz; yalnız bir adet güvenle ayrıştırılabilen tablo işaretlemesi, düşük güvenli ve öğretmen denetimli JSON hücre taslağına dönüştürülür. Birden çok/hiç tablo işaretlemesi veya şema sorunu koşumu `blocked` yapar; yayın kapalı kalır.
 
 The runner processes only the checksum-verified private crop, never a full PDF. Model table markup is never used as direct HTML: exactly one safely parsed table becomes a low-confidence, teacher-reviewed JSON cell draft. Zero/multiple table markups or a schema issue produces `blocked`; publication remains disabled.
+
+When the private Dataset includes `native-table-evidence-v1.json`, the runner also creates a content-free native-source token-agreement proxy. This is deliberately not a Gold accuracy score, a model-selection decision, or a publishing decision; it only prioritises disagreements for later Gold review.
 
 Do not publish the MEB PDF, page images, annotations, or notebook outputs. Qwen3-VL 4B QLoRA is explicitly out of scope until Docling/Paddle baselines fail the recorded Gold gates.

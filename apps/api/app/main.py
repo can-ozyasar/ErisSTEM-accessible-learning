@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
 from datetime import datetime
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 
 from .auth import Role, require_roles
@@ -68,6 +71,10 @@ class Correction(BaseModel):
 class Approval(BaseModel):
     reason: str = Field(min_length=5, max_length=500)
     expected_revision: int = Field(ge=1)
+
+
+class TextCorrection(Approval):
+    text: str = Field(min_length=1, max_length=10000)
 
 
 class AuditEntry(BaseModel):
@@ -190,6 +197,23 @@ def get_document(document_id: str) -> Document:
     return Document.model_validate(payload)
 
 
+def review_preview(document: Document, page: int) -> tuple[Path, dict[str, float]]:
+    if not any(block.source.page == page for block in document.blocks):
+        raise HTTPException(status_code=404, detail="Sayfa belgede bulunamadı")
+    root = Path(os.getenv("DERIVED_ROOT", "data/derived")).resolve()
+    directory = (root / "review-pages" / document.id).resolve()
+    if not directory.is_relative_to(root):
+        raise HTTPException(status_code=404, detail="Önizleme bulunamadı")
+    image = directory / f"page-{page}.png"
+    metadata = directory / "metadata.json"
+    if not image.is_file() or not metadata.is_file():
+        raise HTTPException(status_code=404, detail="Önizleme henüz üretilmedi")
+    sizes = json.loads(metadata.read_text(encoding="utf-8"))
+    if str(page) not in sizes:
+        raise HTTPException(status_code=404, detail="Önizleme metadatası bulunamadı")
+    return image, sizes[str(page)]
+
+
 def validate_formula(update: Correction) -> None:
     if not re.fullmatch(r"[a-zA-Z0-9^_+\-=/(){}\\ ]+", update.latex):
         raise HTTPException(status_code=422, detail="LaTeX izinli sembol kümesinin dışında")
@@ -252,6 +276,16 @@ def read_published(document_id: str, _: Role = any_role):
 @app.get("/v1/teacher/documents/{document_id}", response_model=Document)
 def read_draft(document_id: str, _: Role = teacher_role):
     return get_document(document_id)
+
+
+@app.get("/v1/teacher/documents/{document_id}/pages/{page}/preview")
+def page_preview(document_id: str, page: int, _: Role = teacher_role):
+    image, size = review_preview(get_document(document_id), page)
+    return FileResponse(
+        image,
+        media_type="image/png",
+        headers={"X-Pdf-Page-Width": str(size["width"]), "X-Pdf-Page-Height": str(size["height"])},
+    )
 
 
 @app.get("/v1/teacher/documents", response_model=list[TeacherDocumentSummary])
@@ -325,6 +359,29 @@ def approve_text_block(
     block.revision += 1
     document_store.save_draft(source.model_dump(mode="json"))
     document_store.add_audit(source.id, role, "text_block_approved", block.id, approval.reason)
+    return block
+
+
+@app.put("/v1/teacher/documents/{document_id}/blocks/{block_id}/text", response_model=Block)
+def correct_text_block(
+    document_id: str, block_id: str, update: TextCorrection, role: Role = teacher_role
+):
+    source = get_document(document_id)
+    block = next((item for item in source.blocks if item.id == block_id), None)
+    if block is None or block.kind == "formula-display":
+        raise HTTPException(status_code=404, detail="Metin bloğu bulunamadı")
+    if block.revision != update.expected_revision:
+        raise HTTPException(status_code=409, detail="İçerik değişti; tekrar yükleyin")
+    block.text, block.status, block.revision = update.text.strip(), "approved", block.revision + 1
+    block.validation = Validation(
+        schema_passed=True,
+        render_score=1,
+        source_agreement=1,
+        confidence=1,
+        reasons=["Öğretmen metin düzeltmesi"],
+    )
+    document_store.save_draft(source.model_dump(mode="json"))
+    document_store.add_audit(source.id, role, "text_corrected", block.id, update.reason)
     return block
 
 

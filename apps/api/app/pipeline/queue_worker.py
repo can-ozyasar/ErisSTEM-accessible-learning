@@ -9,6 +9,7 @@ from pathlib import Path
 from ..job_store import DocumentStore, JobStore, make_session_factory
 from .materialize import draft_from_text_layer
 from .pdf_text_layer import PdfSafetyError, extract_text_layer
+from .review_previews import write_review_previews
 from .worker import write_text_layer
 
 
@@ -30,8 +31,16 @@ def process_one(
             return True
         write_text_layer(result, output_dir)
         if documents is not None:
-            documents.create_draft(
-                draft_from_text_layer(result, "İçe aktarılan kaynak taslağı", job.selected_pages)
+            draft = draft_from_text_layer(
+                result, "İçe aktarılan kaynak taslağı", job.selected_pages
+            )
+            documents.create_draft(draft)
+            write_review_previews(
+                source_root / job.source_relative_path,
+                source_root,
+                output_dir,
+                draft["id"],
+                pages or set(range(1, result.page_count + 1)),
             )
         store.finish(job.id)
     except PdfSafetyError:

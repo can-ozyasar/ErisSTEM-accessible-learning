@@ -71,3 +71,20 @@ def test_manifest_blocks_single_perfect_sample_and_emits_no_content():
     assert report["candidate_decision"] == "blocked_insufficient_gold_samples"
     assert report["contains_document_content"] is False
     assert report["evaluations"][0]["decision"] == "matches-gold"
+
+
+def test_manifest_rejects_unexpected_model_field_instead_of_ignoring_it():
+    payload = candidate().model_dump() | {
+        "schema_version": "visual-table-draft-v1",
+        "publication_status": "requires-schema-validation-and-teacher-review",
+        "html": "<table>untrusted</table>",
+    }
+    report = evaluate_manifest(
+        [payload],
+        VisualTableGoldManifest.model_validate(
+            {"schema_version": "visual-table-gold-v1", "tables": [gold().model_dump()]}
+        ),
+    )
+
+    assert report["invalid_or_duplicate_draft_regions"] == ["table-p46-1"]
+    assert report["evaluations"][0]["decision"] == "missing-candidate"

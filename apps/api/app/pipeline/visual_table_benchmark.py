@@ -19,6 +19,7 @@ from .benchmark import character_error_rate, normalized
 from .visual_result_schema import SourceRegion, VisualTableDraft
 
 GOLD_SCHEMA_VERSION = "visual-table-gold-v1"
+DRAFT_SCHEMA_VERSION = "visual-table-draft-v1"
 MINIMUM_TABLE_GOLD_SAMPLES = 3
 
 
@@ -86,8 +87,17 @@ def _f1(precision: float, recall: float) -> float:
 
 def _candidate_from_payload(payload: dict) -> VisualTableDraft:
     """Accept the Kaggle draft envelope, while rejecting arbitrary extra model fields."""
-    allowed = {"kind", "source", "cells", "confidence"}
-    return VisualTableDraft.model_validate({key: value for key, value in payload.items() if key in allowed})
+    draft_fields = {"kind", "source", "cells", "confidence"}
+    envelope_fields = {"schema_version", "publication_status"}
+    unknown = set(payload) - draft_fields - envelope_fields
+    if unknown or payload.get("schema_version") != DRAFT_SCHEMA_VERSION:
+        raise ValueError("invalid visual-table draft envelope")
+    return VisualTableDraft.model_validate({key: value for key, value in payload.items() if key in draft_fields})
+
+
+def _payload_region_id(payload: dict) -> str:
+    source = payload.get("source")
+    return str(source.get("region_id", "unknown")) if isinstance(source, dict) else "unknown"
 
 
 def evaluate_table(candidate: VisualTableDraft, gold: VisualTableGold) -> TableEvaluation:
@@ -145,8 +155,8 @@ def evaluate_manifest(drafts: list[dict], gold: VisualTableGoldManifest) -> dict
             continue
         try:
             candidate = _candidate_from_payload(payload)
-        except ValidationError:
-            invalid_drafts.append(str(payload.get("source", {}).get("region_id", "unknown")))
+        except (ValidationError, ValueError):
+            invalid_drafts.append(_payload_region_id(payload))
             continue
         if candidate.source.region_id in drafts_by_region:
             invalid_drafts.append(candidate.source.region_id)

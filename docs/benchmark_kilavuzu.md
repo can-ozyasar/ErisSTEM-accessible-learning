@@ -40,6 +40,16 @@ python -m app.pipeline.pdf_vector_grid --input ../../data/meb/kitap.pdf --source
 
 Bu hücreler `requires-schema-validation-and-review` durumundadır; başlık, veri hücresi, birleştirme veya öğrenciye gösterilecek değer taşımaz.
 
+Yerel PDF metin katmanındaki blok, merkezi tek bir hücredeyse ve bloğun en az %80'i hücre içindeyse private taslağa bağlanır:
+
+```bash
+python -m app.pipeline.pdf_grid_text_binding --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 91 --output ../../data/derived/grid-text-draft.json
+```
+
+Belirsiz veya hücreler arasında taşan metin hiç bölünmez; `unbound-needs-fallback-or-review` olarak kalır. Bu katman OCR/LLM sonucu üretmez.
+
+Bir ızgaradaki hücrelerin en az %50'si güvenle bağlanmadıkça rota `candidate-table-schema-validation` olmaz; `insufficient-bound-text-needs-chart-or-visual-route` olarak kalır. Bu eşik yayın eşiği değil, semantik tablo şemasına erken geçmeyi engelleyen yönlendirme korumasıdır.
+
 Aynı sayfada vektör ve gömülü görsel bulunabilir. Bölge bazlı private yönlendirme planı, vektör adaylarını ve onlarla çakışmayan görselleri ayrı benchmark rotalarına verir:
 
 ```bash
@@ -55,5 +65,9 @@ Chart/table candidate pages first pass through the private vector/embedded-image
 When vector geometry is available, the next candidate extracts only grid/axis regions without producing semantic results. `rectilinear-grid-candidate` and `perpendicular-axis-candidate` are source-linked comparison regions, not publishable tables or charts. Cell relationships and chart values require separate schema validation.
 
 For grid candidates, cell geometry can be extracted before reading any cell values. These cells remain `requires-schema-validation-and-review`: they contain no header/data/merge interpretation and no student-visible value.
+
+A native PDF text block is bound to a private grid draft only when its centre is in exactly one cell and at least 80% of the block lies within that cell. Ambiguous or spanning text is never split; it remains `unbound-needs-fallback-or-review`. This layer does not generate OCR or LLM output.
+
+Unless at least 50% of a grid's cells are safely bound, its route cannot become `candidate-table-schema-validation`; it remains `insufficient-bound-text-needs-chart-or-visual-route`. This is a routing safeguard, not a publication threshold.
 
 A page can contain both vectors and embedded images. The private region-level routing plan sends vector candidates and non-overlapping images to separate benchmark routes. `vector-geometry-benchmark` identifies structured-extraction candidates, while `visual-model-benchmark` identifies PaddleOCR-VL or another benchmark-approved fallback. Every route still requires schema validation and teacher review.

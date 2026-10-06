@@ -17,9 +17,9 @@ from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
-# P46 doğrulanmış tablo kırpımı; P51 köprü görseli deneyiyle artefact karışmaz.
-INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-table-p46-visual-v1")
-RUN_ID = "paddleocr-vl-1.6-transformers-table-p46-visual-v1"
+# Üç private Gold tablo bölgesi; P51/P46 smoke-test artefact'larıyla karışmaz.
+INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-table-gold-regions-v1")
+RUN_ID = "paddleocr-vl-1.6-transformers-table-gold-regions-v1"
 OUTPUT = Path("/kaggle/working/eristem-private-visual-region-benchmark") / "runs" / RUN_ID
 SCHEMA_VERSION = "visual-table-draft-v1"
 MAX_MARKUP_CHARS = 200_000

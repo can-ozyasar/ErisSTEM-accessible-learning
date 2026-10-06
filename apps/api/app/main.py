@@ -77,6 +77,10 @@ class TextCorrection(Approval):
     text: str = Field(min_length=1, max_length=10000)
 
 
+class PageApproval(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
+
 class AuditEntry(BaseModel):
     at: datetime
     actor_role: Role
@@ -288,6 +292,12 @@ def page_preview(document_id: str, page: int, _: Role = teacher_role):
     )
 
 
+@app.get("/v1/teacher/documents/{document_id}/pages/{page}/preview-metadata")
+def page_preview_metadata(document_id: str, page: int, _: Role = teacher_role):
+    _, size = review_preview(get_document(document_id), page)
+    return size
+
+
 @app.get("/v1/teacher/documents", response_model=list[TeacherDocumentSummary])
 def list_teacher_documents(_: Role = teacher_role):
     documents = [Document.model_validate(payload) for payload in document_store.list_drafts()]
@@ -383,6 +393,35 @@ def correct_text_block(
     document_store.save_draft(source.model_dump(mode="json"))
     document_store.add_audit(source.id, role, "text_corrected", block.id, update.reason)
     return block
+
+
+@app.post("/v1/teacher/documents/{document_id}/pages/{page}/approve-text")
+def approve_page_text(
+    document_id: str, page: int, approval: PageApproval, role: Role = teacher_role
+):
+    """Öğretmenin kaynak sayfayı görerek yaptığı toplu metin onayı."""
+    source = get_document(document_id)
+    candidates = [
+        block
+        for block in source.blocks
+        if block.source.page == page
+        and block.kind != "formula-display"
+        and block.status == "review_required"
+    ]
+    if not candidates:
+        raise HTTPException(status_code=409, detail="Bu sayfada onay bekleyen metin yok")
+    for block in candidates:
+        block.status = "approved"
+        block.revision += 1
+    document_store.save_draft(source.model_dump(mode="json"))
+    document_store.add_audit(
+        source.id,
+        role,
+        "page_text_approved",
+        None,
+        f"page={page}; blocks={len(candidates)}; {approval.reason}",
+    )
+    return {"approved_count": len(candidates), "page": page}
 
 
 @app.post("/v1/reviewer/documents/{document_id}/publish", response_model=Document)

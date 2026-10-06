@@ -21,7 +21,7 @@ Notebook hücresi: `!python /kaggle/working/benchmark_runner.py`
 
 ## İkinci aday: PaddleOCR-VL / Second candidate: PaddleOCR-VL
 
-T4 (CC 7.x) için vLLM seçilmez; resmi dokümantasyon bu kartlarda zaman aşımı veya bellek taşması riski belirtiyor. `paddleocr_vl_runner.py`, tam belge ayrıştırma hattını resmi `transformers` motoruyla her Gold sayfasında ayrı çalıştırır; tablo, formül, grafik ve okuma sırası çıktıları private artefact olarak tutulur.
+T4 (CC 7.x) için vLLM seçilmez; resmi dokümantasyon bu kartlarda zaman aşımı veya bellek taşması riski belirtiyor. `paddleocr_vl_runner.py`, tam belge ayrıştırma hattını resmi `transformers` motoruyla başlatır ve modeli GPU'ya yalnız **bir kez** yükler; tüm Gold sayfaları aynı pipeline ile işlenir. Tablo, formül, grafik ve okuma sırası çıktıları private artefact olarak tutulur.
 
 1. Notebook **Internet** ayarını yalnız bu ilk model indirmesi için açın ve GPU olarak T4 seçili kalsın.
 2. Yeni bir kod hücresine `paddleocr_vl_runner.py` dosyasının tamamını yapıştırıp çalıştırın. Dosyanın sonundaki koruma bloğu notebook'ta `main()` fonksiyonunu zaten bir kez çağırır; ayrıca çağırmayın.

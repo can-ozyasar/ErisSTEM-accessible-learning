@@ -18,17 +18,6 @@ from pathlib import Path
 
 INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-gold-benchmark-v1")
 OUTPUT = Path("/kaggle/working/eristem-private-paddleocr-vl")
-PAGE_TIMEOUT_SECONDS = 900
-
-
-def run(command: list[str], *, timeout: int | None = None) -> None:
-    subprocess.run(command, check=True, timeout=timeout)
-
-
-def command_output(command: list[str]) -> str:
-    return subprocess.check_output(command, text=True, stderr=subprocess.STDOUT).strip()
-
-
 def resolve_inputs() -> tuple[Path, Path]:
     pdfs = list(INPUT.rglob("*.pdf"))
     manifests = list(INPUT.rglob("gold-v1.json"))
@@ -75,16 +64,20 @@ def artefacts_for(result_dir: Path) -> list[dict[str, str | int]]:
 
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
-    run(["nvidia-smi"])
-    gpu = command_output(
-        ["nvidia-smi", "--query-gpu=name,compute_cap,driver_version", "--format=csv,noheader"]
-    )
+    gpu = subprocess.check_output(
+        ["nvidia-smi", "--query-gpu=name,compute_cap,driver_version", "--format=csv,noheader"],
+        text=True,
+        stderr=subprocess.STDOUT,
+    ).strip()
 
     # PaddleOCR-VL'nin ilk model indirmesi Internet açıkken yapılır. Bu komut
     # PaddlePaddle CPU/GPU paketini zorla kurmaz; T4'te resmi Transformers motoru
     # seçildiği için Kaggle'in mevcut CUDA/PyTorch ortamıyla çalışır.
-    run([sys.executable, "-m", "pip", "install", "--quiet", "pymupdf", "paddleocr[doc-parser]"])
-    run(["paddleocr", "--help"])
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", "--quiet", "pymupdf", "paddleocr[doc-parser]"],
+        check=True,
+    )
+    from paddleocr import PaddleOCRVL
 
     pdf, manifest_path = resolve_inputs()
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
@@ -94,23 +87,25 @@ def main() -> None:
     results_dir.mkdir(exist_ok=True)
     records: list[dict[str, object]] = []
 
+    # Komut satırı aracı sayfa başına yeni bir süreç/model kurar. Resmi Python
+    # API'si modeli bir kez GPU'ya alır; aşağıdaki tüm sayfalar aynı pipeline'ı
+    # kullanır. Bu, benchmark'ın hem daha hızlı hem de tekrar üretilebilir olmasını sağlar.
+    pipeline = PaddleOCRVL(engine="transformers")
+
     for item in manifest["items"]:
         item_id = item["id"]
         one_page = pages_dir / f"{item_id}.pdf"
         result_dir = results_dir / item_id
         page_pdf(pdf, item["page"], one_page)
-        command = [
-            "paddleocr",
-            "doc_parser",
-            "-i",
-            str(one_page),
-            "--engine",
-            "transformers",
-            "--save_path",
-            str(result_dir),
-        ]
         try:
-            run(command, timeout=PAGE_TIMEOUT_SECONDS)
+            # Tek sayfalık PDF'nin sonucu tek bir PaddleOCRVLResult olur. JSON ve
+            # Markdown private result_dir altında tutulur; terminale ham içerik yazılmaz.
+            outputs = list(pipeline.predict(str(one_page)))
+            if len(outputs) != 1:
+                raise RuntimeError(f"{item_id} için beklenmeyen çıktı sayısı: {len(outputs)}")
+            result_dir.mkdir(parents=True, exist_ok=True)
+            outputs[0].save_to_json(save_path=result_dir)
+            outputs[0].save_to_markdown(save_path=result_dir)
             records.append(
                 {
                     "id": item_id,
@@ -120,7 +115,7 @@ def main() -> None:
                     "artefacts": artefacts_for(result_dir),
                 }
             )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        except Exception as error:  # Her Gold örneği diğerlerinden bağımsız kayda geçer.
             records.append(
                 {
                     "id": item_id,
@@ -138,7 +133,7 @@ def main() -> None:
         "python": sys.version,
         "paddleocr_version": importlib.metadata.version("paddleocr"),
         "input_private": True,
-        "page_timeout_seconds": PAGE_TIMEOUT_SECONDS,
+        "pipeline_initializations": 1,
         "metric_status": (
             "ready_to_score" if all(item.get("expected") for item in manifest["items"])
             else "blocked_missing_gold_annotations"

@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import zipfile
+from collections import Counter
 from html.parser import HTMLParser
 from pathlib import Path
 
@@ -137,6 +138,41 @@ def table_markup(result_dir: Path) -> list[str]:
     return list(dict.fromkeys(markup))
 
 
+def structural_diagnostics(result_dir: Path) -> dict[str, object]:
+    """Return content-free model-result diagnostics for a blocked region."""
+    labels: Counter[str] = Counter()
+    json_files = unreadable_json_files = table_markup_count = 0
+    for path in result_dir.rglob("*.json"):
+        json_files += 1
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            unreadable_json_files += 1
+            continue
+        for node in iter_nodes(payload):
+            label = str(node.get("block_label", node.get("label", ""))).lower()
+            if label:
+                labels[label] += 1
+            content = node.get("block_content")
+            if label == "table" and isinstance(content, str) and "<table" in content.lower():
+                table_markup_count += 1
+    return {
+        "result_json_files": json_files,
+        "unreadable_json_files": unreadable_json_files,
+        "labels": dict(sorted(labels.items())),
+        "table_markup_count": table_markup_count,
+    }
+
+
+def safe_error_code(error: Exception) -> str:
+    """Keep model content out of logs while retaining actionable known failure codes."""
+    if isinstance(error, TableMarkupError):
+        return str(error)
+    if isinstance(error, RuntimeError) and str(error).startswith("expected_one_table_markup_got_"):
+        return str(error)
+    return type(error).__name__
+
+
 def adapt_table(markup: str, asset: dict) -> dict:
     if not markup or len(markup) > MAX_MARKUP_CHARS:
         raise TableMarkupError("invalid_markup_length")
@@ -213,11 +249,22 @@ def main() -> None:
             if len(markup) != 1:
                 raise TableMarkupError(f"expected_one_table_markup_got_{len(markup)}")
             drafts.append(adapt_table(markup[0], asset))
-            records.append({"route_id": asset["route_id"], "status": "validated_low_confidence_review_required"})
+            records.append(
+                {
+                    "route_id": asset["route_id"],
+                    "status": "validated_low_confidence_review_required",
+                    "diagnostics": structural_diagnostics(result_dir),
+                }
+            )
             print(f"[{position}/{len(manifest['assets'])}] Şema doğrulandı: {asset['route_id']}")
         except (OSError, RuntimeError, TableMarkupError, json.JSONDecodeError) as error:
             records.append(
-                {"route_id": asset["route_id"], "status": "blocked", "error_type": type(error).__name__}
+                {
+                    "route_id": asset["route_id"],
+                    "status": "blocked",
+                    "error_code": safe_error_code(error),
+                    "diagnostics": structural_diagnostics(result_dir),
+                }
             )
             print(f"[{position}/{len(manifest['assets'])}] Engellendi: {asset['route_id']} ({type(error).__name__})")
 

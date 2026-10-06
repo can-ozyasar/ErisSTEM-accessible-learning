@@ -227,6 +227,16 @@ def validate_formula(update: Correction) -> None:
         raise HTTPException(status_code=422, detail="MathML güvenli değil")
 
 
+def needs_structured_math_extraction(block: Block) -> bool:
+    """Metin katmanındaki parçalanmış matematik işaretlerini toplu yayından korur."""
+    text = block.text or ""
+    return bool(
+        re.search(r"\d(?:\s+\d){2,}", text)
+        or "�" in text
+        or (any(symbol in text for symbol in ("/", "=", "−", "÷")) and len(text) < 30)
+    )
+
+
 app = FastAPI(title="ErişSTEM API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -410,6 +420,15 @@ def approve_page_text(
     ]
     if not candidates:
         raise HTTPException(status_code=409, detail="Bu sayfada onay bekleyen metin yok")
+    unreliable = [block.id for block in candidates if needs_structured_math_extraction(block)]
+    if unreliable:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "Sayfada güvenilir olmayan matematiksel metin katmanı var; toplu onay kapatıldı",
+                "block_ids": unreliable,
+            },
+        )
     for block in candidates:
         block.status = "approved"
         block.revision += 1

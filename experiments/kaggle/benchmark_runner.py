@@ -9,8 +9,6 @@ import subprocess
 import zipfile
 from pathlib import Path
 
-import pymupdf
-
 INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-gold-benchmark-v1")
 OUTPUT = Path("/kaggle/working/eristem-private-benchmark")
 
@@ -32,6 +30,8 @@ def resolve_inputs() -> tuple[Path, Path]:
 
 
 def page_pdf(source: Path, page_number: int, destination: Path) -> None:
+    import pymupdf
+
     with pymupdf.open(source) as input_pdf:
         output = pymupdf.open()
         output.insert_pdf(input_pdf, from_page=page_number - 1, to_page=page_number - 1)
@@ -42,7 +42,7 @@ def page_pdf(source: Path, page_number: int, destination: Path) -> None:
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     run(["nvidia-smi"])
-    run(["python", "-m", "pip", "install", "--quiet", "docling"])
+    run(["python", "-m", "pip", "install", "--quiet", "pymupdf", "docling"])
     from docling.document_converter import DocumentConverter
 
     pdf, manifest_path = resolve_inputs()

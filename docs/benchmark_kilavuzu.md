@@ -24,6 +24,16 @@ python -m app.pipeline.pdf_vector_evidence --input ../../data/meb/kitap.pdf --so
 
 Bu çıktı yalnız kaynak koordinatlı yönlendirme kanıtıdır; tablo veya grafik verisi değildir. `vector-geometry-available` sonucu vektör tabanlı çıkarıcı benchmark'ına, `embedded-image-needs-visual-extraction` sonucu görsel model benchmark'ına yönlenir.
 
+Vektör geometri varsa bir sonraki aday, semantik sonuç üretmeden yalnız ızgara/eksen bölgelerini çıkarır:
+
+```bash
+python -m app.pipeline.pdf_vector_structure --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 51 91 --output ../../data/derived/vector-structure.json
+```
+
+`rectilinear-grid-candidate` ve `perpendicular-axis-candidate` sonuçları yayınlanabilir tablo/grafik değildir. Bunlar, kaynak koordinatlı karşılaştırma bölgeleridir; hücre ilişkileri ve grafik değerleri ancak ayrı şema doğrulaması ile oluşturulabilir.
+
 Real MEB PDFs and Gold annotations never enter Git. A private manifest holds `page`, `kind`, and human-verified `expected` values. Empty annotations block measurement; unavailable model packages are recorded as unavailable rather than treated as results.
 
 Chart/table candidate pages first pass through the private vector/embedded-image inventory. Its output is routing evidence with source coordinates, not table or chart data. `vector-geometry-available` routes to a vector-based extractor benchmark; `embedded-image-needs-visual-extraction` routes to a visual-model benchmark.
+
+When vector geometry is available, the next candidate extracts only grid/axis regions without producing semantic results. `rectilinear-grid-candidate` and `perpendicular-axis-candidate` are source-linked comparison regions, not publishable tables or charts. Cell relationships and chart values require separate schema validation.

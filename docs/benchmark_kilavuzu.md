@@ -58,6 +58,14 @@ python -m app.pipeline.pdf_structure_routing --input ../../data/meb/kitap.pdf --
 
 `vector-geometry-benchmark` yapı çıkarıcılarını, `visual-model-benchmark` ise PaddleOCR-VL veya benchmark ile onaylanmış fallback'i aday gösterir. Her rota öğretmen denetimi ve şema doğrulaması gerektirir.
 
+Görsel rota yalnız kaynak bölgesini private crop olarak render eder; tam PDF sayfası veya kaynak belge export edilmez:
+
+```bash
+python -m app.pipeline.pdf_visual_regions --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 51 --output-dir ../../data/derived/visual-regions --manifest ../../data/derived/visual-regions.json
+```
+
+Görsel model sonucu yalnız sıkı JSON tablo/grafik şemasına doğrulanarak kabul edilir. HTML, serbest Markdown veya doğrudan UI render'ı kabul edilmez; her taslak `source_checksum`, sayfa ve bbox ile eşleşmelidir.
+
 Real MEB PDFs and Gold annotations never enter Git. A private manifest holds `page`, `kind`, and human-verified `expected` values. Empty annotations block measurement; unavailable model packages are recorded as unavailable rather than treated as results.
 
 Chart/table candidate pages first pass through the private vector/embedded-image inventory. Its output is routing evidence with source coordinates, not table or chart data. `vector-geometry-available` routes to a vector-based extractor benchmark; `embedded-image-needs-visual-extraction` routes to a visual-model benchmark.
@@ -71,3 +79,5 @@ A native PDF text block is bound to a private grid draft only when its centre is
 Unless at least 50% of a grid's cells are safely bound, its route cannot become `candidate-table-schema-validation`; it remains `insufficient-bound-text-needs-chart-or-visual-route`. This is a routing safeguard, not a publication threshold.
 
 A page can contain both vectors and embedded images. The private region-level routing plan sends vector candidates and non-overlapping images to separate benchmark routes. `vector-geometry-benchmark` identifies structured-extraction candidates, while `visual-model-benchmark` identifies PaddleOCR-VL or another benchmark-approved fallback. Every route still requires schema validation and teacher review.
+
+The visual route renders only the routed source region as a private crop; it never exports a complete PDF page or source document. Visual-model output is accepted only through strict JSON table/chart schemas. HTML, free Markdown, and direct UI rendering are rejected; every draft must match its source checksum, page, and bbox.

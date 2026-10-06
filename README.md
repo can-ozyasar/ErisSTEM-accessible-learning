@@ -19,7 +19,9 @@ docker compose up --build
 
 Linux'ta worker'ın türetilmiş private dosyaları size ait kalması için gerekirse Compose'u şu değişkenlerle başlatın: `LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build`.
 
-API: `http://localhost:8000/docs` · Web: `http://localhost:5173`
+Web: `http://localhost:5173` · Geliştirme API dokümantasyonu: `http://localhost:5173/api/docs`
+
+Web uygulaması API'ye aynı origin üzerinden `/api` ile ulaşır. API container'ı doğrudan dışa açılmaz; bu özellikle IDE/uzak önizleme ortamlarında tarayıcının yanlış `localhost` adresine bağlanmasını önler.
 
 Yerelde:
 
@@ -87,7 +89,9 @@ docker compose up --build
 
 On Linux, if needed, start Compose with `LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) docker compose up --build` so private derived files remain owned by your local user.
 
-API: `http://localhost:8000/docs` · Web: `http://localhost:5173`
+Web: `http://localhost:5173` · Development API docs: `http://localhost:5173/api/docs`
+
+The web app reaches the API through the same-origin `/api` path. The API container is not directly exposed, preventing a browser in an IDE or remote preview from connecting to the wrong `localhost` address.
 
 For local development:
 

@@ -5,7 +5,9 @@ import "./style.css";
 
 type Block = { id: string; kind: "heading" | "paragraph" | "formula-display"; text?: string; latex?: string; mathml?: string; status: string; revision: number; source: { page: number; bbox: number[]; source_checksum: string; extraction_step: string }; validation: { confidence: number; reasons: string[] } };
 type Document = { id: string; title: string; license_notice: string; blocks: Block[] };
-const API = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
+// Üretimde istekler aynı-origin nginx proxy'si üzerinden gider; uzak/IDE önizlemelerinde
+// tarayıcının kendi localhost'una yanlışlıkla bağlanılmaz.
+const API = import.meta.env.VITE_API_URL ?? "/api";
 // React'in HTML tipleri MathML etiketini henüz tanımıyor; tarayıcıya gerçek MathML gönderilir.
 const MathElement = "math" as unknown as ElementType;
 

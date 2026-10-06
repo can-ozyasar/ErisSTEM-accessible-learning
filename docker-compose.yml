@@ -4,7 +4,6 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://eristem:eristem@db:5432/eristem
       OBJECT_STORAGE_BACKEND: local
-    ports: ["8000:8000"]
     depends_on:
       db:
         condition: service_healthy
@@ -28,7 +27,7 @@ services:
     build: ./apps/web
     ports: ["5173:80"]
     depends_on: [api]
-    networks: [internal]
+    networks: [internal, edge]
   db:
     image: postgres:16-alpine
     environment:
@@ -47,3 +46,4 @@ volumes:
 networks:
   internal:
     internal: true
+  edge: {}

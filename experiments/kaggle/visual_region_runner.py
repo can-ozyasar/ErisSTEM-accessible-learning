@@ -96,10 +96,23 @@ def resolve_manifest() -> tuple[Path, dict, Path]:
 
 
 def asset_path(manifest_path: Path, relative_path: str) -> Path:
-    path = (manifest_path.parent / relative_path).resolve()
-    if not path.is_relative_to(manifest_path.parent.resolve()) or not path.is_file():
+    package_root = manifest_path.parent.resolve()
+    declared = Path(relative_path)
+    if declared.is_absolute() or ".." in declared.parts:
+        raise RuntimeError("Manifest asset yolu izinli paketin dışında")
+    direct = (package_root / declared).resolve()
+    if direct.is_relative_to(package_root) and direct.is_file():
+        return direct
+    # v1 paketi, manifestte yalnız dosya adı taşıyıp asset'i alt klasöre koydu.
+    # Fallback yalnız aynı paket kökündeki benzersiz dosya adına izin verir.
+    matches = [
+        candidate.resolve()
+        for candidate in package_root.rglob(declared.name)
+        if candidate.resolve().is_relative_to(package_root) and candidate.is_file()
+    ]
+    if len(matches) != 1:
         raise RuntimeError("Manifest asset yolu izinli paketin dışında veya eksik")
-    return path
+    return matches[0]
 
 
 def iter_nodes(value: object):

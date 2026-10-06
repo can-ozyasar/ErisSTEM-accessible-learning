@@ -50,6 +50,14 @@ Belirsiz veya hücreler arasında taşan metin hiç bölünmez; `unbound-needs-f
 
 Bir ızgaradaki hücrelerin en az %50'si güvenle bağlanmadıkça rota `candidate-table-schema-validation` olmaz; `insufficient-bound-text-needs-chart-or-visual-route` olarak kalır. Bu eşik yayın eşiği değil, semantik tablo şemasına erken geçmeyi engelleyen yönlendirme korumasıdır.
 
+Komşu düşük-bağlama ızgaraları aynı tablo bandını oluşturuyorsa, yalnız birleşik bölge private görsel fallback crop'ı olur:
+
+```bash
+python -m app.pipeline.pdf_grid_visual_fallback --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 46 --output-dir ../../data/derived/grid-visual-regions --manifest ../../data/derived/grid-visual-regions.json
+```
+
+Bu birleşim geometriye dayanır; hücre/başlık/değer yorumu değildir. Tam sayfa dışa aktarılmaz.
+
 Aynı sayfada vektör ve gömülü görsel bulunabilir. Bölge bazlı private yönlendirme planı, vektör adaylarını ve onlarla çakışmayan görselleri ayrı benchmark rotalarına verir:
 
 ```bash
@@ -79,6 +87,8 @@ For grid candidates, cell geometry can be extracted before reading any cell valu
 A native PDF text block is bound to a private grid draft only when its centre is in exactly one cell and at least 80% of the block lies within that cell. Ambiguous or spanning text is never split; it remains `unbound-needs-fallback-or-review`. This layer does not generate OCR or LLM output.
 
 Unless at least 50% of a grid's cells are safely bound, its route cannot become `candidate-table-schema-validation`; it remains `insufficient-bound-text-needs-chart-or-visual-route`. This is a routing safeguard, not a publication threshold.
+
+When adjacent low-binding grids form the same table band, only their merged region becomes a private visual-fallback crop. The merge is geometric only; it does not interpret cells, headers, or values, and never exports a full page.
 
 A page can contain both vectors and embedded images. The private region-level routing plan sends vector candidates and non-overlapping images to separate benchmark routes. `vector-geometry-benchmark` identifies structured-extraction candidates, while `visual-model-benchmark` identifies PaddleOCR-VL or another benchmark-approved fallback. Every route still requires schema validation and teacher review.
 

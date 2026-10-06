@@ -32,6 +32,14 @@ python -m app.pipeline.pdf_vector_structure --input ../../data/meb/kitap.pdf --s
 
 `rectilinear-grid-candidate` ve `perpendicular-axis-candidate` sonuçları yayınlanabilir tablo/grafik değildir. Bunlar, kaynak koordinatlı karşılaştırma bölgeleridir; hücre ilişkileri ve grafik değerleri ancak ayrı şema doğrulaması ile oluşturulabilir.
 
+Izgara adayları için hücre değerleri okunmadan önce yalnız hücre geometrisi çıkarılabilir:
+
+```bash
+python -m app.pipeline.pdf_vector_grid --input ../../data/meb/kitap.pdf --source-root ../../data/meb --pages 91 --output ../../data/derived/vector-grid.json
+```
+
+Bu hücreler `requires-schema-validation-and-review` durumundadır; başlık, veri hücresi, birleştirme veya öğrenciye gösterilecek değer taşımaz.
+
 Aynı sayfada vektör ve gömülü görsel bulunabilir. Bölge bazlı private yönlendirme planı, vektör adaylarını ve onlarla çakışmayan görselleri ayrı benchmark rotalarına verir:
 
 ```bash
@@ -45,5 +53,7 @@ Real MEB PDFs and Gold annotations never enter Git. A private manifest holds `pa
 Chart/table candidate pages first pass through the private vector/embedded-image inventory. Its output is routing evidence with source coordinates, not table or chart data. `vector-geometry-available` routes to a vector-based extractor benchmark; `embedded-image-needs-visual-extraction` routes to a visual-model benchmark.
 
 When vector geometry is available, the next candidate extracts only grid/axis regions without producing semantic results. `rectilinear-grid-candidate` and `perpendicular-axis-candidate` are source-linked comparison regions, not publishable tables or charts. Cell relationships and chart values require separate schema validation.
+
+For grid candidates, cell geometry can be extracted before reading any cell values. These cells remain `requires-schema-validation-and-review`: they contain no header/data/merge interpretation and no student-visible value.
 
 A page can contain both vectors and embedded images. The private region-level routing plan sends vector candidates and non-overlapping images to separate benchmark routes. `vector-geometry-benchmark` identifies structured-extraction candidates, while `visual-model-benchmark` identifies PaddleOCR-VL or another benchmark-approved fallback. Every route still requires schema validation and teacher review.

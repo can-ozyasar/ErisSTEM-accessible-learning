@@ -1,0 +1,5 @@
+CREATE TABLE IF NOT EXISTS benchmark_annotations (
+  id VARCHAR(100) PRIMARY KEY,
+  expected VARCHAR(10000) NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL
+);

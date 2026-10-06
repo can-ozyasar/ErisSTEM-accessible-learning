@@ -4,7 +4,7 @@ import hashlib
 import json
 import os
 import re
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Literal
 
@@ -12,9 +12,16 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import select
 
 from .auth import Role, require_roles
-from .job_store import DocumentStore, JobStore, ProcessingJob, make_session_factory
+from .job_store import (
+    BenchmarkAnnotation,
+    DocumentStore,
+    JobStore,
+    ProcessingJob,
+    make_session_factory,
+)
 
 
 class SourceCoordinate(BaseModel):
@@ -79,6 +86,10 @@ class TextCorrection(Approval):
 
 class PageApproval(BaseModel):
     reason: str = Field(min_length=5, max_length=500)
+
+
+class GoldAnnotation(BaseModel):
+    expected: str = Field(min_length=1, max_length=10000)
 
 
 class AuditEntry(BaseModel):
@@ -218,6 +229,13 @@ def review_preview(document: Document, page: int) -> tuple[Path, dict[str, float
     return image, sizes[str(page)]
 
 
+def gold_manifest() -> dict:
+    path = Path(os.getenv("DERIVED_ROOT", "data/derived")) / "gold-v1.json"
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Private Gold manifesti bulunamadı")
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def validate_formula(update: Correction) -> None:
     if not re.fullmatch(r"[a-zA-Z0-9^_+\-=/(){}\\ ]+", update.latex):
         raise HTTPException(status_code=422, detail="LaTeX izinli sembol kümesinin dışında")
@@ -290,6 +308,44 @@ def read_published(document_id: str, _: Role = any_role):
 @app.get("/v1/teacher/documents/{document_id}", response_model=Document)
 def read_draft(document_id: str, _: Role = teacher_role):
     return get_document(document_id)
+
+
+@app.get("/v1/teacher/benchmark/gold-v1/items")
+def list_gold_items(_: Role = teacher_role):
+    with job_store.sessions() as session:
+        annotations = {
+            item.id: item.expected for item in session.scalars(select(BenchmarkAnnotation))
+        }
+    return [
+        {**item, "expected": annotations.get(item["id"], "")} for item in gold_manifest()["items"]
+    ]
+
+
+@app.get("/v1/teacher/benchmark/gold-v1/items/{item_id}/preview")
+def gold_preview(item_id: str, _: Role = teacher_role):
+    item = next((value for value in gold_manifest()["items"] if value["id"] == item_id), None)
+    root = Path(os.getenv("DERIVED_ROOT", "data/derived")) / "review-pages" / "benchmark-gold-v1"
+    image = root / f"page-{item['page']}.png" if item else None
+    if image is None or not image.is_file():
+        raise HTTPException(status_code=404, detail="Gold sayfa önizlemesi bulunamadı")
+    return FileResponse(image, media_type="image/png")
+
+
+@app.put("/v1/teacher/benchmark/gold-v1/items/{item_id}")
+def save_gold_annotation(item_id: str, annotation: GoldAnnotation, _: Role = teacher_role):
+    if not any(item["id"] == item_id for item in gold_manifest()["items"]):
+        raise HTTPException(status_code=404, detail="Gold örneği bulunamadı")
+    with job_store.sessions.begin() as session:
+        record = session.get(BenchmarkAnnotation, item_id)
+        if record is None:
+            session.add(
+                BenchmarkAnnotation(
+                    id=item_id, expected=annotation.expected.strip(), updated_at=datetime.now(UTC)
+                )
+            )
+        else:
+            record.expected, record.updated_at = annotation.expected.strip(), datetime.now(UTC)
+    return {"id": item_id, "saved": True}
 
 
 @app.get("/v1/teacher/documents/{document_id}/pages/{page}/preview")

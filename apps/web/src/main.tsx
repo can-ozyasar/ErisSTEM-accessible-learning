@@ -67,6 +67,16 @@ function TeacherReview() {
 }
 
 type TeacherDocument = { id: string; title: string; published_revision: number; review_required_count: number };
+type GoldItem = { id: string; page: number; kind: string; expected: string };
+
+function GoldAnnotationReview() {
+  const [items, setItems] = useState<GoldItem[]>([]); const [selected, setSelected] = useState<GoldItem | null>(null); const [text, setText] = useState(""); const [image, setImage] = useState<string | null>(null); const [message, setMessage] = useState("Gold örnekleri yükleniyor.");
+  useEffect(() => { void fetch(`${API}/v1/teacher/benchmark/gold-v1/items`, { headers: { "X-Role": "teacher" } }).then(r => r.json()).then((next: GoldItem[]) => { setItems(next); setSelected(next[0] ?? null); setText(next[0]?.expected ?? ""); }).catch(() => setMessage("Gold kümesi yüklenemedi.")); }, []);
+  useEffect(() => { if (!selected) return; let url: string | null = null; void fetch(`${API}/v1/teacher/benchmark/gold-v1/items/${selected.id}/preview`, { headers: { "X-Role": "teacher" } }).then(r => r.blob()).then(blob => { url = URL.createObjectURL(blob); setImage(url); }).catch(() => setImage(null)); return () => { if (url) URL.revokeObjectURL(url); }; }, [selected]);
+  const choose = (item: GoldItem) => { setSelected(item); setText(item.expected); };
+  const save = async () => { if (!selected) return; const r = await fetch(`${API}/v1/teacher/benchmark/gold-v1/items/${selected.id}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Role": "teacher" }, body: JSON.stringify({ expected: text }) }); setMessage(r.ok ? "Gold anotasyonu kaydedildi." : "Kaydetme başarısız."); };
+  return <main className="teacher review-workspace"><header><p className="brand">ErişSTEM</p><h1>Gold benchmark anotasyonu</h1><p>Bu içerik öğrenciye yayımlanmaz. Yalnız çıkarıcıların doğruluğunu ölçmek için temsilî bölgeyi doğru ve sade biçimde tanımlayın.</p></header><p role="status">{message}</p><div className="review-layout"><aside><h2>Örnekler</h2>{items.map(item => <button className={item.id === selected?.id ? "selected-page" : ""} onClick={() => choose(item)} key={item.id}>{item.kind} · s. {item.page}</button>)}</aside><section className="page-canvas">{image ? <img alt={`Gold kaynak sayfası ${selected?.page}`} src={image} /> : <p>Sayfa yükleniyor.</p>}</section><section className="editor"><h2>{selected?.kind} · Sayfa {selected?.page}</h2><label htmlFor="gold-text">Doğru erişilebilir içerik</label><textarea id="gold-text" value={text} onChange={event => setText(event.target.value)} placeholder="Örneğin: sıfır virgül iki yüz on dokuz eksi sıfır virgül sıfır sıfır dokuz bölü iki virgül bir" /><button onClick={() => void save()}>Gold anotasyonunu kaydet</button></section></div></main>;
+}
 
 function ReviewerPublish() {
   const [documents, setDocuments] = useState<TeacherDocument[]>([]);
@@ -78,5 +88,5 @@ function ReviewerPublish() {
 }
 
 const mode = new URLSearchParams(window.location.search).get("mode");
-createRoot(document.getElementById("root")!).render(mode === "teacher" ? <TeacherReview /> : mode === "reviewer" ? <ReviewerPublish /> : <Reader />);
+createRoot(document.getElementById("root")!).render(mode === "teacher" ? <TeacherReview /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : <Reader />);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

@@ -76,6 +76,13 @@ class DocumentAudit(Base):
     detail: Mapped[str] = mapped_column(String(500), nullable=False)
 
 
+class BenchmarkAnnotation(Base):
+    __tablename__ = "benchmark_annotations"
+    id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    expected: Mapped[str] = mapped_column(String(10000), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 def database_url() -> str:
     configured = os.getenv("DATABASE_URL")
     if configured:

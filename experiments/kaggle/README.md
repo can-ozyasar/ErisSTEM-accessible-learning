@@ -53,6 +53,20 @@ When the private Dataset includes `native-table-evidence-v1.json`, the runner al
 
 If the mathematical token normaliser changes, `rescore_native_agreement.py` re-scores the existing private `table_drafts.json` without downloading or running the model again. Share only its content-free report.
 
+## Güvenli Kaggle API işlemleri / Safe Kaggle API operations
+
+`kaggle_ops.py`, token'ı okumaz veya repo içine yazmaz; `kagglehub` yalnız kullanıcının yerel kimlik deposunu kullanır. Kaynak olarak sadece `data/private/` altındaki klasör kabul edilir. Uzak Dataset sürümü oluşturmak için ayrıca `--apply` gerekir; aksi hâlde yalnız checksum içeren private işlem kaydı yazılır.
+
+```bash
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py verify
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-dataset \
+  --source-dir data/private/eristem_meb9_table_gold_regions_v2 \
+  --handle muhammedcanozyasar/eristem-meb9-table-gold-regions-v2 \
+  --version-notes "Private native evidence package"
+```
+
+Do not add `--apply` unless the exact private folder and target Dataset version have been reviewed. Operation records remain under ignored `data/private/kaggle-operation-records/`.
+
 ## Docling visual-table comparison / Docling görsel tablo karşılaştırması
 
 `docling_visual_region_runner.py`, aynı V2 private crop ve native-kanıt paketi üzerinde Docling'i ikinci aday olarak çalıştırır. Ham Markdown yalnız private run klasöründe kalır; yalnız tek ve güvenle ayrıştırılabilen pipe-table düşük güvenli JSON taslağına dönüşür. `native_agreement_report.json` iki aday için karşılaştırılabilir içeriksiz proxy sinyalidir; Gold skoru veya yayın kararı değildir.

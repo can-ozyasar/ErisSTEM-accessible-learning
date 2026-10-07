@@ -181,3 +181,7 @@ def main() -> int:
     args.output.write_text(json.dumps([asdict(item) for item in result], ensure_ascii=False, indent=2), encoding="utf-8")
     print(args.output)
     return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

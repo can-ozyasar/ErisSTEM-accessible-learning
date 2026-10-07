@@ -1,4 +1,4 @@
-from app.job_store import TableReviewStore, make_session_factory
+from app.job_store import TableReview, TableReviewStore, make_session_factory
 from app.pipeline.export_teacher_table_gold import (
     teacher_approved_gold,
     teacher_approved_quality_report,
@@ -54,3 +54,20 @@ def test_quality_report_uses_original_candidate_not_teacher_corrected_draft(tmp_
 
     assert report["status"] == "completed"
     assert report["evaluation"]["candidate_decision"] == "blocked_gold_gate_not_met"
+
+
+def test_quality_report_blocks_legacy_review_without_original_candidate(tmp_path):
+    tables = TableReviewStore(make_session_factory(f"sqlite:///{tmp_path / 'reviews.db'}"))
+    for index in range(3):
+        payload = _payload(f"table-{index}", f"region-{index}")
+        tables.create(payload)
+        legacy = {**payload, "cells": [{key: value for key, value in payload["cells"][0].items() if key != "confidence"}]}
+        tables.save(payload["id"], legacy, status="approved", revision=2)
+        with tables.sessions.begin() as session:
+            record = session.get(TableReview, payload["id"])
+            assert record is not None
+            record.candidate_payload = legacy
+
+    report = teacher_approved_quality_report(tables)
+
+    assert report["status"] == "blocked_missing_immutable_candidate"

@@ -112,3 +112,10 @@ def test_symbol_quality_gate_detects_a_wrong_critical_glyph():
         "missing_symbol_cells": 0,
         "decision": "symbol-gate-blocked",
     }
+
+
+def test_gold_permits_intentional_empty_grid_cells():
+    payload = gold().model_dump()
+    payload["cells"][1]["text"] = ""
+
+    assert VisualTableGold.model_validate(payload).cells[1].text == ""

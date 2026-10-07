@@ -33,7 +33,9 @@ class GoldTableCell(BaseModel):
     row: int = Field(ge=1)
     column: int = Field(ge=1)
     role: Literal["header", "data", "unknown"]
-    text: str = Field(min_length=1, max_length=4000)
+    # Bir PDF ızgarasındaki bilinçli boş hücre de Gold yapısının parçasıdır.
+    # Boş hücreyi yok saymak, satır/sütun geometrisini yanlış değerlendirtir.
+    text: str = Field(max_length=4000)
 
 
 class VisualTableGold(BaseModel):

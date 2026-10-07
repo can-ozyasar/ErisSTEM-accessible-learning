@@ -59,13 +59,26 @@ def teacher_approved_quality_report(tables: TableReviewStore) -> dict:
             "contains_document_content": False,
             "status": export["status"],
         }
+    approved = tables.list_teacher_approved()
+    legacy = [
+        item.id
+        for item in approved
+        if any("confidence" not in cell for cell in item.candidate_payload.get("cells", []))
+    ]
+    if legacy:
+        return {
+            "report_type": "teacher-approved-vector-native-quality-v1",
+            "contains_document_content": False,
+            "status": "blocked_missing_immutable_candidate",
+            "legacy_record_count": len(legacy),
+        }
     gold = VisualTableGoldManifest.model_validate(manifest)
     candidates = [
         {
             key: item.candidate_payload[key]
             for key in ("schema_version", "publication_status", "kind", "source", "cells", "confidence")
         }
-        for item in tables.list_teacher_approved()
+        for item in approved
     ]
     return {
         "report_type": "teacher-approved-vector-native-quality-v1",

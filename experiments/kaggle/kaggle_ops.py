@@ -161,6 +161,13 @@ def kernel_package_directory(kernel: str) -> Path:
     return private_root() / "kaggle-notebooks" / owner / slug
 
 
+def notebook_title_slug(title: str) -> str:
+    """Use a deterministic ASCII title so Kaggle cannot silently change the kernel ID."""
+    if not re.fullmatch(r"[A-Za-z0-9]+(?:[ -][A-Za-z0-9]+)*", title):
+        raise ValueError("Notebook başlığı yalnız ASCII harf/rakam, boşluk ve tire içermeli")
+    return re.sub(r"[ -]+", "-", title).lower()
+
+
 def prepare_notebook_package(
     kernel: str,
     dataset: str,
@@ -171,6 +178,9 @@ def prepare_notebook_package(
 ) -> Path:
     """Create a private Kaggle script package, refusing to overwrite a package."""
     kernel, dataset = validate_handle(kernel), validate_handle(dataset)
+    _, slug = kernel.split("/", maxsplit=1)
+    if notebook_title_slug(title) != slug:
+        raise ValueError("Notebook başlığının Kaggle slug'ı --kernel slug'ı ile aynı olmalı")
     source = runner_path(runner)
     if dataset not in source.read_text(encoding="utf-8"):
         raise ValueError("Runner içindeki private Dataset yolu --dataset ile eşleşmiyor")

@@ -48,7 +48,7 @@ def test_prepare_notebook_package_is_private_and_binds_the_declared_dataset(tmp_
     monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
 
     package = module.prepare_notebook_package(
-        "muhammedcanozyasar/private-notebook-v2", dataset, runner, "Private benchmark", enable_internet=True
+        "muhammedcanozyasar/private-notebook-v2", dataset, runner, "Private Notebook V2", enable_internet=True
     )
 
     metadata = module.load_kernel_metadata(package, "muhammedcanozyasar/private-notebook-v2", dataset)
@@ -74,9 +74,17 @@ def test_prepare_notebook_rejects_runner_with_different_dataset(tmp_path: Path, 
             "muhammedcanozyasar/private-notebook-v2",
             "muhammedcanozyasar/private-benchmark-v2",
             runner,
-            "Private benchmark",
+            "Private Notebook V2",
             enable_internet=False,
         )
+
+
+def test_notebook_title_must_resolve_to_the_declared_kernel_slug():
+    module = kaggle_ops_module()
+
+    assert module.notebook_title_slug("Eristem Private Benchmark V2") == "eristem-private-benchmark-v2"
+    with pytest.raises(ValueError, match="ASCII"):
+        module.notebook_title_slug("ErişSTEM private benchmark")
 
 
 def test_symbol_prediction_validation_requires_exactly_the_sealed_input_ids(tmp_path: Path, monkeypatch):

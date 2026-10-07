@@ -161,7 +161,7 @@ apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-notebook \
   --kernel muhammedcanozyasar/eristem-private-symbol-cell-paddleocr-v1 \
   --dataset muhammedcanozyasar/eristem-meb9-symbol-cell-benchmark-v1 \
   --runner experiments/kaggle/symbol_cell_paddleocr_runner.py \
-  --title "ErişSTEM private symbol-cell PaddleOCR benchmark" --internet
+  --title "Eristem Private Symbol Cell Paddleocr V1" --internet
 
 apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py push-notebook \
   --package-dir data/private/kaggle-notebooks/muhammedcanozyasar/eristem-private-symbol-cell-paddleocr-v1 \

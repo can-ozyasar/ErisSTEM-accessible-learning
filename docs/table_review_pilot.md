@@ -31,6 +31,10 @@ Web uygulamasını normal geliştirme komutuyla başlatıp şu adresi açın:
 http://localhost:5173/?mode=table-review
 ```
 
+Vite artık `/api` isteklerini varsayılan olarak `127.0.0.1:8000` API'sine
+proxy'ler. API başka bir porta çalışıyorsa web'i `VITE_API_PROXY_TARGET` ile
+başlatın; tarayıcı adresine API URL'si yazmayın.
+
 Öğretmen yalnız sayfa görüntüsündeki turuncu kaynak kutusunu ve sade hücre
 metnini görür. “Kaynakla aynı, onayla” veya “Düzelt ve onayla” öğrenci yayını
 değildir. Yayın için ikinci rolün ayrı API çağrısı gerekir; öğrenci uç noktası

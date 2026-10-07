@@ -15,7 +15,9 @@ PREDICTIONS_SCHEMA = "symbol-cell-predictions-v1"
 
 
 class SymbolInputAsset(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # The sealed input also carries source/checksum provenance. Evaluation
+    # intentionally consumes only IDs, while preserving strictness elsewhere.
+    model_config = ConfigDict(extra="ignore")
 
     id: str = Field(pattern=r"^[A-Za-z0-9_-]+$")
 

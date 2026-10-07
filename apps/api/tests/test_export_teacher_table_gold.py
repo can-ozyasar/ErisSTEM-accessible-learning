@@ -1,5 +1,8 @@
 from app.job_store import TableReviewStore, make_session_factory
-from app.pipeline.export_teacher_table_gold import teacher_approved_gold
+from app.pipeline.export_teacher_table_gold import (
+    teacher_approved_gold,
+    teacher_approved_quality_report,
+)
 
 
 def _payload(identifier: str, region: str) -> dict:
@@ -37,3 +40,17 @@ def test_gold_export_is_ready_with_three_teacher_approved_tables(tmp_path):
 
     assert report["status"] == "ready"
     assert len(manifest["tables"]) == 3
+
+
+def test_quality_report_uses_original_candidate_not_teacher_corrected_draft(tmp_path):
+    tables = TableReviewStore(make_session_factory(f"sqlite:///{tmp_path / 'reviews.db'}"))
+    for index in range(3):
+        payload = _payload(f"table-{index}", f"region-{index}")
+        tables.create(payload)
+        corrected = {**payload, "cells": [{**payload["cells"][0], "text": "Düzeltilmiş"}]}
+        tables.save(payload["id"], corrected, status="approved", revision=2)
+
+    report = teacher_approved_quality_report(tables)
+
+    assert report["status"] == "completed"
+    assert report["evaluation"]["candidate_decision"] == "blocked_gold_gate_not_met"

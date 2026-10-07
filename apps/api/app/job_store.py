@@ -89,6 +89,7 @@ class TableReview(Base):
     __tablename__ = "table_reviews"
     id: Mapped[str] = mapped_column(String(200), primary_key=True)
     document_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    candidate_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     draft_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
     published_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -121,6 +122,15 @@ def make_session_factory(url: str | None = None) -> sessionmaker[Session]:
             with engine.begin() as connection:
                 connection.exec_driver_sql(
                     "ALTER TABLE processing_jobs ADD COLUMN selected_pages VARCHAR(1000) DEFAULT 'all'"
+                )
+        table_review_columns = {
+            column["name"] for column in inspect(engine).get_columns("table_reviews")
+        } if "table_reviews" in inspect(engine).get_table_names() else set()
+        if table_review_columns and "candidate_payload" not in table_review_columns:
+            with engine.begin() as connection:
+                connection.exec_driver_sql("ALTER TABLE table_reviews ADD COLUMN candidate_payload JSON")
+                connection.exec_driver_sql(
+                    "UPDATE table_reviews SET candidate_payload = draft_payload WHERE candidate_payload IS NULL"
                 )
     return sessionmaker(engine, expire_on_commit=False)
 
@@ -332,7 +342,7 @@ class TableReviewStore:
                 raise ValueError("Tablo denetim kaydı zaten var")
             now = datetime.now(UTC)
             record = TableReview(
-                id=payload["id"], document_id=payload["document_id"], draft_payload=payload,
+                id=payload["id"], document_id=payload["document_id"], candidate_payload=payload, draft_payload=payload,
                 published_payload=None, status="review_required", revision=1,
                 created_at=now, updated_at=now,
             )

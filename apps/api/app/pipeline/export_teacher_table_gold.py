@@ -11,6 +11,7 @@ from .visual_table_benchmark import (
     GOLD_SCHEMA_VERSION,
     MINIMUM_TABLE_GOLD_SAMPLES,
     VisualTableGoldManifest,
+    evaluate_manifest,
 )
 
 
@@ -49,12 +50,39 @@ def teacher_approved_gold(tables: TableReviewStore) -> tuple[dict, dict]:
     return manifest, report
 
 
+def teacher_approved_quality_report(tables: TableReviewStore) -> dict:
+    """Score immutable pre-review candidates against teacher-approved Gold."""
+    manifest, export = teacher_approved_gold(tables)
+    if export["status"] != "ready":
+        return {
+            "report_type": "teacher-approved-vector-native-quality-v1",
+            "contains_document_content": False,
+            "status": export["status"],
+        }
+    gold = VisualTableGoldManifest.model_validate(manifest)
+    candidates = [
+        {
+            key: item.candidate_payload[key]
+            for key in ("schema_version", "publication_status", "kind", "source", "cells", "confidence")
+        }
+        for item in tables.list_teacher_approved()
+    ]
+    return {
+        "report_type": "teacher-approved-vector-native-quality-v1",
+        "contains_document_content": False,
+        "status": "completed",
+        "evaluation": evaluate_manifest(candidates, gold),
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Export teacher-approved private table Gold manifest")
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
-    manifest, report = teacher_approved_gold(TableReviewStore(make_session_factory()))
+    tables = TableReviewStore(make_session_factory())
+    manifest, report = teacher_approved_gold(tables)
+    report["candidate_quality"] = teacher_approved_quality_report(tables)
     args.report.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     if report["status"] == "ready":
         args.output.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")

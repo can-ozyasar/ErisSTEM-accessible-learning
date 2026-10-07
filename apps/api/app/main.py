@@ -20,7 +20,16 @@ from .job_store import (
     DocumentStore,
     JobStore,
     ProcessingJob,
+    TableReviewStore,
     make_session_factory,
+)
+from .table_review import (
+    PublishedTable,
+    TableReviewApproval,
+    TableReviewCorrection,
+    TeacherTableReview,
+    VectorNativeTableIngress,
+    teacher_projection,
 )
 
 
@@ -215,8 +224,13 @@ def get_document(document_id: str) -> Document:
 def review_preview(document: Document, page: int) -> tuple[Path, dict[str, float]]:
     if not any(block.source.page == page for block in document.blocks):
         raise HTTPException(status_code=404, detail="Sayfa belgede bulunamadı")
+    return preview_file(document.id, page)
+
+
+def preview_file(document_id: str, page: int) -> tuple[Path, dict[str, float]]:
+    """Read a pre-rendered private page preview without exposing the PDF itself."""
     root = Path(os.getenv("DERIVED_ROOT", "data/derived")).resolve()
-    directory = (root / "review-pages" / document.id).resolve()
+    directory = (root / "review-pages" / document_id).resolve()
     if not directory.is_relative_to(root):
         raise HTTPException(status_code=404, detail="Önizleme bulunamadı")
     image = directory / f"page-{page}.png"
@@ -264,6 +278,7 @@ app.add_middleware(
 )
 job_store = JobStore(make_session_factory())
 document_store = DocumentStore(job_store.sessions)
+table_review_store = TableReviewStore(job_store.sessions)
 document_store.ensure(demo_document.model_dump(mode="json"))
 
 
@@ -329,6 +344,112 @@ def gold_preview(item_id: str, _: Role = teacher_role):
     if image is None or not image.is_file():
         raise HTTPException(status_code=404, detail="Gold sayfa önizlemesi bulunamadı")
     return FileResponse(image, media_type="image/png")
+
+
+def source_bound_document(document_id: str, source_checksum: str) -> Document:
+    document = get_document(document_id)
+    if not any(block.source.source_checksum == source_checksum for block in document.blocks):
+        raise HTTPException(status_code=422, detail="Tablo kaynağı belge checksum'ı ile eşleşmiyor")
+    return document
+
+
+@app.post("/v1/admin/table-reviews", response_model=TeacherTableReview, status_code=201)
+def import_vector_native_table_review(
+    submission: VectorNativeTableIngress, role: Role = admin_role
+):
+    """Accept only the deterministic vector/native candidate envelope from a private worker."""
+    source_bound_document(submission.document_id, submission.source.source_checksum)
+    payload = submission.model_dump(mode="json")
+    try:
+        item = table_review_store.create(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    document_store.add_audit(
+        submission.document_id, role, "vector_native_table_imported", submission.id,
+        f"page={submission.source.page}; region={submission.source.region_id}",
+    )
+    return teacher_projection(item.draft_payload, item.status, item.revision)
+
+
+@app.get("/v1/teacher/table-reviews", response_model=list[TeacherTableReview])
+def table_review_queue(_: Role = teacher_role):
+    """Only uncertain, still-unapproved tables are listed for the teacher."""
+    return [
+        teacher_projection(item.draft_payload, item.status, item.revision)
+        for item in table_review_store.list_pending()
+    ]
+
+
+def get_table_review(table_id: str):
+    item = table_review_store.get(table_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Tablo denetim kaydı bulunamadı")
+    return item
+
+
+@app.get("/v1/teacher/table-reviews/{table_id}/preview")
+def table_review_preview(table_id: str, _: Role = teacher_role):
+    item = get_table_review(table_id)
+    payload = item.draft_payload
+    source_bound_document(payload["document_id"], payload["source"]["source_checksum"])
+    image, size = preview_file(payload["document_id"], payload["source"]["page"])
+    return FileResponse(
+        image,
+        media_type="image/png",
+        headers={"X-Pdf-Page-Width": str(size["width"]), "X-Pdf-Page-Height": str(size["height"])},
+    )
+
+
+@app.put("/v1/teacher/table-reviews/{table_id}", response_model=TeacherTableReview)
+def correct_table_review(
+    table_id: str, update: TableReviewCorrection, role: Role = teacher_role
+):
+    item = get_table_review(table_id)
+    if item.status != "review_required":
+        raise HTTPException(status_code=409, detail="Tablo denetim beklemiyor")
+    if item.revision != update.expected_revision:
+        raise HTTPException(status_code=409, detail="İçerik değişti; tekrar yükleyin")
+    original = {(cell["row"], cell["column"]) for cell in item.draft_payload["cells"]}
+    corrected = {(cell.row, cell.column) for cell in update.cells}
+    if original != corrected:
+        raise HTTPException(status_code=422, detail="Hücre yapısı değiştirilemez; yalnız hücre metni/rolü doğrulanır")
+    payload = {**item.draft_payload, "cells": [cell.model_dump(mode="json") for cell in update.cells]}
+    saved = table_review_store.save(table_id, payload, status="approved", revision=item.revision + 1)
+    document_store.add_audit(payload["document_id"], role, "table_corrected", table_id, update.reason)
+    return teacher_projection(saved.draft_payload, saved.status, saved.revision)
+
+
+@app.post("/v1/teacher/table-reviews/{table_id}/approve", response_model=TeacherTableReview)
+def approve_table_review(
+    table_id: str, approval: TableReviewApproval, role: Role = teacher_role
+):
+    item = get_table_review(table_id)
+    if item.status != "review_required":
+        raise HTTPException(status_code=409, detail="Tablo denetim beklemiyor")
+    if item.revision != approval.expected_revision:
+        raise HTTPException(status_code=409, detail="İçerik değişti; tekrar yükleyin")
+    saved = table_review_store.save(table_id, item.draft_payload, status="approved", revision=item.revision + 1)
+    document_store.add_audit(item.document_id, role, "table_approved", table_id, approval.reason)
+    return teacher_projection(saved.draft_payload, saved.status, saved.revision)
+
+
+@app.post("/v1/reviewer/table-reviews/{table_id}/publish", response_model=PublishedTable)
+def publish_table_review(table_id: str, role: Role = reviewer_role):
+    item = get_table_review(table_id)
+    if item.status != "approved":
+        raise HTTPException(status_code=422, detail="Tablo öğretmen tarafından henüz onaylanmadı")
+    published = table_review_store.publish(table_id)
+    document_store.add_audit(item.document_id, role, "table_published", table_id, "teacher-approved")
+    return PublishedTable(id=published.id, cells=teacher_projection(published.draft_payload, "published", published.revision).cells)
+
+
+@app.get("/v1/student/tables/{table_id}", response_model=PublishedTable)
+def read_published_table(table_id: str, _: Role = any_role):
+    item = get_table_review(table_id)
+    if item.status != "published" or item.published_payload is None:
+        raise HTTPException(status_code=404, detail="Yayımlanmış tablo bulunamadı")
+    projection = teacher_projection(item.published_payload, "published", item.revision)
+    return PublishedTable(id=item.id, cells=projection.cells)
 
 
 @app.put("/v1/teacher/benchmark/gold-v1/items/{item_id}")

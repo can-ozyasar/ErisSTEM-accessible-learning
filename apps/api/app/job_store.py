@@ -83,6 +83,20 @@ class BenchmarkAnnotation(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class TableReview(Base):
+    """Private, source-bound table review state; student content is separate."""
+
+    __tablename__ = "table_reviews"
+    id: Mapped[str] = mapped_column(String(200), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(100), nullable=False)
+    draft_payload: Mapped[dict] = mapped_column(JSON, nullable=False)
+    published_payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False)
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 def database_url() -> str:
     configured = os.getenv("DATABASE_URL")
     if configured:
@@ -304,3 +318,54 @@ class DocumentStore:
     def audit(self) -> list[DocumentAudit]:
         with self.sessions() as session:
             return list(session.scalars(select(DocumentAudit).order_by(DocumentAudit.at)))
+
+
+class TableReviewStore:
+    """Store only reviewable vector/native tables, never raw model artefacts."""
+
+    def __init__(self, sessions: sessionmaker[Session]):
+        self.sessions = sessions
+
+    def create(self, payload: dict) -> TableReview:
+        with self.sessions.begin() as session:
+            if session.get(TableReview, payload["id"]):
+                raise ValueError("Tablo denetim kaydı zaten var")
+            now = datetime.now(UTC)
+            record = TableReview(
+                id=payload["id"], document_id=payload["document_id"], draft_payload=payload,
+                published_payload=None, status="review_required", revision=1,
+                created_at=now, updated_at=now,
+            )
+            session.add(record)
+            return record
+
+    def reset_for_test(self) -> None:
+        with self.sessions.begin() as session:
+            session.query(TableReview).delete()
+
+    def get(self, table_id: str) -> TableReview | None:
+        with self.sessions() as session:
+            return session.get(TableReview, table_id)
+
+    def list_pending(self) -> list[TableReview]:
+        with self.sessions() as session:
+            return list(session.scalars(select(TableReview).where(TableReview.status == "review_required").order_by(TableReview.created_at)))
+
+    def save(self, table_id: str, payload: dict, *, status: str, revision: int) -> TableReview:
+        with self.sessions.begin() as session:
+            record = session.get(TableReview, table_id)
+            if record is None:
+                raise LookupError("Tablo denetim kaydı bulunamadı")
+            record.draft_payload, record.status, record.revision = payload, status, revision
+            record.updated_at = datetime.now(UTC)
+            return record
+
+    def publish(self, table_id: str) -> TableReview:
+        with self.sessions.begin() as session:
+            record = session.get(TableReview, table_id)
+            if record is None:
+                raise LookupError("Tablo denetim kaydı bulunamadı")
+            record.status = "published"
+            record.published_payload = record.draft_payload
+            record.updated_at = datetime.now(UTC)
+            return record

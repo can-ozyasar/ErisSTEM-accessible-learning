@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from fastapi.testclient import TestClient
 
-from app.main import app, demo_document, document_store
+from app.main import SAMPLE_CHECKSUM, app, demo_document, document_store, table_review_store
 from app.pipeline.materialize import draft_from_text_layer
 from app.pipeline.pdf_text_layer import ExtractedBlock, ExtractedDocument, SourceCoordinate
 
@@ -14,6 +14,7 @@ client = TestClient(app)
 @pytest.fixture(autouse=True)
 def reset_document_store():
     document_store.reset_for_test(demo_document.model_dump(mode="json"))
+    table_review_store.reset_for_test()
 
 
 def test_student_never_receives_unreviewed_formula():
@@ -104,3 +105,68 @@ def test_only_admin_can_queue_and_duplicate_job_is_reused():
     assert second.status_code == 201
     assert second.json()["created"] is False
     assert second.json()["id"] == first.json()["id"]
+
+
+def test_vector_native_table_is_reviewed_at_source_then_published_separately():
+    submission = {
+        "id": "table-review-demo-1",
+        "document_id": "synthetic-geometry-01",
+        "schema_version": "visual-table-draft-v1",
+        "kind": "table",
+        "source": {
+            "region_id": "synthetic-grid-1", "source_checksum": SAMPLE_CHECKSUM,
+            "page": 1, "bbox": [72, 72, 300, 180],
+        },
+        "cells": [
+            {"row": 1, "column": 1, "role": "header", "text": "Kenar", "confidence": 0.0},
+            {"row": 1, "column": 2, "role": "header", "text": "Uzunluk", "confidence": 0.0},
+            {"row": 2, "column": 1, "role": "data", "text": "a", "confidence": 0.0},
+            {"row": 2, "column": 2, "role": "data", "text": "3", "confidence": 0.0},
+        ],
+        "confidence": 0.0,
+        "publication_status": "requires-gold-and-teacher-review",
+        "candidate_status": "candidate-vector-native-needs-gold-and-review",
+    }
+    created = client.post("/v1/admin/table-reviews", headers={"X-Role": "admin"}, json=submission)
+    assert created.status_code == 201
+    assert "confidence" not in created.json()
+    assert "source_checksum" not in created.json()["source"]
+    assert client.get("/v1/student/tables/table-review-demo-1", headers={"X-Role": "student"}).status_code == 404
+
+    queue = client.get("/v1/teacher/table-reviews", headers={"X-Role": "teacher"})
+    assert [item["id"] for item in queue.json()] == ["table-review-demo-1"]
+    approved = client.post(
+        "/v1/teacher/table-reviews/table-review-demo-1/approve",
+        headers={"X-Role": "teacher"},
+        json={"reason": "Kaynak PDF koordinatındaki tabloyla karşılaştırıldı.", "expected_revision": 1},
+    )
+    assert approved.status_code == 200
+    assert approved.json()["status"] == "approved"
+    published = client.post(
+        "/v1/reviewer/table-reviews/table-review-demo-1/publish", headers={"X-Role": "reviewer"}
+    )
+    assert published.status_code == 200
+    assert published.json() == {
+        "id": "table-review-demo-1",
+        "cells": [
+            {"row": 1, "column": 1, "role": "header", "text": "Kenar"},
+            {"row": 1, "column": 2, "role": "header", "text": "Uzunluk"},
+            {"row": 2, "column": 1, "role": "data", "text": "a"},
+            {"row": 2, "column": 2, "role": "data", "text": "3"},
+        ],
+    }
+
+
+def test_table_review_rejects_latex_and_non_vector_candidate():
+    payload = {
+        "id": "table-review-demo-2", "document_id": "synthetic-geometry-01",
+        "schema_version": "visual-table-draft-v1", "kind": "table",
+        "source": {"region_id": "grid", "source_checksum": SAMPLE_CHECKSUM, "page": 1, "bbox": [1, 1, 2, 2]},
+        "cells": [{"row": 1, "column": 1, "role": "data", "text": r"\\frac{1}{2}", "confidence": 0.0}],
+        "confidence": 0.0, "publication_status": "requires-gold-and-teacher-review",
+        "candidate_status": "candidate-vector-native-needs-gold-and-review",
+    }
+    assert client.post("/v1/admin/table-reviews", headers={"X-Role": "admin"}, json=payload).status_code == 422
+    payload["cells"][0]["text"] = "güvenli"
+    payload["candidate_status"] = "candidate-visual-needs-review"
+    assert client.post("/v1/admin/table-reviews", headers={"X-Role": "admin"}, json=payload).status_code == 422

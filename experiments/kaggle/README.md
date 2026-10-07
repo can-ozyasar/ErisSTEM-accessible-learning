@@ -144,3 +144,43 @@ kullanılamaz: aday tahminleri private olarak geri alındıktan sonra yalnız ye
 Gold ile skorlanır ve öğretmen/yayın kapıları yine geçerlidir. Üç tablodan
 oluşan mevcut pilot, fine-tuning için eğitim verisi değildir; önce bu kapalı
 benchmark üzerinde en az bir güçlü adayın kanıtlanması gerekir.
+
+İlk aday için runner, sadece tek tahmin dosyasını üretir. Ham model sonucu,
+PDF veya Gold Notebook output'undan indirilmez. Aşağıdaki dört komut sırasıyla
+private Dataset sürümünü yükler, private T4 Notebook paketini hazırlar,
+çalıştırır ve yalnız doğrulanmış tahmin dosyasını yerelde private alana getirir:
+
+```bash
+# Bu iki --apply komutu uzak private Kaggle kaynağını değiştirir.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py upload-dataset \
+  --source-dir data/private/eristem_meb9_symbol_cell_benchmark_v1 \
+  --handle muhammedcanozyasar/eristem-meb9-symbol-cell-benchmark-v1 \
+  --version-notes "Private sealed math-symbol candidate input v1" --apply
+
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-notebook \
+  --kernel muhammedcanozyasar/eristem-private-symbol-cell-paddleocr-v1 \
+  --dataset muhammedcanozyasar/eristem-meb9-symbol-cell-benchmark-v1 \
+  --runner experiments/kaggle/symbol_cell_paddleocr_runner.py \
+  --title "ErişSTEM private symbol-cell PaddleOCR benchmark" --internet
+
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py push-notebook \
+  --package-dir data/private/kaggle-notebooks/muhammedcanozyasar/eristem-private-symbol-cell-paddleocr-v1 \
+  --kernel muhammedcanozyasar/eristem-private-symbol-cell-paddleocr-v1 \
+  --dataset muhammedcanozyasar/eristem-meb9-symbol-cell-benchmark-v1 --apply
+
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py download-symbol-predictions \
+  --kernel muhammedcanozyasar/eristem-private-symbol-cell-paddleocr-v1 \
+  --input-manifest data/private/eristem_meb9_symbol_cell_benchmark_v1/symbol-cell-manifest.json
+```
+
+İndirilen `symbol_predictions.json`, yalnız private çıktı klasöründe kalır.
+Sonra bunu yerel Gold ile skorlayın; rapor beklenen sembolleri veya modelin ham
+metnini içermez:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.symbol_cell_evaluation \
+  --input-manifest data/private/eristem_meb9_symbol_cell_benchmark_v1/symbol-cell-manifest.json \
+  --gold data/private/eristem_meb9_symbol_cell_gold_v1.json \
+  --predictions data/private/kaggle-notebook-outputs/.../symbol_predictions.json \
+  --output data/private/symbol-cell-paddleocr-evaluation-v1.json
+```

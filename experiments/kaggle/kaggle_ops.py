@@ -25,6 +25,7 @@ SUMMARY_FILENAMES = (
     "region_records.json",
     "native_agreement_report.json",
 )
+SYMBOL_PREDICTIONS_FILENAME = "symbol_predictions.json"
 
 
 def repo_root() -> Path:
@@ -300,6 +301,97 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
     return destination, results
 
 
+def symbol_input_ids(input_manifest: Path) -> set[str]:
+    """Read IDs only from the sealed candidate manifest; never read local Gold."""
+    path = private_path(input_manifest)
+    if not path.is_file():
+        raise ValueError("Symbol input manifesti private dosya olarak bulunamadı")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        assets = payload["assets"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Symbol input manifesti okunamadı") from exc
+    if payload.get("schema_version") != "symbol-cell-benchmark-input-v1" or not isinstance(assets, list):
+        raise ValueError("Symbol input şeması geçersiz")
+    ids = {item.get("id") for item in assets if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    if not ids or len(ids) != len(assets) or "expected" in payload:
+        raise ValueError("Symbol input manifesti aday benchmark sınırını karşılamıyor")
+    return ids
+
+
+def validate_symbol_predictions(path: Path, expected_ids: set[str]) -> None:
+    """Reject arbitrary notebook output before it enters the private evaluation path."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        predictions = payload["predictions"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Symbol prediction dosyası okunamadı") from exc
+    if (
+        set(payload) != {"schema_version", "candidate", "predictions"}
+        or payload.get("schema_version") != "symbol-cell-predictions-v1"
+        or not isinstance(payload.get("candidate"), str)
+        or not 1 <= len(payload["candidate"]) <= 80
+        or not isinstance(predictions, list)
+    ):
+        raise ValueError("Symbol prediction şeması geçersiz")
+    seen: set[str] = set()
+    for item in predictions:
+        if not isinstance(item, dict) or set(item) != {"id", "prediction", "status"}:
+            raise ValueError("Symbol prediction alanları geçersiz")
+        asset_id, prediction, status = item.get("id"), item.get("prediction"), item.get("status")
+        if (
+            not isinstance(asset_id, str)
+            or asset_id not in expected_ids
+            or asset_id in seen
+            or not isinstance(prediction, str)
+            or len(prediction) > 128
+            or status not in {"completed", "no-text", "failed"}
+        ):
+            raise ValueError("Symbol prediction kaydı geçersiz")
+        seen.add(asset_id)
+    if seen != expected_ids:
+        raise ValueError("Symbol prediction kayıtları aday input hücreleriyle eşleşmiyor")
+
+
+def download_symbol_predictions(kernel: str, input_manifest: Path) -> Path:
+    """Download exactly one schema-checked private prediction file for local scoring."""
+    expected_ids = symbol_input_ids(input_manifest)
+    destination = output_directory(kernel)
+    result = subprocess.run(
+        [
+            kaggle_cli(),
+            "kernels",
+            "output",
+            validate_handle(kernel),
+            "--path",
+            str(destination),
+            "--force",
+            "--quiet",
+            "--file-pattern",
+            f"^{re.escape(SYMBOL_PREDICTIONS_FILENAME)}$",
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    prediction_files = [path for path in destination.rglob(SYMBOL_PREDICTIONS_FILENAME) if path.is_file()]
+    unexpected = [path.name for path in destination.rglob("*") if path.is_file() and path.name != SYMBOL_PREDICTIONS_FILENAME]
+    if result.returncode != 0 or len(prediction_files) != 1 or unexpected:
+        raise RuntimeError("Yalnız izinli symbol prediction dosyası indirilemedi")
+    predictions = prediction_files[0]
+    validate_symbol_predictions(predictions, expected_ids)
+    manifest = {
+        "schema_version": "kaggle-symbol-prediction-download-v1",
+        "kernel": validate_handle(kernel),
+        "input_manifest_relative_path": str(private_path(input_manifest).relative_to(private_root())),
+        "files": [{"path": str(predictions.relative_to(destination)), "sha256": sha256(predictions), "bytes": predictions.stat().st_size}],
+    }
+    (destination / "download_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return predictions
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ErişSTEM safe Kaggle private Dataset and Notebook operations")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -328,6 +420,11 @@ def main() -> int:
     status.add_argument("--kernel", required=True)
     output = commands.add_parser("download-summaries", help="Yalnız izinli içeriksiz özet JSON'larını indirir")
     output.add_argument("--kernel", required=True)
+    predictions = commands.add_parser(
+        "download-symbol-predictions", help="Yalnız şema-doğrulanmış private sembol tahminlerini indirir"
+    )
+    predictions.add_argument("--kernel", required=True)
+    predictions.add_argument("--input-manifest", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "verify":
         print(json.dumps(verify(), ensure_ascii=False))
@@ -354,6 +451,10 @@ def main() -> int:
     if args.command == "download-summaries":
         destination, attempts = download_summaries(args.kernel)
         print(json.dumps({"status": "download-complete", "output": str(destination), "attempts": attempts}, ensure_ascii=False))
+        return 0
+    if args.command == "download-symbol-predictions":
+        prediction_path = download_symbol_predictions(args.kernel, args.input_manifest)
+        print(json.dumps({"status": "download-complete", "predictions": str(prediction_path)}, ensure_ascii=False))
         return 0
     source, handle = private_directory(args.source_dir), validate_handle(args.handle)
     if args.command == "prepare-dataset":

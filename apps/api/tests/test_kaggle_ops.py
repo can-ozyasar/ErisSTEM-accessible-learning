@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 import pytest
@@ -76,3 +77,42 @@ def test_prepare_notebook_rejects_runner_with_different_dataset(tmp_path: Path, 
             "Private benchmark",
             enable_internet=False,
         )
+
+
+def test_symbol_prediction_validation_requires_exactly_the_sealed_input_ids(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    manifest = private / "symbol-cell-manifest.json"
+    manifest.write_text(
+        json.dumps({"schema_version": "symbol-cell-benchmark-input-v1", "assets": [{"id": "cell-a"}]}),
+        encoding="utf-8",
+    )
+    predictions = private / "symbol_predictions.json"
+    predictions.write_text(
+        json.dumps(
+            {
+                "schema_version": "symbol-cell-predictions-v1",
+                "candidate": "candidate-a",
+                "predictions": [{"id": "cell-a", "prediction": "∈", "status": "completed"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(module, "private_root", lambda: private)
+
+    ids = module.symbol_input_ids(manifest)
+    module.validate_symbol_predictions(predictions, ids)
+
+    predictions.write_text(
+        json.dumps(
+            {
+                "schema_version": "symbol-cell-predictions-v1",
+                "candidate": "candidate-a",
+                "predictions": [{"id": "unknown", "prediction": "∈", "status": "completed"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="geçersiz"):
+        module.validate_symbol_predictions(predictions, ids)

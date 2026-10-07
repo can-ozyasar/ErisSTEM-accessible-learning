@@ -54,3 +54,22 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python \
 The importer is deterministic and idempotent: it creates previews and imports
 only vector/native candidates. It never imports a visual-model table draft,
 does not overwrite an existing review, and never publishes a table.
+
+## Öğretmen onayından sonraki otomatik kapı
+
+Üç farklı tablo öğretmen tarafından onaylanmadan Gold manifesti oluşmaz. Bu
+komut yalnız onaylı kayıtları private Gold biçimine dönüştürür; yeterli örnek
+yoksa yalnız içeriksiz bir `blocked` raporu yazar:
+
+```bash
+DATABASE_URL="sqlite:///$PWD/data/private/table-review-pilot.db" \
+PYTHONPATH=apps/api apps/api/.venv/bin/python \
+  -m app.pipeline.export_teacher_table_gold \
+  --output data/private/vector-native-table-gold-v1.json \
+  --report data/private/vector-native-table-gold-export-report.json
+```
+
+Gold manifesti ancak üç onaydan sonra yazılır. Sonraki ölçüm, private
+vector/native taslakları bu manifestle `visual_table_benchmark` üzerinden
+karşılaştırır; tam hücre/yapı/rol/metin eşleşmesi sağlanmadıkça üretim adayı
+onaylanmaz.

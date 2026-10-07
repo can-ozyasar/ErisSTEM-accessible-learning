@@ -351,6 +351,16 @@ class TableReviewStore:
         with self.sessions() as session:
             return list(session.scalars(select(TableReview).where(TableReview.status == "review_required").order_by(TableReview.created_at)))
 
+    def list_teacher_approved(self) -> list[TableReview]:
+        with self.sessions() as session:
+            return list(
+                session.scalars(
+                    select(TableReview)
+                    .where(TableReview.status.in_(("approved", "published")))
+                    .order_by(TableReview.created_at)
+                )
+            )
+
     def save(self, table_id: str, payload: dict, *, status: str, revision: int) -> TableReview:
         with self.sessions.begin() as session:
             record = session.get(TableReview, table_id)

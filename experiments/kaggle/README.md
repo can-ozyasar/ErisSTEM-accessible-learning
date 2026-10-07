@@ -110,3 +110,37 @@ output folder.
 `docling_visual_region_runner.py`, aynı V2 private crop ve native-kanıt paketi üzerinde Docling'i ikinci aday olarak çalıştırır. Ham Markdown yalnız private run klasöründe kalır; yalnız tek ve güvenle ayrıştırılabilen pipe-table düşük güvenli JSON taslağına dönüşür. `native_agreement_report.json` iki aday için karşılaştırılabilir içeriksiz proxy sinyalidir; Gold skoru veya yayın kararı değildir.
 
 Do not publish the MEB PDF, page images, annotations, or notebook outputs. Qwen3-VL 4B QLoRA is explicitly out of scope until Docling/Paddle baselines fail the recorded Gold gates.
+
+## Matematik sembol hücre benchmark'ı / Mathematical symbol-cell benchmark
+
+Tablo geometrisi doğru olduğu hâlde sembol fontu/Unicode eşlemesinin bozulduğu
+durumlarda tüm tabloyu yeniden OCR etmek yerine yalnız sorunlu hücreleri yüksek
+çözünürlükte ölçeriz. `symbol_cell_benchmark.py`, öğretmen-onaylı Gold'daki
+matematik-kritik hücreleri (ör. küme işlemleri ve üyelik işaretleri) kaynak PDF
+koordinatından crop olarak üretir.
+
+Kaggle'a gidecek aday paketi **cevap içermez**; beklenen semboller ayrı bir
+yerel private Gold dosyasında kalır. Böylece aday modeller eşit koşulda
+karşılaştırılır ve modelin Gold'u görmesi engellenir.
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.symbol_cell_benchmark \
+  --input data/meb/matematik-9sinif-ders-kitabi-1kitap_2026.pdf \
+  --source-root data/meb \
+  --gold data/private/vector-native-table-gold-v1.json \
+  --output-dir data/private/eristem_meb9_symbol_cell_benchmark_v1 \
+  --gold-output data/private/eristem_meb9_symbol_cell_gold_v1.json
+
+# Uzakta değişiklik yapmadan, gönderilecek paketi denetle.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-dataset \
+  --source-dir data/private/eristem_meb9_symbol_cell_benchmark_v1 \
+  --handle muhammedcanozyasar/eristem-meb9-symbol-cell-benchmark-v1 \
+  --version-notes "Private high-resolution math-symbol benchmark input; expected answers retained locally"
+```
+
+`--apply` olmadan komut yalnız checksum içeren private işlem kaydı üretir;
+uzak Dataset'e yükleme yapmaz. Sembol-crop sonuçları üretimde otomatik
+kullanılamaz: aday tahminleri private olarak geri alındıktan sonra yalnız yerel
+Gold ile skorlanır ve öğretmen/yayın kapıları yine geçerlidir. Üç tablodan
+oluşan mevcut pilot, fine-tuning için eğitim verisi değildir; önce bu kapalı
+benchmark üzerinde en az bir güçlü adayın kanıtlanması gerekir.

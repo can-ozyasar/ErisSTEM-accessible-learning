@@ -53,4 +53,8 @@ When the private Dataset includes `native-table-evidence-v1.json`, the runner al
 
 If the mathematical token normaliser changes, `rescore_native_agreement.py` re-scores the existing private `table_drafts.json` without downloading or running the model again. Share only its content-free report.
 
+## Docling visual-table comparison / Docling görsel tablo karşılaştırması
+
+`docling_visual_region_runner.py`, aynı V2 private crop ve native-kanıt paketi üzerinde Docling'i ikinci aday olarak çalıştırır. Ham Markdown yalnız private run klasöründe kalır; yalnız tek ve güvenle ayrıştırılabilen pipe-table düşük güvenli JSON taslağına dönüşür. `native_agreement_report.json` iki aday için karşılaştırılabilir içeriksiz proxy sinyalidir; Gold skoru veya yayın kararı değildir.
+
 Do not publish the MEB PDF, page images, annotations, or notebook outputs. Qwen3-VL 4B QLoRA is explicitly out of scope until Docling/Paddle baselines fail the recorded Gold gates.

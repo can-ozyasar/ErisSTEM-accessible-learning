@@ -385,7 +385,15 @@ def download_symbol_predictions(kernel: str, input_manifest: Path) -> Path:
         check=False,
     )
     prediction_files = [path for path in destination.rglob(SYMBOL_PREDICTIONS_FILENAME) if path.is_file()]
-    unexpected = [path.name for path in destination.rglob("*") if path.is_file() and path.name != SYMBOL_PREDICTIONS_FILENAME]
+    # Kaggle CLI always materialises its technical kernel log beside a matched
+    # output. It is not accepted as benchmark input or included in the manifest.
+    _, kernel_slug = validate_handle(kernel).split("/", maxsplit=1)
+    transient_log = f"{kernel_slug}.log"
+    unexpected = [
+        path.name
+        for path in destination.rglob("*")
+        if path.is_file() and path.name not in {SYMBOL_PREDICTIONS_FILENAME, transient_log}
+    ]
     if result.returncode != 0 or len(prediction_files) != 1 or unexpected:
         raise RuntimeError("Yalnız izinli symbol prediction dosyası indirilemedi")
     predictions = prediction_files[0]

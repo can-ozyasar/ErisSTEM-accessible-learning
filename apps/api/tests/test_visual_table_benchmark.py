@@ -88,3 +88,27 @@ def test_manifest_rejects_unexpected_model_field_instead_of_ignoring_it():
 
     assert report["invalid_or_duplicate_draft_regions"] == ["table-p46-1"]
     assert report["evaluations"][0]["decision"] == "missing-candidate"
+
+
+def test_symbol_quality_gate_detects_a_wrong_critical_glyph():
+    payload = candidate().model_dump() | {
+        "schema_version": "visual-table-draft-v1",
+        "publication_status": "requires-schema-validation-and-teacher-review",
+    }
+    reference = gold().model_dump()
+    reference["cells"][1]["text"] = "∈"
+    payload["cells"][1]["text"] = "!"
+
+    report = evaluate_manifest(
+        [payload],
+        VisualTableGoldManifest.model_validate({"schema_version": "visual-table-gold-v1", "tables": [reference]}),
+    )
+
+    assert report["symbol_quality"] == {
+        "report_type": "table-symbol-critical-quality-v1",
+        "contains_document_content": False,
+        "symbol_critical_cells": 1,
+        "symbol_exact_accuracy": 0.0,
+        "missing_symbol_cells": 0,
+        "decision": "symbol-gate-blocked",
+    }

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import unicodedata
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
@@ -21,6 +22,7 @@ from .visual_result_schema import SourceRegion, VisualTableDraft
 GOLD_SCHEMA_VERSION = "visual-table-gold-v1"
 DRAFT_SCHEMA_VERSION = "visual-table-draft-v1"
 MINIMUM_TABLE_GOLD_SAMPLES = 3
+SYMBOL_CRITICAL_CHARACTERS = frozenset({"\\", "′", "°", "|"})
 
 
 class GoldTableCell(BaseModel):
@@ -145,6 +147,46 @@ def evaluate_table(candidate: VisualTableDraft, gold: VisualTableGold) -> TableE
     )
 
 
+def _symbol_critical_cell(text: str) -> bool:
+    """Identify cells where a glyph substitution changes mathematical meaning."""
+    return any(unicodedata.category(character) == "Sm" or character in SYMBOL_CRITICAL_CHARACTERS for character in text)
+
+
+def symbol_quality_summary(drafts: list[dict], gold: VisualTableGoldManifest) -> dict:
+    """Content-free critical-glyph metric, separate from ordinary text accuracy."""
+    candidates: dict[str, VisualTableDraft] = {}
+    for payload in drafts:
+        if not isinstance(payload, dict):
+            continue
+        try:
+            candidate = _candidate_from_payload(payload)
+        except (ValidationError, ValueError):
+            continue
+        if candidate.source.region_id not in candidates:
+            candidates[candidate.source.region_id] = candidate
+    total = exact = missing = 0
+    for reference in gold.tables:
+        candidate = candidates.get(reference.source.region_id)
+        by_cell = {} if candidate is None else {(cell.row, cell.column): cell for cell in candidate.cells}
+        for cell in reference.cells:
+            if not _symbol_critical_cell(cell.text):
+                continue
+            total += 1
+            actual = by_cell.get((cell.row, cell.column))
+            if actual is None:
+                missing += 1
+            elif normalized(actual.text) == normalized(cell.text):
+                exact += 1
+    return {
+        "report_type": "table-symbol-critical-quality-v1",
+        "contains_document_content": False,
+        "symbol_critical_cells": total,
+        "symbol_exact_accuracy": exact / total if total else 0.0,
+        "missing_symbol_cells": missing,
+        "decision": "symbol-gate-passed" if total and exact == total else "symbol-gate-blocked",
+    }
+
+
 def evaluate_manifest(drafts: list[dict], gold: VisualTableGoldManifest) -> dict:
     """Create a content-free, conservative candidate-selection report."""
     drafts_by_region: dict[str, VisualTableDraft] = {}
@@ -195,6 +237,7 @@ def evaluate_manifest(drafts: list[dict], gold: VisualTableGoldManifest) -> dict
         "invalid_or_duplicate_draft_regions": sorted(invalid_drafts),
         "candidate_decision": candidate_decision,
         "evaluations": [asdict(item) for item in evaluations],
+        "symbol_quality": symbol_quality_summary(drafts, gold),
     }
 
 

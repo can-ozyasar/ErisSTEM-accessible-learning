@@ -155,6 +155,9 @@ def test_vector_native_table_is_reviewed_at_source_then_published_separately():
             {"row": 2, "column": 2, "role": "data", "text": "3"},
         ],
     }
+    reviewer_queue = client.get("/v1/reviewer/table-reviews", headers={"X-Role": "reviewer"})
+    assert reviewer_queue.status_code == 200
+    assert reviewer_queue.json()[0]["status"] == "published"
 
 
 def test_table_review_rejects_latex_and_non_vector_candidate():

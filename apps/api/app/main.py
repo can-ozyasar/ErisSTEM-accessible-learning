@@ -443,6 +443,15 @@ def publish_table_review(table_id: str, role: Role = reviewer_role):
     return PublishedTable(id=published.id, cells=teacher_projection(published.draft_payload, "published", published.revision).cells)
 
 
+@app.get("/v1/reviewer/table-reviews", response_model=list[TeacherTableReview])
+def reviewer_table_review_queue(_: Role = reviewer_role):
+    """Reviewer sees teacher-approved tables, including already published records."""
+    return [
+        teacher_projection(item.draft_payload, item.status, item.revision)
+        for item in table_review_store.list_teacher_approved()
+    ]
+
+
 @app.get("/v1/student/tables/{table_id}", response_model=PublishedTable)
 def read_published_table(table_id: str, _: Role = any_role):
     item = get_table_review(table_id)

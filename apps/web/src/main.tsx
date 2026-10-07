@@ -110,11 +110,13 @@ function GoldAnnotationReview() {
 
 function ReviewerPublish() {
   const [documents, setDocuments] = useState<TeacherDocument[]>([]);
-  const [message, setMessage] = useState("Yayınlanabilir belgeler yükleniyor.");
-  const load = () => fetch(`${API}/v1/teacher/documents`, { headers: { "X-Role": "reviewer" } }).then(r => r.json()).then((items: TeacherDocument[]) => { setDocuments(items); setMessage(items.length ? "Belge seçin." : "Belge bulunamadı."); }).catch(() => setMessage("Belge listesi yüklenemedi."));
+  const [tables, setTables] = useState<TableReview[]>([]);
+  const [message, setMessage] = useState("Yayınlanabilir içerikler yükleniyor.");
+  const load = () => Promise.all([fetch(`${API}/v1/teacher/documents`, { headers: { "X-Role": "reviewer" } }).then(r => r.json()) as Promise<TeacherDocument[]>, fetch(`${API}/v1/reviewer/table-reviews`, { headers: { "X-Role": "reviewer" } }).then(r => r.json()) as Promise<TableReview[]>]).then(([nextDocuments, nextTables]) => { setDocuments(nextDocuments); setTables(nextTables); setMessage(nextDocuments.length || nextTables.length ? "Onaylı içeriği yayınlamak için seçin." : "Yayınlanabilir içerik yok."); }).catch(() => setMessage("Yayın listesi yüklenemedi."));
   useEffect(() => { load(); }, []);
   const publish = async (id: string) => { const result = await fetch(`${API}/v1/reviewer/documents/${id}/publish`, { method: "POST", headers: { "X-Role": "reviewer" } }); setMessage(result.ok ? "Belge yayımlandı." : "Yayın engellendi: denetim bekleyen içerikleri kontrol edin."); if (result.ok) load(); };
-  return <main className="teacher"><h1>Onaylayıcı yayın paneli</h1><p role="status">{message}</p><ul>{documents.map(document => <li key={document.id}><h2>{document.title}</h2><p>Yayın sürümü: {document.published_revision}. Denetim bekleyen blok: {document.review_required_count}.</p><button type="button" disabled={document.review_required_count > 0} onClick={() => publish(document.id)}>Yayımla</button></li>)}</ul></main>;
+  const publishTable = async (id: string) => { const result = await fetch(`${API}/v1/reviewer/table-reviews/${id}/publish`, { method: "POST", headers: { "X-Role": "reviewer" } }); setMessage(result.ok ? "Tablo yayımlandı." : "Tablo yayımlanamadı; öğretmen onayı gerekli."); if (result.ok) load(); };
+  return <main className="teacher"><h1>Onaylayıcı yayın paneli</h1><p role="status">{message}</p><h2>Belgeler</h2><ul>{documents.map(document => <li key={document.id}><h3>{document.title}</h3><p>Yayın sürümü: {document.published_revision}. Denetim bekleyen blok: {document.review_required_count}.</p><button type="button" disabled={document.review_required_count > 0} onClick={() => publish(document.id)}>Yayımla</button></li>)}</ul><h2>Öğretmen onaylı tablolar</h2><ul>{tables.map(table => <li key={table.id}><h3>Sayfa {table.source.page} · tablo</h3><p>{table.cells.length} hücre. Durum: {table.status === "published" ? "yayımlandı" : "öğretmen onaylı"}.</p><button type="button" disabled={table.status === "published"} onClick={() => publishTable(table.id)}>{table.status === "published" ? "Yayımlandı" : "Tabloyu yayımla"}</button></li>)}</ul></main>;
 }
 
 const mode = new URLSearchParams(window.location.search).get("mode");

@@ -1,8 +1,8 @@
-"""Safe, auditable Kaggle private-Dataset operations for ErişSTEM.
+"""Safe, auditable Kaggle private Dataset and Notebook operations for ErişSTEM.
 
-No command uploads by default. A remote mutation needs both ``upload-dataset``
-and ``--apply``. Credentials are read only by kagglehub from the local user
-credential store; this script never reads, prints, or writes a token.
+No command uploads or starts a Notebook by default. A remote mutation needs an
+``--apply`` flag. Credentials are read only by Kaggle clients from the local
+user credential store; this script never reads, prints, or writes a token.
 """
 
 from __future__ import annotations
@@ -11,10 +11,20 @@ import argparse
 import hashlib
 import json
 import re
+import shutil
+import subprocess
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 
 HANDLE_PATTERN = re.compile(r"^[a-zA-Z0-9_-]+/[a-zA-Z0-9_-]+$")
+SUMMARY_FILENAMES = (
+    "run_metadata.json",
+    "run_records.json",
+    "structural_report.json",
+    "region_records.json",
+    "native_agreement_report.json",
+)
 
 
 def repo_root() -> Path:
@@ -30,6 +40,14 @@ def private_directory(value: Path) -> Path:
     root = private_root()
     if not path.is_relative_to(root) or not path.is_dir():
         raise ValueError("Dataset kaynağı yalnız data/private altındaki bir klasör olabilir")
+    return path
+
+
+def private_path(value: Path) -> Path:
+    """Accept a non-existing path only when it remains below data/private."""
+    path = value.resolve()
+    if not path.is_relative_to(private_root()):
+        raise ValueError("İşlem yolu yalnız data/private altında olabilir")
     return path
 
 
@@ -79,6 +97,36 @@ def write_record(action: str, handle: str, source: Path, *, applied: bool, versi
     return destination
 
 
+def write_notebook_record(
+    action: str,
+    kernel: str,
+    dataset: str,
+    package: Path,
+    *,
+    applied: bool,
+    details: dict[str, object] | None = None,
+) -> Path:
+    """Record orchestration metadata without reading raw document outputs."""
+    directory = private_root() / "kaggle-operation-records"
+    directory.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    package = private_directory(package)
+    record = {
+        "schema_version": "kaggle-notebook-operation-record-v1",
+        "created_at": datetime.now(UTC).isoformat(),
+        "action": action,
+        "kernel": validate_handle(kernel),
+        "dataset_handle": validate_handle(dataset),
+        "package_relative_path": str(package.relative_to(private_root())),
+        "applied": applied,
+        "files": dataset_manifest(package),
+        "details": details or {},
+    }
+    destination = directory / f"{timestamp}-{action}.json"
+    destination.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return destination
+
+
 def kagglehub_client():
     try:
         import kagglehub
@@ -98,8 +146,162 @@ def upload_dataset(source: Path, handle: str, version_notes: str) -> None:
     kagglehub_client().dataset_upload(validate_handle(handle), str(private_directory(source)), version_notes=version_notes)
 
 
+def runner_path(value: Path) -> Path:
+    """Permit only checked-in Kaggle runner source, never an arbitrary local script."""
+    path = value.resolve()
+    allowed_root = (repo_root() / "experiments" / "kaggle").resolve()
+    if not path.is_relative_to(allowed_root) or not path.is_file() or path.suffix != ".py":
+        raise ValueError("Notebook runner yalnız experiments/kaggle altındaki bir .py dosyası olabilir")
+    return path
+
+
+def kernel_package_directory(kernel: str) -> Path:
+    owner, slug = validate_handle(kernel).split("/", maxsplit=1)
+    return private_root() / "kaggle-notebooks" / owner / slug
+
+
+def prepare_notebook_package(
+    kernel: str,
+    dataset: str,
+    runner: Path,
+    title: str,
+    *,
+    enable_internet: bool,
+) -> Path:
+    """Create a private Kaggle script package, refusing to overwrite a package."""
+    kernel, dataset = validate_handle(kernel), validate_handle(dataset)
+    source = runner_path(runner)
+    if dataset not in source.read_text(encoding="utf-8"):
+        raise ValueError("Runner içindeki private Dataset yolu --dataset ile eşleşmiyor")
+    package = kernel_package_directory(kernel)
+    if package.exists():
+        raise FileExistsError("Notebook paketi zaten var; önce içeriği inceleyip bilinçli olarak kaldırın")
+    package.mkdir(parents=True)
+    shutil.copy2(source, package / "run.py")
+    metadata = {
+        "id": kernel,
+        "title": title,
+        "code_file": "run.py",
+        "language": "python",
+        "kernel_type": "script",
+        "is_private": "true",
+        "enable_gpu": "true",
+        "enable_internet": "true" if enable_internet else "false",
+        "dataset_sources": [dataset],
+        "competition_sources": [],
+        "kernel_sources": [],
+        "model_sources": [],
+    }
+    (package / "kernel-metadata.json").write_text(
+        json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return package
+
+
+def load_kernel_metadata(package: Path, kernel: str, dataset: str) -> dict[str, object]:
+    package = private_directory(package)
+    metadata_path = package / "kernel-metadata.json"
+    try:
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("Notebook metadata dosyası okunamadı") from exc
+    if not isinstance(metadata, dict):
+        raise TypeError("Notebook metadata nesne olmalı")
+    if metadata.get("id") != validate_handle(kernel) or metadata.get("is_private") != "true":
+        raise ValueError("Notebook handle veya private ayarı doğrulanamadı")
+    if metadata.get("dataset_sources") != [validate_handle(dataset)]:
+        raise ValueError("Notebook Dataset kaynağı doğrulanamadı")
+    code_file = metadata.get("code_file")
+    if not isinstance(code_file, str) or not (package / code_file).is_file():
+        raise ValueError("Notebook code_file pakette bulunamadı")
+    return metadata
+
+
+def kaggle_cli() -> str:
+    local = Path(sys.executable).with_name("kaggle")
+    if local.is_file():
+        return str(local)
+    executable = shutil.which("kaggle")
+    if not executable:
+        raise RuntimeError("Kaggle CLI kurulu değil; apps/api/.venv içinde kaggle paketini yükleyin")
+    return executable
+
+
+def run_cli(arguments: list[str], *, capture_output: bool = False) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [kaggle_cli(), *arguments], check=True, text=True, capture_output=capture_output
+    )
+
+
+def push_notebook(package: Path, kernel: str, dataset: str, timeout: int, accelerator: str) -> None:
+    load_kernel_metadata(package, kernel, dataset)
+    run_cli(
+        [
+            "kernels",
+            "push",
+            "--path",
+            str(private_directory(package)),
+            "--timeout",
+            str(timeout),
+            "--accelerator",
+            accelerator,
+        ]
+    )
+
+
+def notebook_status(kernel: str) -> str:
+    result = run_cli(["kernels", "status", validate_handle(kernel)], capture_output=True)
+    return result.stdout.strip()
+
+
+def output_directory(kernel: str) -> Path:
+    owner, slug = validate_handle(kernel).split("/", maxsplit=1)
+    timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    destination = private_root() / "kaggle-notebook-outputs" / owner / slug / timestamp
+    destination.mkdir(parents=True)
+    return destination
+
+
+def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
+    """Download only explicit content-free report filenames to a fresh private folder."""
+    destination = output_directory(kernel)
+    results: list[dict[str, object]] = []
+    for filename in SUMMARY_FILENAMES:
+        result = subprocess.run(
+            [
+                kaggle_cli(),
+                "kernels",
+                "output",
+                validate_handle(kernel),
+                "--path",
+                str(destination),
+                "--force",
+                "--quiet",
+                "--file-pattern",
+                f"^{re.escape(filename)}$",
+            ],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        results.append({"filename": filename, "downloaded": result.returncode == 0})
+    downloaded = [path for path in destination.rglob("*") if path.is_file()]
+    unexpected = [path.name for path in downloaded if path.name not in SUMMARY_FILENAMES]
+    if unexpected:
+        raise RuntimeError("İndirme allowlist dışı dosya üretti: " + ", ".join(sorted(unexpected)))
+    manifest = [
+        {"path": str(path.relative_to(destination)), "sha256": sha256(path), "bytes": path.stat().st_size}
+        for path in sorted(downloaded)
+    ]
+    (destination / "download_manifest.json").write_text(
+        json.dumps({"kernel": validate_handle(kernel), "files": manifest, "attempts": results}, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    return destination, results
+
+
 def main() -> int:
-    parser = argparse.ArgumentParser(description="ErişSTEM safe Kaggle private-Dataset operations")
+    parser = argparse.ArgumentParser(description="ErişSTEM safe Kaggle private Dataset and Notebook operations")
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("verify", help="Yalnız Kaggle kimlik doğrulamasını denetler")
     for name in ("prepare-dataset", "upload-dataset"):
@@ -109,9 +311,49 @@ def main() -> int:
         command.add_argument("--version-notes", required=True)
         if name == "upload-dataset":
             command.add_argument("--apply", action="store_true", help="Uzak Dataset sürümü oluşturmayı açıkça onaylar")
+    package = commands.add_parser("prepare-notebook", help="Private Kaggle script paketini yalnız yerelde oluşturur")
+    package.add_argument("--kernel", required=True)
+    package.add_argument("--dataset", required=True)
+    package.add_argument("--runner", type=Path, required=True)
+    package.add_argument("--title", required=True)
+    package.add_argument("--internet", action="store_true", help="Yalnız model/paket indirmesi gerektiğinde etkinleştir")
+    push = commands.add_parser("push-notebook", help="Private paketi Kaggle'a gönderir ve koşumu başlatır")
+    push.add_argument("--package-dir", type=Path, required=True)
+    push.add_argument("--kernel", required=True)
+    push.add_argument("--dataset", required=True)
+    push.add_argument("--timeout", type=int, default=3600)
+    push.add_argument("--accelerator", default="NvidiaTeslaT4")
+    push.add_argument("--apply", action="store_true", help="Uzak private Notebook oluşturma/güncelleme ve koşumu açıkça onaylar")
+    status = commands.add_parser("notebook-status", help="Notebook durumunu yalnız-okunur sorgular")
+    status.add_argument("--kernel", required=True)
+    output = commands.add_parser("download-summaries", help="Yalnız izinli içeriksiz özet JSON'larını indirir")
+    output.add_argument("--kernel", required=True)
     args = parser.parse_args()
     if args.command == "verify":
         print(json.dumps(verify(), ensure_ascii=False))
+        return 0
+    if args.command == "notebook-status":
+        print(json.dumps({"kernel": validate_handle(args.kernel), "status": notebook_status(args.kernel)}, ensure_ascii=False))
+        return 0
+    if args.command == "prepare-notebook":
+        package = prepare_notebook_package(args.kernel, args.dataset, args.runner, args.title, enable_internet=args.internet)
+        record = write_notebook_record("prepare-notebook", args.kernel, args.dataset, package, applied=False)
+        print(json.dumps({"status": "prepared-not-pushed", "package": str(package), "record": str(record)}, ensure_ascii=False))
+        return 0
+    if args.command == "push-notebook":
+        package = private_directory(args.package_dir)
+        load_kernel_metadata(package, args.kernel, args.dataset)
+        if not args.apply:
+            record = write_notebook_record("push-notebook", args.kernel, args.dataset, package, applied=False, details={"timeout": args.timeout, "accelerator": args.accelerator})
+            print(json.dumps({"status": "dry-run-not-pushed", "record": str(record)}, ensure_ascii=False))
+            return 0
+        push_notebook(package, args.kernel, args.dataset, args.timeout, args.accelerator)
+        record = write_notebook_record("push-notebook", args.kernel, args.dataset, package, applied=True, details={"timeout": args.timeout, "accelerator": args.accelerator})
+        print(json.dumps({"status": "pushed-and-started", "record": str(record)}, ensure_ascii=False))
+        return 0
+    if args.command == "download-summaries":
+        destination, attempts = download_summaries(args.kernel)
+        print(json.dumps({"status": "download-complete", "output": str(destination), "attempts": attempts}, ensure_ascii=False))
         return 0
     source, handle = private_directory(args.source_dir), validate_handle(args.handle)
     if args.command == "prepare-dataset":

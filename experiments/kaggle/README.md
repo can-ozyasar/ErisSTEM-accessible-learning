@@ -67,6 +67,44 @@ apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-dataset \
 
 Do not add `--apply` unless the exact private folder and target Dataset version have been reviewed. Operation records remain under ignored `data/private/kaggle-operation-records/`.
 
+## Private Notebook orkestrasyonu / Private Notebook orchestration
+
+`kaggle_ops.py` artık aynı güvenlik sınırında private Notebook paketi hazırlar,
+Kaggle'a gönderip GPU koşumunu başlatır ve yalnız allowlist'teki özet JSON
+dosyalarını indirir. Kod ve indirilen çıktılar `data/private/` altında kalır;
+runner ham PDF, crop, `results/`, `table_drafts.json` veya model Markdown'ını
+indiremez. `push-notebook` uzaktaki private Notebook'u oluşturur/günceller ve
+çalıştırır; bu nedenle ancak gerçek yeni bir benchmark gerektiğinde `--apply`
+ile kullanılır.
+
+```bash
+# 1. Bir kez: V2 Paddle tablosu için yerel private Notebook paketi oluştur.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-notebook \
+  --kernel muhammedcanozyasar/eristem-private-table-benchmark-v2 \
+  --dataset muhammedcanozyasar/eristem-meb9-table-gold-regions-v2 \
+  --runner experiments/kaggle/visual_region_runner.py \
+  --title "ErişSTEM private table benchmark V2" --internet
+
+# 2. Önce uzakta değişiklik yapmadan paketi doğrula.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py push-notebook \
+  --package-dir data/private/kaggle-notebooks/muhammedcanozyasar/eristem-private-table-benchmark-v2 \
+  --kernel muhammedcanozyasar/eristem-private-table-benchmark-v2 \
+  --dataset muhammedcanozyasar/eristem-meb9-table-gold-regions-v2
+
+# 3. Yalnız gerçek yeni koşum için: private T4 koşumunu gönder ve başlat.
+# Aynı komuta --apply eklenir; ardından yalnız durum ve izinli özetler alınır.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py notebook-status \
+  --kernel muhammedcanozyasar/eristem-private-table-benchmark-v2
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py download-summaries \
+  --kernel muhammedcanozyasar/eristem-private-table-benchmark-v2
+```
+
+The Kaggle notebook remains private, GPU-enabled, and receives exactly one
+declared private Dataset. A remote run is never started by a default command;
+`--apply` is the deliberate boundary. The downloader requests only named,
+content-free report files and creates a checksum manifest in the ignored private
+output folder.
+
 ## Docling visual-table comparison / Docling görsel tablo karşılaştırması
 
 `docling_visual_region_runner.py`, aynı V2 private crop ve native-kanıt paketi üzerinde Docling'i ikinci aday olarak çalıştırır. Ham Markdown yalnız private run klasöründe kalır; yalnız tek ve güvenle ayrıştırılabilen pipe-table düşük güvenli JSON taslağına dönüşür. `native_agreement_report.json` iki aday için karşılaştırılabilir içeriksiz proxy sinyalidir; Gold skoru veya yayın kararı değildir.

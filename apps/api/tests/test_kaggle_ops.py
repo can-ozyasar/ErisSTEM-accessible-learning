@@ -32,3 +32,47 @@ def test_private_directory_rejects_paths_outside_private_root(tmp_path: Path, mo
     assert module.private_directory(allowed) == allowed
     with pytest.raises(ValueError):
         module.private_directory(tmp_path)
+
+
+def test_prepare_notebook_package_is_private_and_binds_the_declared_dataset(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    runners = tmp_path / "experiments" / "kaggle"
+    runners.mkdir(parents=True)
+    runner = runners / "runner.py"
+    dataset = "muhammedcanozyasar/private-benchmark-v2"
+    runner.write_text(f"INPUT = '/kaggle/input/datasets/{dataset}'\n", encoding="utf-8")
+    monkeypatch.setattr(module, "private_root", lambda: private)
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+
+    package = module.prepare_notebook_package(
+        "muhammedcanozyasar/private-notebook-v2", dataset, runner, "Private benchmark", enable_internet=True
+    )
+
+    metadata = module.load_kernel_metadata(package, "muhammedcanozyasar/private-notebook-v2", dataset)
+    assert metadata["is_private"] == "true"
+    assert metadata["enable_gpu"] == "true"
+    assert metadata["dataset_sources"] == [dataset]
+    assert (package / "run.py").is_file()
+
+
+def test_prepare_notebook_rejects_runner_with_different_dataset(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    runners = tmp_path / "experiments" / "kaggle"
+    runners.mkdir(parents=True)
+    runner = runners / "runner.py"
+    runner.write_text("INPUT = 'another/dataset'\n", encoding="utf-8")
+    monkeypatch.setattr(module, "private_root", lambda: private)
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+
+    with pytest.raises(ValueError, match="eşleşmiyor"):
+        module.prepare_notebook_package(
+            "muhammedcanozyasar/private-notebook-v2",
+            "muhammedcanozyasar/private-benchmark-v2",
+            runner,
+            "Private benchmark",
+            enable_internet=False,
+        )

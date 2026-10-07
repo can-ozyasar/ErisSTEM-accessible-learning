@@ -116,7 +116,9 @@ def main() -> None:
         except (OSError, RuntimeError, ValueError, json.JSONDecodeError):
             predictions.append({"id": asset_id, "prediction": "", "status": "failed"})
             records.append({"id": asset_id, "status": "failed"})
-    (OUTPUT / PREDICTIONS_NAME).write_text(
+    # Kaggle downloads only /kaggle/working root outputs reliably. Keep raw
+    # inference files in OUTPUT, but expose this schema-limited private file.
+    (Path("/kaggle/working") / PREDICTIONS_NAME).write_text(
         json.dumps({"schema_version": "symbol-cell-predictions-v1", "candidate": "paddleocr-vl-transformers", "predictions": predictions}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )

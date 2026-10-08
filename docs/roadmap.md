@@ -11,6 +11,8 @@ bulduğu istisnaların denetçisidir.
   sözleşmesi.
 - Her blokta koordinat/checksum, okuma sırası, ekran okuyucu etiketi, sesli
   temsil ve kalite kanıtı.
+- Öğrenci okuyucusu için doğrulanmış bloklardan üretilen sıralı okuma planı;
+  düşük güvenli bloklar bu plana giremez.
 - `auto-approved`, `review-required`, `blocked` kararları; confidence tek
   başına hiçbir zaman yayın kararı vermez.
 - Kaynak bağı, şema veya render bozulursa içerik öğrenciye hiç ulaşmaz.

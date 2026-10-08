@@ -38,6 +38,10 @@ olamaz. VLM/OCR yalnız aday üretir; karar vermez.
   ekran okuyucu ile tür-bazlı gezinme.
 - Türkçe TTS: hız, duraklat/devam, cümle/öğe atlama; matematik için kısa ve
   ayrıntılı okunuş modu.
+- İlk sürüm, işletim sistemi/tarayıcının Türkçe sesini yalnız doğrulanmış
+  okuma planı üzerinde kullanır. Fine-tuning ancak lisanslı ses kayıtları,
+  matematik sesletim Gold'u, kör kullanıcı görev testleri ve mevcut sese karşı
+  anlaşılabilirlik değerlendirmesiyle başlatılır.
 - Braille adaptörü: kanonik metin/MathML'den gerçek Türkçe-matematik Braille
   dönüşümü; Unicode görsel taklidi değil.
 - NVDA+Firefox, TalkBack+Chrome ve klavye görev testleri release kapısıdır.

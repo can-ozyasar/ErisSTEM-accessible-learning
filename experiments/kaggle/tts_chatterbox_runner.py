@@ -96,11 +96,26 @@ def load_gold(path: Path) -> list[dict[str, object]]:
     return checked
 
 
-def main() -> None:
-    OUTPUT.mkdir(parents=True, exist_ok=True)
+def install_chatterbox_runtime() -> None:
+    """Install Chatterbox's pinned Torch runtime without a mismatched vision wheel.
+
+    Kaggle's base image can have a newer CUDA torchvision wheel. Chatterbox
+    pins Torch 2.6, so leaving that wheel installed makes Transformers import
+    an unavailable ``torchvision::nms`` operator even though TTS needs no
+    vision functions. The Notebook runtime is ephemeral; removing only this
+    optional package avoids modifying any persistent local environment.
+    """
     subprocess.run(
         [sys.executable, "-m", "pip", "install", "--quiet", "chatterbox-tts"], check=True
     )
+    subprocess.run(
+        [sys.executable, "-m", "pip", "uninstall", "--yes", "torchvision"], check=True
+    )
+
+
+def main() -> None:
+    OUTPUT.mkdir(parents=True, exist_ok=True)
+    install_chatterbox_runtime()
     import torch
     import torchaudio as ta
     from chatterbox.mtl_tts import ChatterboxMultilingualTTS

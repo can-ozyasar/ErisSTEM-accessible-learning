@@ -59,3 +59,15 @@ def test_tts_runner_rejects_path_like_gold_item_id(tmp_path: Path):
 
     with pytest.raises(module.TtsInputError, match="invalid_tts_gold_item"):
         module.load_gold(gold)
+
+
+def test_tts_runner_removes_only_the_incompatible_optional_vision_package(monkeypatch):
+    module = runner_module()
+    calls = []
+
+    monkeypatch.setattr(module.subprocess, "run", lambda command, check: calls.append((command, check)))
+
+    module.install_chatterbox_runtime()
+
+    assert calls[0][0][-1] == "chatterbox-tts"
+    assert calls[1][0][-2:] == ["--yes", "torchvision"]

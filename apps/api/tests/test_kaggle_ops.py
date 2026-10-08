@@ -230,3 +230,49 @@ def test_download_tts_audio_accepts_only_run_bound_wavs_and_verifies_each_checks
             "bytes": len(audio_bytes),
         }
     ]
+
+
+def test_download_tts_candidate_transcripts_requires_known_gold_ids_and_candidate(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    gold = private / "tts-gold-v1.json"
+    gold.write_text(
+        json.dumps(
+            {
+                "schema_version": "tts-gold-v1",
+                "items": [{"id": "unit-01"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    destination = tmp_path / "download"
+    kernel = "muhammedcanozyasar/private-asr-v1"
+    monkeypatch.setattr(module, "private_root", lambda: private)
+    monkeypatch.setattr(module, "output_directory", lambda received_kernel: destination)
+    monkeypatch.setattr(module, "kaggle_cli", lambda: "kaggle")
+
+    def fake_run(command, **_kwargs):
+        transcript = destination / "run" / "candidate_transcripts.json"
+        transcript.parent.mkdir(parents=True, exist_ok=True)
+        transcript.write_text(
+            json.dumps(
+                {
+                    "schema_version": "tts-candidate-v1",
+                    "candidate": "voice-a",
+                    "results": [{"id": "unit-01", "observed_spoken_text": "private transcript"}],
+                }
+            ),
+            encoding="utf-8",
+        )
+        (destination / "private-asr-v1.log").write_text("technical log", encoding="utf-8")
+        return subprocess.CompletedProcess(command, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    transcripts = module.download_tts_candidate_transcripts(kernel, gold, "voice-a")
+
+    assert transcripts.name == "candidate_transcripts.json"
+    manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["candidate"] == "voice-a"
+    assert manifest["file"]["path"] == "run/candidate_transcripts.json"

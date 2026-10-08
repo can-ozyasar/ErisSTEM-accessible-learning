@@ -26,8 +26,10 @@ SUMMARY_FILENAMES = (
     "native_agreement_report.json",
 )
 SYMBOL_PREDICTIONS_FILENAME = "symbol_predictions.json"
+TTS_CANDIDATE_TRANSCRIPTS_FILENAME = "candidate_transcripts.json"
 TTS_AUDIO_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 MAX_TTS_AUDIO_FILES = 200
+MAX_TTS_TRANSCRIPT_CHARS = 8_000
 
 
 def repo_root() -> Path:
@@ -434,6 +436,113 @@ def download_tts_audio(kernel: str, run_records_path: Path) -> Path:
     return destination
 
 
+def tts_gold_ids(gold_path: Path) -> set[str]:
+    """Read only private Gold identifiers to bound a candidate transcript download."""
+    path = private_path(gold_path)
+    if not path.is_file():
+        raise ValueError("Private TTS Gold dosyası bulunamadı")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        items = payload["items"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Private TTS Gold dosyası okunamadı") from exc
+    if payload.get("schema_version") != "tts-gold-v1" or not isinstance(items, list) or not items:
+        raise ValueError("Private TTS Gold şeması geçersiz")
+    ids = {
+        item.get("id")
+        for item in items
+        if isinstance(item, dict) and isinstance(item.get("id"), str) and TTS_AUDIO_ID_PATTERN.fullmatch(item["id"])
+    }
+    if len(ids) != len(items):
+        raise ValueError("Private TTS Gold kimlikleri geçersiz")
+    return ids
+
+
+def validate_tts_candidate_transcripts(path: Path, expected_ids: set[str], expected_candidate: str) -> None:
+    """Keep untrusted private ASR text out unless every field has the expected shape."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        results = payload["results"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Private TTS aday transkripti okunamadı") from exc
+    if (
+        set(payload) != {"schema_version", "candidate", "results"}
+        or payload.get("schema_version") != "tts-candidate-v1"
+        or payload.get("candidate") != expected_candidate
+        or not isinstance(results, list)
+        or len(results) > len(expected_ids)
+    ):
+        raise ValueError("Private TTS aday transkript şeması geçersiz")
+    seen: set[str] = set()
+    for result in results:
+        if not isinstance(result, dict) or set(result) != {"id", "observed_spoken_text"}:
+            raise ValueError("Private TTS aday transkript kaydı geçersiz")
+        item_id, observed = result.get("id"), result.get("observed_spoken_text")
+        if (
+            not isinstance(item_id, str)
+            or item_id not in expected_ids
+            or item_id in seen
+            or not isinstance(observed, str)
+            or not observed.strip()
+            or len(observed) > MAX_TTS_TRANSCRIPT_CHARS
+        ):
+            raise ValueError("Private TTS aday transkript kaydı geçersiz")
+        seen.add(item_id)
+
+
+def download_tts_candidate_transcripts(kernel: str, gold_path: Path, expected_candidate: str) -> Path:
+    """Download one schema-checked private ASR transcript candidate for local scoring."""
+    kernel = validate_handle(kernel)
+    expected_ids = tts_gold_ids(gold_path)
+    if not isinstance(expected_candidate, str) or not 1 <= len(expected_candidate) <= 100:
+        raise ValueError("Beklenen TTS aday adı geçersiz")
+    destination = output_directory(kernel)
+    result = subprocess.run(
+        [
+            kaggle_cli(),
+            "kernels",
+            "output",
+            kernel,
+            "--path",
+            str(destination),
+            "--force",
+            "--quiet",
+            "--file-pattern",
+            output_filename_pattern(TTS_CANDIDATE_TRANSCRIPTS_FILENAME),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    transcripts = [path for path in destination.rglob(TTS_CANDIDATE_TRANSCRIPTS_FILENAME) if path.is_file()]
+    _, kernel_slug = kernel.split("/", maxsplit=1)
+    transient_log = f"{kernel_slug}.log"
+    unexpected = [
+        path.name
+        for path in destination.rglob("*")
+        if path.is_file() and path.name not in {TTS_CANDIDATE_TRANSCRIPTS_FILENAME, transient_log}
+    ]
+    if result.returncode != 0 or len(transcripts) != 1 or unexpected:
+        raise RuntimeError("Yalnız izinli private TTS aday transkripti indirilemedi")
+    transcript_path = transcripts[0]
+    validate_tts_candidate_transcripts(transcript_path, expected_ids, expected_candidate)
+    manifest = {
+        "schema_version": "kaggle-tts-candidate-transcript-download-v1",
+        "kernel": kernel,
+        "gold_relative_path": str(private_path(gold_path).relative_to(private_root())),
+        "candidate": expected_candidate,
+        "file": {
+            "path": str(transcript_path.relative_to(destination)),
+            "sha256": sha256(transcript_path),
+            "bytes": transcript_path.stat().st_size,
+        },
+    }
+    (destination / "download_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return transcript_path
+
+
 def symbol_input_ids(input_manifest: Path) -> set[str]:
     """Read IDs only from the sealed candidate manifest; never read local Gold."""
     path = private_path(input_manifest)
@@ -571,6 +680,13 @@ def main() -> int:
     )
     audio.add_argument("--kernel", required=True)
     audio.add_argument("--run-records", type=Path, required=True)
+    transcripts = commands.add_parser(
+        "download-tts-candidate-transcripts",
+        help="Yalnız Gold kimlikleriyle şema-doğrulanmış private TTS aday transkriptini indirir",
+    )
+    transcripts.add_argument("--kernel", required=True)
+    transcripts.add_argument("--gold", type=Path, required=True)
+    transcripts.add_argument("--expected-candidate", required=True)
     args = parser.parse_args()
     if args.command == "verify":
         print(json.dumps(verify(), ensure_ascii=False))
@@ -605,6 +721,10 @@ def main() -> int:
     if args.command == "download-tts-audio":
         destination = download_tts_audio(args.kernel, args.run_records)
         print(json.dumps({"status": "download-complete", "output": str(destination)}, ensure_ascii=False))
+        return 0
+    if args.command == "download-tts-candidate-transcripts":
+        transcript_path = download_tts_candidate_transcripts(args.kernel, args.gold, args.expected_candidate)
+        print(json.dumps({"status": "download-complete", "transcripts": str(transcript_path)}, ensure_ascii=False))
         return 0
     source, handle = private_directory(args.source_dir), validate_handle(args.handle)
     if args.command == "prepare-dataset":

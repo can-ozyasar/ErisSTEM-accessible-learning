@@ -47,6 +47,15 @@ kanıtlanır. Ancak bundan sonra, model ailesinin resmî veri gereksinimine gör
 eğitim corpus miktarı kararlaştırılır; rastgele internet sesiyle fine-tuning
 başlatılmaz.
 
+Projede bunun için 60 özgün ve dengeli Türkçe STEM sesletim örneğinden oluşan
+bir calibration Gold üreticisi vardır. Bu örnekler MEB kaynağı veya öğrenciye
+sunulan ders içeriği değildir; yalnız model adaylarını ilk kez sınamak içindir:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.bootstrap_tts_evaluation_gold \
+  --output data/private/eristem_meb9_tts_gold_v1/tts-gold-v1.json
+```
+
 ## Private manifest ve doğrulama
 
 Örnek manifest yapısı (metinler burada temsili tutulur; gerçek içerik private

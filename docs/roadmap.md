@@ -71,6 +71,10 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
   incelemeli hafif yerel ONNX aday ile CUDA üzerinde kalite adayı aynı private
   Gold ile karşılaştırılır. Eğitim, izinli konuşmacı kayıtları ve baseline'a
   karşı kör dinleyici iyileşmesi olmadan başlatılmaz (ADR 0016).
+- Eğitim corpus'u için açık rıza, geri çekme süreci, WAV kalite denetimi ve
+  train/validation ayrımı zorunludur. Herkese açık video veya kanal erişimi
+  eğitim rızası yerine geçmez; `tts_training_corpus` yalnız private yapı
+  denetimi yapar, ses/model kalitesi kararı vermez.
 
 ## Mevcut durum
 

@@ -25,6 +25,17 @@ def test_student_never_receives_unreviewed_formula():
     assert [block["id"] for block in response.json()["blocks"]] == ["heading-1", "paragraph-1"]
 
 
+def test_student_reading_plan_exposes_only_verified_direct_text_units():
+    response = client.get(
+        "/v1/student/documents/synthetic-geometry-01/reading-plan", headers={"X-Role": "student"}
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [unit["id"] for unit in payload["plan"]["units"]] == ["heading-1", "paragraph-1"]
+    assert payload["unavailable_block_ids"] == []
+
+
 def test_missing_development_identity_is_rejected():
     response = client.get("/v1/student/documents/synthetic-geometry-01")
     assert response.status_code == 401

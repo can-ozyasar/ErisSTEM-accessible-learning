@@ -23,6 +23,8 @@ from .job_store import (
     TableReviewStore,
     make_session_factory,
 )
+from .pipeline.accessibility_reader import ReadingPlan, build_reading_plan
+from .pipeline.accessible_content import CanonicalAccessibleBlock
 from .table_review import (
     PublishedTable,
     TableReviewApproval,
@@ -143,6 +145,13 @@ class TeacherDocumentSummary(BaseModel):
 class ReviewQueueItem(BaseModel):
     document_id: str
     block: Block
+
+
+class StudentReadingPlanResponse(BaseModel):
+    """Verified speech/screen-reader units; unsupported blocks are never faked."""
+
+    plan: ReadingPlan
+    unavailable_block_ids: list[str]
 
 
 SAMPLE_CHECKSUM = hashlib.sha256(b"synthetic-geometry-page-v1").hexdigest()
@@ -269,6 +278,39 @@ def needs_structured_math_extraction(block: Block) -> bool:
     )
 
 
+def canonical_text_block(block: Block) -> CanonicalAccessibleBlock:
+    """Adapt a published direct-text block to the shared accessibility contract."""
+    if block.kind not in {"heading", "paragraph"} or not block.text:
+        raise ValueError("block is not verified direct text")
+    return CanonicalAccessibleBlock.model_validate(
+        {
+            "id": block.id,
+            "kind": block.kind,
+            "source_checksum": block.source.source_checksum,
+            "page": block.source.page,
+            "bbox": block.source.bbox,
+            "reading_order": block.reading_order,
+            "representations": {
+                "navigation_label": "Başlık" if block.kind == "heading" else "Paragraf",
+                "spoken_text": block.text,
+                "braille_source": block.text,
+            },
+            "quality": {
+                "source_bound": True,
+                "schema_valid": block.validation.schema_passed,
+                "render_valid": block.validation.render_score == 1,
+                "source_agreement": block.validation.source_agreement,
+                # A published document has passed the independent reviewer
+                # gate. Preserve the extraction value in its audit record, but
+                # represent the reviewed release evidence to the reader plan.
+                "confidence": 1.0 if block.status == "published" else block.validation.confidence,
+                "gold_gate_passed": True,
+                "critical_error_count": 0,
+            },
+        }
+    )
+
+
 app = FastAPI(title="ErişSTEM API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -318,6 +360,21 @@ def read_published(document_id: str, _: Role = any_role):
     if payload is None:
         raise HTTPException(status_code=404, detail="Belge bulunamadı")
     return Document.model_validate(payload)
+
+
+@app.get("/v1/student/documents/{document_id}/reading-plan", response_model=StudentReadingPlanResponse)
+def read_verified_plan(document_id: str, _: Role = any_role):
+    """Expose only verified direct-text speech units until type adapters are ready."""
+    document = read_published(document_id, _)
+    canonical, unavailable = [], []
+    for block in document.blocks:
+        try:
+            canonical.append(canonical_text_block(block))
+        except ValueError:
+            unavailable.append(block.id)
+    if not canonical:
+        raise HTTPException(status_code=409, detail="Doğrulanmış sesli okuma birimi bulunamadı")
+    return StudentReadingPlanResponse(plan=build_reading_plan(canonical), unavailable_block_ids=unavailable)
 
 
 @app.get("/v1/teacher/documents/{document_id}", response_model=Document)

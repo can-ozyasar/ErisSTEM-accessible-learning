@@ -64,6 +64,9 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
 - TTS için en az 50 private Gold sesletim örneği, yüzde 98+ sesletim doğruluğu,
   kritik matematik belirteçlerinde yüzde 100 doğruluk ve ardından kör kullanıcı
   dinleyici çalışması zorunludur. Bu kapı geçilmeden özel ses modeli seçilmez.
+- `build_tts_gold` yalnız otomatik kalite kapısını geçmiş kanonik okuma
+  birimlerinden private TTS Gold hazırlar. Öğretmen yalnız kritik sesletim
+  belirteçlerini örneklem bazında denetler; ders içeriğini baştan yazmaz.
 
 ## Mevcut durum
 

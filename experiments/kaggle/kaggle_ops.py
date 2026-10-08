@@ -273,6 +273,11 @@ def output_directory(kernel: str) -> Path:
     return destination
 
 
+def output_filename_pattern(filename: str) -> str:
+    """Match one allowlisted output name whether Kaggle preserves its run directory or not."""
+    return rf"^(?:.*/)?{re.escape(filename)}$"
+
+
 def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
     """Download only explicit content-free report filenames to a fresh private folder."""
     kernel = validate_handle(kernel)
@@ -290,7 +295,7 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
                 "--force",
                 "--quiet",
                 "--file-pattern",
-                f"^{re.escape(filename)}$",
+                output_filename_pattern(filename),
             ],
             text=True,
             capture_output=True,
@@ -388,7 +393,7 @@ def download_symbol_predictions(kernel: str, input_manifest: Path) -> Path:
             "--force",
             "--quiet",
             "--file-pattern",
-            f"^{re.escape(SYMBOL_PREDICTIONS_FILENAME)}$",
+            output_filename_pattern(SYMBOL_PREDICTIONS_FILENAME),
         ],
         text=True,
         capture_output=True,

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -86,6 +87,16 @@ def test_notebook_title_must_resolve_to_the_declared_kernel_slug():
     assert module.notebook_title_slug("Eristem Private Benchmark V2") == "eristem-private-benchmark-v2"
     with pytest.raises(ValueError, match="ASCII"):
         module.notebook_title_slug("ErişSTEM private benchmark")
+
+
+def test_output_filename_pattern_allows_only_the_expected_filename_with_an_optional_run_directory():
+    module = kaggle_ops_module()
+    pattern = module.output_filename_pattern("run_metadata.json")
+
+    assert re.fullmatch(pattern, "run_metadata.json")
+    assert re.fullmatch(pattern, "run-1/run_metadata.json")
+    assert not re.fullmatch(pattern, "run_metadata.json.bak")
+    assert not re.fullmatch(pattern, "run-1/unrelated.json")
 
 
 def test_symbol_prediction_validation_requires_exactly_the_sealed_input_ids(tmp_path: Path, monkeypatch):

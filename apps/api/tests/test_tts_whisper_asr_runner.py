@@ -76,3 +76,17 @@ def test_asr_runner_rejects_wav_path_outside_the_private_input_package(tmp_path:
 
     with pytest.raises(module.AsrInputError, match="tts_asr_audio_integrity_mismatch"):
         module.load_assets(manifest)
+
+
+def test_asr_runner_refreshes_pyav_for_the_current_faster_whisper_decoder(monkeypatch):
+    module = runner_module()
+    calls = []
+    monkeypatch.setattr(module.subprocess, "run", lambda command, check: calls.append((command, check)))
+
+    module.install_asr_runtime()
+
+    command, check = calls[0]
+    assert check is True
+    assert "faster-whisper==1.2.1" in command
+    assert "av>=14,<17" in command
+    assert "--force-reinstall" in command

@@ -116,7 +116,18 @@ def load_assets(manifest_path: Path) -> tuple[str, list[dict[str, object]]]:
 
 def install_asr_runtime() -> None:
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet", "faster-whisper==1.2.1"], check=True
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "--quiet",
+            "--upgrade",
+            "--force-reinstall",
+            "faster-whisper==1.2.1",
+            "av>=14,<17",
+        ],
+        check=True,
     )
 
 

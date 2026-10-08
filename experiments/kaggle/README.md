@@ -184,3 +184,41 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.symbol_cell_evalua
   --predictions data/private/kaggle-notebook-outputs/.../symbol_predictions.json \
   --output data/private/symbol-cell-paddleocr-evaluation-v1.json
 ```
+
+## Türkçe STEM TTS aday benchmark'ı
+
+`tts_chatterbox_runner.py`, yalnız private `tts-gold-v1.json` içindeki önceden
+doğrulanmış `expected_spoken_text` birimlerinden Chatterbox Multilingual V3
+ile Türkçe WAV üretir. Çalıştırıcı bir sesi öğrenciye yayımlamaz, sesletim
+kalitesi puanı üretmez ve fine-tuning yapmaz. WAV'lar private Notebook
+çıktısında kalır; yalnız içeriksiz `run_metadata.json` ve `run_records.json`
+özetleri otomatik olarak indirilebilir.
+
+Girdi Dataset'i `tts-gold-v1.json` dosyasını tek başına veya tek bir zip
+içinde taşımalıdır. Bu manifest, yalnız yayın eşiğini geçmiş kanonik bloklardan
+yerelde `build_tts_gold` ile üretilir. Dinleme/ASR transkriptleri Kaggle
+çalıştırıcısına değil, private yerel değerlendirme sürecine girer; sonuç
+`app.pipeline.tts_quality` ile skorlanır.
+
+```bash
+# Önce yalnız göndereceğiniz private Gold paketinin checksum kaydını oluşturun.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-dataset \
+  --source-dir data/private/eristem_meb9_tts_gold_v1 \
+  --handle muhammedcanozyasar/eristem-meb9-tts-gold-v1 \
+  --version-notes "Private verified Turkish STEM TTS evaluation input v1"
+
+# Notebook paketi private, GPU'lu ve yalnız bu Dataset'e bağlıdır.
+apps/api/.venv/bin/python experiments/kaggle/kaggle_ops.py prepare-notebook \
+  --kernel muhammedcanozyasar/eristem-private-tts-chatterbox-v1 \
+  --dataset muhammedcanozyasar/eristem-meb9-tts-gold-v1 \
+  --runner experiments/kaggle/tts_chatterbox_runner.py \
+  --title "Eristem Private Tts Chatterbox V1" --internet
+```
+
+`upload-dataset --apply` ve `push-notebook --apply` yalnız manifest içeriği,
+model kartı/lisans kaydı ve örnek sayısı gözden geçirildikten sonra kullanılır.
+Ses dosyaları ders içeriği taşıdığından genel çıktı indirme aracının allowlist'ine
+eklenmez; dinleyici incelemesi gerekiyorsa yalnız ilgili private Kaggle output
+elle, private saklama alanına alınır. 50+ Gold örnek, %98+ sesletim, kritik
+matematik belirteçlerinde %100 ve kör dinleyici testi geçilmeden ses modeli
+ürün varsayılanı olmaz.

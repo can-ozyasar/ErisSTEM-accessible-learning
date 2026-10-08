@@ -61,6 +61,9 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
   öğrenci yayımını otomatik durdurur.
 - Fine-tuning, ancak yeterli çeşitlilikte Gold veri ve baseline başarısızlığı
   varsa değerlendirilir.
+- TTS için en az 50 private Gold sesletim örneği, yüzde 98+ sesletim doğruluğu,
+  kritik matematik belirteçlerinde yüzde 100 doğruluk ve ardından kör kullanıcı
+  dinleyici çalışması zorunludur. Bu kapı geçilmeden özel ses modeli seçilmez.
 
 ## Mevcut durum
 

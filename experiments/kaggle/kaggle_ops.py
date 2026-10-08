@@ -278,30 +278,34 @@ def output_filename_pattern(filename: str) -> str:
     return rf"^(?:.*/)?{re.escape(filename)}$"
 
 
+def output_filenames_pattern(filenames: tuple[str, ...]) -> str:
+    """Match only allowlisted report names in one Kaggle download request."""
+    if not filenames:
+        raise ValueError("En az bir izinli çıktı dosyası gerekli")
+    return rf"^(?:.*/)?(?:{'|'.join(re.escape(filename) for filename in filenames)})$"
+
+
 def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
     """Download only explicit content-free report filenames to a fresh private folder."""
     kernel = validate_handle(kernel)
     destination = output_directory(kernel)
-    results: list[dict[str, object]] = []
-    for filename in SUMMARY_FILENAMES:
-        result = subprocess.run(
-            [
-                kaggle_cli(),
-                "kernels",
-                "output",
-                kernel,
-                "--path",
-                str(destination),
-                "--force",
-                "--quiet",
-                "--file-pattern",
-                output_filename_pattern(filename),
-            ],
-            text=True,
-            capture_output=True,
-            check=False,
-        )
-        results.append({"filename": filename, "downloaded": result.returncode == 0})
+    result = subprocess.run(
+        [
+            kaggle_cli(),
+            "kernels",
+            "output",
+            kernel,
+            "--path",
+            str(destination),
+            "--force",
+            "--quiet",
+            "--file-pattern",
+            output_filenames_pattern(SUMMARY_FILENAMES),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
     downloaded = [path for path in destination.rglob("*") if path.is_file()]
     # Kaggle CLI materialises a technical kernel log next to matched files.
     # It is never an accepted report, nor is it recorded in the manifest.
@@ -315,6 +319,11 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
     if unexpected:
         raise RuntimeError("İndirme allowlist dışı dosya üretti: " + ", ".join(sorted(unexpected)))
     accepted = [path for path in downloaded if path.name in SUMMARY_FILENAMES]
+    accepted_names = {path.name for path in accepted}
+    results = [
+        {"filename": filename, "downloaded": result.returncode == 0 and filename in accepted_names}
+        for filename in SUMMARY_FILENAMES
+    ]
     manifest = [
         {"path": str(path.relative_to(destination)), "sha256": sha256(path), "bytes": path.stat().st_size}
         for path in sorted(accepted)

@@ -99,6 +99,15 @@ def test_output_filename_pattern_allows_only_the_expected_filename_with_an_optio
     assert not re.fullmatch(pattern, "run-1/unrelated.json")
 
 
+def test_output_filenames_pattern_matches_only_the_allowlisted_report_names():
+    module = kaggle_ops_module()
+    pattern = module.output_filenames_pattern(("run_metadata.json", "run_records.json"))
+
+    assert re.fullmatch(pattern, "run-1/run_metadata.json")
+    assert re.fullmatch(pattern, "run-1/run_records.json")
+    assert not re.fullmatch(pattern, "run-1/audio.wav")
+
+
 def test_symbol_prediction_validation_requires_exactly_the_sealed_input_ids(tmp_path: Path, monkeypatch):
     module = kaggle_ops_module()
     private = tmp_path / "private"
@@ -157,7 +166,13 @@ def test_download_summaries_ignores_kaggle_technical_log_but_keeps_it_out_of_man
     result_directory, attempts = module.download_summaries(kernel)
 
     assert result_directory == destination
-    assert all(item["downloaded"] for item in attempts)
+    assert attempts == [
+        {"filename": "run_metadata.json", "downloaded": True},
+        {"filename": "run_records.json", "downloaded": False},
+        {"filename": "structural_report.json", "downloaded": False},
+        {"filename": "region_records.json", "downloaded": False},
+        {"filename": "native_agreement_report.json", "downloaded": False},
+    ]
     manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
     assert [item["path"] for item in manifest["files"]] == ["run_metadata.json"]
     assert (destination / "private-notebook-v3.log").is_file()

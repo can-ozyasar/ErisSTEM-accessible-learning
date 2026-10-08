@@ -191,6 +191,54 @@ Doğrulama yalnız dosya yapısı, WAV standardı, süre istatistikleri ve rıza
 attestasyonunu raporlar. Bu rapor `corpus-structure-valid` dese bile model
 eğitiminin uygun veya başarılı olacağını iddia etmez.
 
+## Harici veri kaynakları: Nisan sesi ve matematik alan verisi
+
+Bir Hugging Face veri kartı, ses modeli eğitimi izni yerine geçmez. Özellikle
+birleştirilmiş çok-konuşmacılı bir veri seti, tek bir hedef ses için doğrudan
+eğitim corpus'u değildir. Her harici kaynak önce private kaynak kayıt defterine
+ayrı rolüyle girer:
+
+- **Nisan Kumru hedef sesi:** Tek-konuşmacı eğitim yolu yalnız Nisan'a ait
+  kaynaklar için açılır. Kaynağın gerçekten tek konuşmacı olduğunu, ses ve
+  transkript kullanım hakkını, açık ses-modeli eğitimi iznini ve geri çekme
+  sürecini doğrulayan private bir izin kaydı olmadan ses indirilmez veya
+  fine-tuning'e eklenmez.
+- **`afkfatih/turkish-tts-combined-raw`:** Kaynak envanteri olarak ele
+  alınır; farklı konuşmacıların WAV'ları tek-ses eğitimine karıştırılmaz.
+  İçinden kullanılacak bir alt kaynak ayrıca kayda alınır ve yukarıdaki Nisan
+  koşullarını tek başına geçmelidir.
+- **`ysdede/khanacademy-turkish-math`:** İlk kullanım rolü ses eğitimi değil,
+  Türkçe matematik okunuşu kalıplarının analizi ve domain değerlendirmesidir.
+  Bu sesler hedef konuşmacının sesiyle karıştırılmaz. Metin kullanım hakkı
+  kayda geçmeden bu rol de açılmaz.
+
+Bu kaydı üretmek için (kayıt dosyası private tutulur):
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_source_registry \
+  --registry data/private/tts_sources/registry.json \
+  --output data/private/tts_sources/validation-report.json
+```
+
+`voice-training-blocked` kararı bir hata değil, eksik köken/izin varken
+sesin yanlışlıkla eğitime girmesini önleyen beklenen davranıştır. Ancak
+`private-corpus-intake-permitted` sonucundan sonra seçili WAV'lar normal
+`tts-training-corpus-v1` denetimine verilebilir.
+
+## Matematik okunuşu: önce deterministik plan, sonra ses
+
+Formül için modelin ham OCR, Markdown veya LaTex'i doğrudan seslendirmesi
+yasaktır. `turkish_math_speech` yalnız tam doğrulanmış MathML ve tam kalite
+kanıtı aldıktan sonra sınırlı, sürümlenmiş bir Türkçe okunuş planı üretir.
+Şimdiki güvenli alt küme; sayılar, işlem/karşılaştırma/küme operatörleri,
+kesir, karekök/kök, üst indis, alt indis ve parantezdir. Bilinmeyen MathML
+etiketi, aşırı karmaşık ifade veya bozuk işaretleme fail-closed reddedilir;
+öğretmen doğrulanmış alternatif okunuş girene kadar öğrenciye ses üretilmez.
+
+Bu plan TTS modelini değiştirmez. Önce kanonik `spoken_text` üretir; ses
+motoru yalnız bu planı kullanır. Böylece seçilecek Nisan sesli aday ve
+tarayıcı TTS'i aynı matematik dilbilgisini paylaşır.
+
 ## Öğrenciye ses teslim kapısı
 
 Bir Kaggle/TTS adayının WAV üretmiş olması öğrenciye sunulması için yeterli

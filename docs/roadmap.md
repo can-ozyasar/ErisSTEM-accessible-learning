@@ -84,6 +84,16 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
   eşleşirse sunulur. Eşleşmeyen veya eksik ses dosyası için sistem rastgele
   bir artefact göstermez; onaylı metin üzerindeki tarayıcı TTS'iyle sınırlı
   kalır.
+- Harici TTS kaynakları için `tts-training-source-registry-v1` vardır.
+  Birleştirilmiş çok-konuşmacılı setler tek-ses fine-tuning'e doğrudan
+  giremez. Hedef konuşmacı için tek-konuşmacı, ses/transkript hakkı, açık
+  ses-modeli eğitimi izni, geri çekme süreci ve private izin kaydı birlikte
+  şarttır. Matematik ders sesi ayrı bir `math-text-analysis` rolünde tutulur;
+  hedef sesle karıştırılmaz.
+- Formül okunuşu bir üretken modele bırakılmaz. Tam kalite kapısından geçen
+  MathML, `turkish-math-speech-v1` ile sınırlı/deterministik Türkçe konuşma
+  planına derlenir. Desteklenmeyen notasyon reddedilir ve öğretmen denetimine
+  gider; ham OCR/LaTex öğrenci TTS girdisi değildir.
 
 ## Mevcut durum
 

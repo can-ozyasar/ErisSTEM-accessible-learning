@@ -32,3 +32,34 @@ def test_tts_gate_blocks_a_wrong_critical_math_token_even_with_adequate_sample_c
 
     assert report["critical_token_accuracy"] < 1
     assert report["decision"] == "tts-candidate-blocked"
+
+
+def test_tts_gate_can_qualify_only_a_safe_content_kind_for_listener_review():
+    items = []
+    results = []
+    for kind in ("text", "formula"):
+        for number in range(25):
+            item_id = f"{kind}-{number}"
+            items.append({
+                "id": item_id,
+                "kind": kind,
+                "expected_spoken_text": "x karesi eşittir dört",
+                "critical_tokens": ["karesi", "eşittir"],
+            })
+            results.append({
+                "id": item_id,
+                "observed_spoken_text": (
+                    "x karesi eşittir dört" if kind == "text" else "x küpü eşittir dört"
+                ),
+            })
+    report = evaluate_tts_candidate(
+        TtsGoldManifest.model_validate({"schema_version": "tts-gold-v1", "items": items}),
+        TtsCandidateManifest.model_validate({
+            "schema_version": "tts-candidate-v1", "candidate": "voice-a", "results": results,
+        }),
+    )
+
+    assert report["quality_policy_version"] == "tts-quality-policy-v2"
+    assert report["eligible_kinds"] == ["text"]
+    assert report["kind_results"]["formula"]["automatic_screen"] == "blocked"
+    assert report["decision"] == "tts-candidate-kind-limited-listener-study-required"

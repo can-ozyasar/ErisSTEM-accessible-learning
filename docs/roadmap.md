@@ -61,9 +61,13 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
   öğrenci yayımını otomatik durdurur.
 - Fine-tuning, ancak yeterli çeşitlilikte Gold veri ve baseline başarısızlığı
   varsa değerlendirilir.
-- TTS için en az 50 private Gold sesletim örneği, yüzde 98+ sesletim doğruluğu,
-  kritik matematik belirteçlerinde yüzde 100 doğruluk ve ardından kör kullanıcı
-  dinleyici çalışması zorunludur. Bu kapı geçilmeden özel ses modeli seçilmez.
+- TTS otomatik kapısı artık tek bir ortalama ile karar vermez: en az 50 private
+  Gold örneği ve her değerlendirilen tür için en az 10 örnek gerekir. Metin,
+  alıştırma, tablo, grafik ve formülün ayrı sesletim/kritik-belirteç eşikleri
+  vardır. Formül en sıkı kritik-belirteç eşiğine sahiptir. Bu eşikler yalnız
+  kör dinleyici çalışmasına giriş içindir; öğrenci yayımı değildir. Bir aday
+  yalnız geçtiği türler için dinleyici çalışmasına girebilir; diğer türler
+  doğrulanmış tarayıcı TTS'inde kalır.
 - `build_tts_gold` yalnız otomatik kalite kapısını geçmiş kanonik okuma
   birimlerinden private TTS Gold hazırlar. Öğretmen yalnız kritik sesletim
   belirteçlerini örneklem bazında denetler; ders içeriğini baştan yazmaz.

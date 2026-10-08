@@ -131,15 +131,31 @@ def _require_automatic_quality_report(
     *,
     candidate: str,
     expected_sha256: str,
-) -> None:
+) -> set[str]:
+    """Return the content kinds that may enter the listener study.
+
+    A policy-v2 quality report can pass one safe content class while keeping
+    the other classes blocked.  Requiring an explicit, non-empty allow-list
+    prevents a partially qualified voice from being reviewed or packaged for
+    a different kind by accident.
+    """
+    eligible = report.get("eligible_kinds")
     if (
         report.get("report_type") != "tts-quality-evaluation-v1"
         or report.get("candidate") != candidate
-        or report.get("decision") != "tts-candidate-passed-listener-study-required"
+        or report.get("decision")
+        not in {
+            "tts-candidate-passed-listener-study-required",
+            "tts-candidate-kind-limited-listener-study-required",
+        }
+        or not isinstance(eligible, list)
+        or not eligible
+        or not all(isinstance(kind, str) and kind in VALID_KINDS for kind in eligible)
         or not isinstance(expected_sha256, str)
         or not re_fullmatch_sha256(expected_sha256)
     ):
         raise ValueError("listener_study_requires_passed_automatic_tts_quality")
+    return set(eligible)
 
 
 def build_listener_packets(
@@ -162,7 +178,7 @@ def build_listener_packets(
     if not all(re_fullmatch_identifier(reviewer_id) for reviewer_id in reviewer_ids):
         raise ValueError("invalid_listener_packet_identifiers")
     audio = _expected_audio(gold, run)
-    _require_automatic_quality_report(
+    eligible_kinds = _require_automatic_quality_report(
         automatic_quality_report,
         candidate=run.candidate,
         expected_sha256=automatic_quality_report_sha256,
@@ -177,6 +193,7 @@ def build_listener_packets(
                 "reference_spoken_text": item.expected_spoken_text,
             }
             for item in gold.items
+            if item.kind in eligible_kinds
         ]
         items.sort(key=lambda item: _sha256_text(f"{study_id}:{reviewer_id}:{item['id']}"))
         packets.append(
@@ -215,7 +232,7 @@ def evaluate_listener_study(
 ) -> dict[str, object]:
     """Fail closed unless independent reviewers accept every exact WAV sample."""
     audio = _expected_audio(gold, run)
-    _require_automatic_quality_report(
+    eligible_kinds = _require_automatic_quality_report(
         automatic_quality_report,
         candidate=run.candidate,
         expected_sha256=automatic_quality_report_sha256,
@@ -225,7 +242,8 @@ def evaluate_listener_study(
     if study.synthesis_run_sha256 != synthesis_run_sha256:
         raise ValueError("listener_study_synthesis_run_checksum_mismatch")
 
-    expected_ids = set(audio)
+    eligible_items = [item for item in gold.items if item.kind in eligible_kinds]
+    expected_ids = {item.id for item in eligible_items}
     reviews_by_id: dict[str, list[ListenerResponse]] = {item_id: [] for item_id in expected_ids}
     malformed_reviewer_count = 0
     for reviewer in study.reviewers:
@@ -242,7 +260,7 @@ def evaluate_listener_study(
                 reviews_by_id[item_id].append(response)
 
     records = []
-    for item in gold.items:
+    for item in eligible_items:
         reviews = reviews_by_id[item.id]
         records.append(
             {

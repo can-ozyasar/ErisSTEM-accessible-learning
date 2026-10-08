@@ -54,6 +54,7 @@ def automatic_quality_report() -> dict[str, object]:
         "report_type": "tts-quality-evaluation-v1",
         "candidate": "voice-a",
         "decision": "tts-candidate-passed-listener-study-required",
+        "eligible_kinds": ["formula", "table"],
     }
 
 

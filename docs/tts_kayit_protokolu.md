@@ -65,11 +65,17 @@ Bu nedenle her aday aşağıdaki kapılardan sırayla geçer:
 1. Her Gold birimi için private ASR çıktısı veya insan tarafından dinlenmiş
    `observed_spoken_text` oluşturulur. Bu dosya ders metni içerdiği için
    `data/private/` altında kalır ve `tts-candidate-v1` şemasını kullanır.
-2. Otomatik sesletim ve kritik belirteç kapısı çalışır. En az 50 örnek,
-   yüzde 98 sesletim ve yüzde 100 kritik belirteç gerekir.
+2. Otomatik sesletim ve kritik belirteç kapısı çalışır. En az 50 Gold örneği
+   ve her içerik türünde en az 10 örnek gerekir. `tts-quality-policy-v2`,
+   tek bir küresel yüzde yerine tür-bazlı eşikler kullanır: metin için
+   `%98 / %95`, alıştırma için `%96 / %97`, tablo ve grafik için `%95 / %97`,
+   formül için `%95 / %98` (sırasıyla sesletim / kritik belirteç). Bunlar
+   **öğrenci yayım eşiği değil**, insan dinleme testine giriş eşiğidir.
 3. Yalnız bu kapıyı geçen aday için üç bağımsız, aday adı gizlenmiş dinleyici
-   paketi oluşturulur. Her gözden geçiren 60 örneğin tamamında referans
-   eşleşmesini, anlaşılırlığı ve ciddi artefact olup olmadığını işaretler.
+   paketi oluşturulur. Aday yalnız bazı türleri geçerse paketler yalnız bu
+   türleri içerir; başarısız türlerden ses öğrenciye açılmaz. Her gözden
+   geçiren paketteki tüm örneklerde referans eşleşmesini, anlaşılırlığı ve
+   ciddi artefact olup olmadığını işaretler.
 4. Aynı WAV checksum'ı, sentez koşusu ve otomatik kalite raporuna bağlı üç
    tam inceleme başarılı olmadan ses varlığı manifesti oluşturulamaz.
 
@@ -82,8 +88,10 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_quality \
   --output data/private/tts_evaluation/chatterbox-v2-quality.json
 ```
 
-Karar `tts-candidate-passed-listener-study-required` değilse dinleyici
-çalışması ve öğrenci sesi başlatılmaz. Geçerse paketler şöyle hazırlanır:
+Karar `tts-candidate-passed-listener-study-required` veya
+`tts-candidate-kind-limited-listener-study-required` değilse dinleyici
+çalışması ve öğrenci sesi başlatılmaz. İkinci karar yalnız raporda açıkça
+listelenen `eligible_kinds` için geçerlidir. Geçerse paketler şöyle hazırlanır:
 
 ```bash
 PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_listener_study build-packets \

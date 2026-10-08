@@ -75,10 +75,14 @@ riski yaratır.
    tablo gezinmesi, grafik özeti ve alıştırma dengeli temsil edilir.
 2. Aynı Gold üzerinde tarayıcı sesi, lisansı uygun Piper adayı ve CUDA'da
    Chatterbox adayı karşılaştırılır.
-3. Otomatik kapı: en az %98 sesletim doğruluğu ve kritik matematik
-   belirteçlerinde %100 doğruluk. Eksik örnek de başarısızlıktır.
-4. Otomatik kapıyı geçen aday NVDA+Firefox ve TalkBack+Chrome ile kör görev
-   testine girer; öğrencinin formül/tablo/grafiği anlayabilmesi ölçülür.
+3. Otomatik kapı: en az 50 Gold örneği ile her tür için en az 10 örnek
+   gerektirir; tür-bazlı sesletim ve kritik-belirteç eşikleri uygular.
+   Formül kritik belirteçleri en sıkı eşiğe tabidir. Bu, otomatik ASR'nin
+   insan anlayışını kusursuz ölçtüğü iddiası değildir; yalnız dinleyici
+   çalışmasına aday seçen fail-closed bir ekrandır. Eksik örnek başarısızdır.
+4. Otomatik kapıyı geçen aday yalnız geçtiği türler için NVDA+Firefox ve
+   TalkBack+Chrome ile kör görev testine girer; öğrencinin
+   formül/tablo/grafiği anlayabilmesi ölçülür.
 5. Ancak iki kapıyı geçen aday ses adaptörü ve önbelleğiyle ürünleştirilir.
 
 TTS, içerik doğruluğunun yerine geçmez: kaynak/şema/render/Goldu geçmeyen blok

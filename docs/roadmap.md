@@ -67,6 +67,10 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
 - `build_tts_gold` yalnız otomatik kalite kapısını geçmiş kanonik okuma
   birimlerinden private TTS Gold hazırlar. Öğretmen yalnız kritik sesletim
   belirteçlerini örneklem bazında denetler; ders içeriğini baştan yazmaz.
+- TTS aday seçimi katmanlıdır: tarayıcı sesi yalnız geliştirme tabanı; lisans
+  incelemeli hafif yerel ONNX aday ile CUDA üzerinde kalite adayı aynı private
+  Gold ile karşılaştırılır. Eğitim, izinli konuşmacı kayıtları ve baseline'a
+  karşı kör dinleyici iyileşmesi olmadan başlatılmaz (ADR 0016).
 
 ## Mevcut durum
 

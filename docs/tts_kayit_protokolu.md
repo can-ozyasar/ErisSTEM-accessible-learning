@@ -56,6 +56,62 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.bootstrap_tts_eval
   --output data/private/eristem_meb9_tts_gold_v1/tts-gold-v1.json
 ```
 
+## Aday ses kalite ve dinleyici çalışması
+
+Kaggle'da WAV üretiminin başarılı olması yalnız sentezin tamamlandığını
+gösterir; adayın doğru, anlaşılır veya öğrenciye uygun olduğunu göstermez.
+Bu nedenle her aday aşağıdaki kapılardan sırayla geçer:
+
+1. Her Gold birimi için private ASR çıktısı veya insan tarafından dinlenmiş
+   `observed_spoken_text` oluşturulur. Bu dosya ders metni içerdiği için
+   `data/private/` altında kalır ve `tts-candidate-v1` şemasını kullanır.
+2. Otomatik sesletim ve kritik belirteç kapısı çalışır. En az 50 örnek,
+   yüzde 98 sesletim ve yüzde 100 kritik belirteç gerekir.
+3. Yalnız bu kapıyı geçen aday için üç bağımsız, aday adı gizlenmiş dinleyici
+   paketi oluşturulur. Her gözden geçiren 60 örneğin tamamında referans
+   eşleşmesini, anlaşılırlığı ve ciddi artefact olup olmadığını işaretler.
+4. Aynı WAV checksum'ı, sentez koşusu ve otomatik kalite raporuna bağlı üç
+   tam inceleme başarılı olmadan ses varlığı manifesti oluşturulamaz.
+
+Otomatik kalite raporunu, private Gold ve ASR/insan transkriptiyle üretin:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_quality \
+  --gold data/private/eristem_meb9_tts_gold_v1/tts-gold-v1.json \
+  --candidate data/private/tts_evaluation/chatterbox-v2-transcripts.json \
+  --output data/private/tts_evaluation/chatterbox-v2-quality.json
+```
+
+Karar `tts-candidate-passed-listener-study-required` değilse dinleyici
+çalışması ve öğrenci sesi başlatılmaz. Geçerse paketler şöyle hazırlanır:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_listener_study build-packets \
+  --gold data/private/eristem_meb9_tts_gold_v1/tts-gold-v1.json \
+  --synthesis-run data/private/.../run_records.json \
+  --automatic-quality-report data/private/tts_evaluation/chatterbox-v2-quality.json \
+  --study-id chatterbox-v2-study-001 \
+  --reviewer-id reviewer-01 --reviewer-id reviewer-02 --reviewer-id reviewer-03 \
+  --output-dir data/private/tts_evaluation/listener-packets
+```
+
+Gözden geçiren yanıtları `tts-listener-study-v1` şemasında private toplanır.
+Her yanıtta `id`, `audio_sha256`, `matches_reference`, `intelligible` ve
+`serious_artifact` alanları bulunur. Toplu karar için:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_listener_study evaluate \
+  --gold data/private/eristem_meb9_tts_gold_v1/tts-gold-v1.json \
+  --synthesis-run data/private/.../run_records.json \
+  --automatic-quality-report data/private/tts_evaluation/chatterbox-v2-quality.json \
+  --study data/private/tts_evaluation/chatterbox-v2-listener-study.json \
+  --output data/private/tts_evaluation/chatterbox-v2-listener-report.json
+```
+
+Bir ciddi artefact, eksik inceleme, farklı WAV checksum'ı veya başarısız
+otomatik kapı `tts-listener-study-blocked` üretir. Bu raporlar içerik,
+transkript, ses yolu veya dinleyici kimliği içermez.
+
 ## Private manifest ve doğrulama
 
 Örnek manifest yapısı (metinler burada temsili tutulur; gerçek içerik private

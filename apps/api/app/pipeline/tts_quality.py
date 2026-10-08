@@ -6,7 +6,10 @@ content-free aggregate metrics and cannot approve a voice by preference alone.
 
 from __future__ import annotations
 
+import argparse
+import json
 from collections import Counter
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -114,3 +117,36 @@ def evaluate_tts_candidate(gold: TtsGoldManifest, candidate: TtsCandidateManifes
         "decision": "tts-candidate-passed-listener-study-required" if passed else "tts-candidate-blocked",
         "records": records,
     }
+
+
+def main() -> int:
+    """Score private ASR or human-reviewed transcripts without exposing them."""
+    parser = argparse.ArgumentParser(description="Evaluate a private Turkish STEM TTS candidate")
+    parser.add_argument("--gold", type=Path, required=True)
+    parser.add_argument("--candidate", type=Path, required=True)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    if args.output.exists():
+        raise FileExistsError("refusing_to_overwrite_tts_quality_report")
+    try:
+        gold = TtsGoldManifest.model_validate_json(args.gold.read_text(encoding="utf-8"))
+        candidate = TtsCandidateManifest.model_validate_json(args.candidate.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as error:
+        raise ValueError("invalid_or_missing_private_tts_evaluation_input") from error
+    report = evaluate_tts_candidate(gold, candidate)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(
+        json.dumps(
+            {
+                key: report[key]
+                for key in ("report_type", "candidate", "gold_samples", "decision")
+            },
+            ensure_ascii=False,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -120,6 +120,36 @@ Bir ciddi artefact, eksik inceleme, farklı WAV checksum'ı veya başarısız
 otomatik kapı `tts-listener-study-blocked` üretir. Bu raporlar içerik,
 transkript, ses yolu veya dinleyici kimliği içermez.
 
+## Adaylar geçmezse: teşhis ve seçim kaydı
+
+ASR eşleşmesi dinleyici deneyiminin yerine geçmez; yine de hangi türün sonraki
+deneyde öncelikli olduğunu içerik sızdırmadan gösterir. Aşağıdaki araç,
+transkript veya Gold metnini rapora yazmadan tür başına kritik-belirteç kaybı,
+tam eşleşme sayısı ve hata şiddeti dağılımı üretir:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_error_analysis \
+  --gold data/private/eristem_meb9_tts_gold_v1/tts-gold-v1.json \
+  --candidate data/private/tts_evaluation/candidate-transcripts.json \
+  --output data/private/tts_evaluation/candidate-error-analysis.json
+```
+
+Birden çok aday karşılaştırıldığında sıralama veya ortalama puan, öğrenci sesi
+seçmek için tek başına kullanılamaz. Bunun yerine aşağıdaki fail-closed seçim
+raporu yalnız `eligible_kinds` içeren adayları kör dinleyici testine geçirir:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_candidate_selection \
+  --quality-report data/private/tts_evaluation/candidate-a-quality.json \
+  --quality-report data/private/tts_evaluation/candidate-b-quality.json \
+  --output data/private/tts_evaluation/candidate-selection.json
+```
+
+`no_candidate_eligible` sonucu başarısızlık gizlenmez: ses varlığı,
+dinleyici paketi ve öğrenci yayımı oluşturulmaz. Sonraki iş hata kümelerine
+uygun yeni bir aday veya açık rızalı, eğitim/validation ayrımlı kayıt corpus'u
+hazırlamaktır; değerlendirme Gold'u eğitim verisine dönüştürülmez.
+
 ## Private manifest ve doğrulama
 
 Örnek manifest yapısı (metinler burada temsili tutulur; gerçek içerik private

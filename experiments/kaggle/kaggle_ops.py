@@ -26,6 +26,8 @@ SUMMARY_FILENAMES = (
     "native_agreement_report.json",
 )
 SYMBOL_PREDICTIONS_FILENAME = "symbol_predictions.json"
+TTS_AUDIO_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+MAX_TTS_AUDIO_FILES = 200
 
 
 def repo_root() -> Path:
@@ -335,6 +337,103 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
     return destination, results
 
 
+def tts_audio_expectations(run_records_path: Path) -> tuple[str, dict[str, str]]:
+    """Read only generated audio IDs and hashes from a private synthesis report."""
+    path = private_path(run_records_path)
+    if not path.is_file():
+        raise ValueError("Private TTS synthesis kayıt raporu bulunamadı")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        candidate, records = payload["candidate"], payload["records"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Private TTS synthesis kayıt raporu okunamadı") from exc
+    if (
+        payload.get("schema_version") != "tts-synthesis-run-v1"
+        or not isinstance(candidate, str)
+        or not 1 <= len(candidate) <= 100
+        or not isinstance(records, list)
+        or not 1 <= len(records) <= MAX_TTS_AUDIO_FILES
+    ):
+        raise ValueError("Private TTS synthesis kayıt şeması geçersiz")
+    expectations: dict[str, str] = {}
+    for record in records:
+        if not isinstance(record, dict):
+            raise TypeError("Private TTS synthesis kaydı geçersiz")
+        item_id, status, audio_hash = record.get("id"), record.get("status"), record.get("audio_sha256")
+        if (
+            not isinstance(item_id, str)
+            or not TTS_AUDIO_ID_PATTERN.fullmatch(item_id)
+            or status != "generated"
+            or not isinstance(audio_hash, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", audio_hash)
+            or item_id in expectations
+        ):
+            raise ValueError("Private TTS synthesis kaydı geçersiz")
+        expectations[item_id] = audio_hash
+    return candidate, expectations
+
+
+def download_tts_audio(kernel: str, run_records_path: Path) -> Path:
+    """Download exactly the generated private WAVs and verify each sealed hash."""
+    kernel = validate_handle(kernel)
+    candidate, expected_hashes = tts_audio_expectations(run_records_path)
+    expected_filenames = tuple(f"{item_id}.wav" for item_id in expected_hashes)
+    destination = output_directory(kernel)
+    result = subprocess.run(
+        [
+            kaggle_cli(),
+            "kernels",
+            "output",
+            kernel,
+            "--path",
+            str(destination),
+            "--force",
+            "--quiet",
+            "--file-pattern",
+            output_filenames_pattern(expected_filenames),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    _, kernel_slug = kernel.split("/", maxsplit=1)
+    transient_log = f"{kernel_slug}.log"
+    allowed_names = {*expected_filenames, transient_log}
+    downloaded = [path for path in destination.rglob("*") if path.is_file()]
+    unexpected = [path.name for path in downloaded if path.name not in allowed_names]
+    files_by_name: dict[str, list[Path]] = {name: [] for name in expected_filenames}
+    for path in downloaded:
+        if path.name in files_by_name:
+            files_by_name[path.name].append(path)
+    if result.returncode != 0 or unexpected or any(len(paths) != 1 for paths in files_by_name.values()):
+        raise RuntimeError("Yalnız doğrulanmış private TTS WAV dosyaları indirilemedi")
+    verified_files = []
+    for item_id, expected_hash in expected_hashes.items():
+        path = files_by_name[f"{item_id}.wav"][0]
+        if sha256(path) != expected_hash:
+            raise RuntimeError("Private TTS WAV checksum uyuşmuyor")
+        verified_files.append(path)
+    manifest = {
+        "schema_version": "kaggle-tts-audio-download-v1",
+        "kernel": kernel,
+        "candidate": candidate,
+        "run_records_relative_path": str(private_path(run_records_path).relative_to(private_root())),
+        "files": [
+            {
+                "id": path.stem,
+                "path": str(path.relative_to(destination)),
+                "sha256": sha256(path),
+                "bytes": path.stat().st_size,
+            }
+            for path in sorted(verified_files)
+        ],
+    }
+    (destination / "download_manifest.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    return destination
+
+
 def symbol_input_ids(input_manifest: Path) -> set[str]:
     """Read IDs only from the sealed candidate manifest; never read local Gold."""
     path = private_path(input_manifest)
@@ -467,6 +566,11 @@ def main() -> int:
     )
     predictions.add_argument("--kernel", required=True)
     predictions.add_argument("--input-manifest", type=Path, required=True)
+    audio = commands.add_parser(
+        "download-tts-audio", help="Yalnız synthesis raporunda checksum'ı bulunan private TTS WAV'lerini indirir"
+    )
+    audio.add_argument("--kernel", required=True)
+    audio.add_argument("--run-records", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "verify":
         print(json.dumps(verify(), ensure_ascii=False))
@@ -497,6 +601,10 @@ def main() -> int:
     if args.command == "download-symbol-predictions":
         prediction_path = download_symbol_predictions(args.kernel, args.input_manifest)
         print(json.dumps({"status": "download-complete", "predictions": str(prediction_path)}, ensure_ascii=False))
+        return 0
+    if args.command == "download-tts-audio":
+        destination = download_tts_audio(args.kernel, args.run_records)
+        print(json.dumps({"status": "download-complete", "output": str(destination)}, ensure_ascii=False))
         return 0
     source, handle = private_directory(args.source_dir), validate_handle(args.handle)
     if args.command == "prepare-dataset":

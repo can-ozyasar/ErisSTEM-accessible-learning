@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import json
 import re
@@ -176,3 +177,56 @@ def test_download_summaries_ignores_kaggle_technical_log_but_keeps_it_out_of_man
     manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
     assert [item["path"] for item in manifest["files"]] == ["run_metadata.json"]
     assert (destination / "private-notebook-v3.log").is_file()
+
+
+def test_download_tts_audio_accepts_only_run_bound_wavs_and_verifies_each_checksum(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    run_records = private / "run_records.json"
+    audio_bytes = b"private wav bytes"
+    run_records.write_text(
+        json.dumps(
+            {
+                "schema_version": "tts-synthesis-run-v1",
+                "candidate": "voice-a",
+                "records": [
+                    {
+                        "id": "unit-01",
+                        "kind": "formula",
+                        "status": "generated",
+                        "audio_sha256": hashlib.sha256(audio_bytes).hexdigest(),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    destination = tmp_path / "download"
+    kernel = "muhammedcanozyasar/private-tts-v1"
+    monkeypatch.setattr(module, "private_root", lambda: private)
+    monkeypatch.setattr(module, "output_directory", lambda received_kernel: destination)
+    monkeypatch.setattr(module, "kaggle_cli", lambda: "kaggle")
+
+    def fake_run(command, **_kwargs):
+        audio_path = destination / "run" / "private-audio" / "unit-01.wav"
+        audio_path.parent.mkdir(parents=True, exist_ok=True)
+        audio_path.write_bytes(audio_bytes)
+        (destination / "private-tts-v1.log").write_text("technical log", encoding="utf-8")
+        return subprocess.CompletedProcess(command, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(module.subprocess, "run", fake_run)
+
+    result_directory = module.download_tts_audio(kernel, run_records)
+
+    assert result_directory == destination
+    manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
+    assert manifest["candidate"] == "voice-a"
+    assert manifest["files"] == [
+        {
+            "id": "unit-01",
+            "path": "run/private-audio/unit-01.wav",
+            "sha256": hashlib.sha256(audio_bytes).hexdigest(),
+            "bytes": len(audio_bytes),
+        }
+    ]

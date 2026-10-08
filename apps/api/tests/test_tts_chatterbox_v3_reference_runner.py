@@ -33,12 +33,23 @@ def test_v3_is_explicit_and_cannot_silently_fall_back_to_v2():
         calls: ClassVar[list[dict[str, str]]] = []
 
         @classmethod
-        def from_pretrained(cls, **kwargs):
+        def from_local(cls, _checkpoint_dir, **kwargs):
             cls.calls.append(kwargs)
             return "v3-model"
 
-    assert module.load_v3(FakeModel) == "v3-model"
+    snapshot_calls = []
+
+    def snapshot_download(**kwargs):
+        snapshot_calls.append(kwargs)
+        return "/private/pinned-model"
+
+    assert module.load_v3(FakeModel, snapshot_download) == "v3-model"
     assert FakeModel.calls == [{"device": "cuda", "t3_model": "v3"}]
+    assert snapshot_calls == [{
+        "repo_id": "ResembleAI/chatterbox", "repo_type": "model",
+        "revision": "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18",
+        "allow_patterns": module.MODEL_FILES,
+    }]
 
 
 def test_reference_filter_rejects_clipped_short_or_malformed_audio():

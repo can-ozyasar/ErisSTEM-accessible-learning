@@ -27,6 +27,15 @@ SOURCE_REVISION = "678712b026da89058feb010886de23983cc8563b"
 SOURCE_REFERENCE = "target-voice-001"
 CANDIDATE = "chatterbox-multilingual-v3-reference-target-voice-001-v1"
 CHATTERBOX_VERSION = "0.1.7"
+# PyPI 0.1.7 currently contains the V2 API.  This immutable upstream commit
+# contains the documented ``t3_model=\"v3\"`` implementation.
+CHATTERBOX_SOURCE_COMMIT = "5de7a54aa4e5e2baadb0182dde554908b48b85c2"
+MODEL_REPOSITORY = "ResembleAI/chatterbox"
+MODEL_REVISION = "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18"
+MODEL_FILES = [
+    "ve.pt", "t3_mtl23ls_v3.safetensors", "s3gen.pt",
+    "grapheme_mtl_merged_expanded_v1.json", "conds.pt", "Cangjie5_TC.json",
+]
 REFERENCE_SAMPLE_RATE = 24_000
 MIN_REFERENCE_SECONDS = 8.0
 MAX_REFERENCE_SECONDS = 12.0
@@ -104,17 +113,27 @@ def load_gold(path: Path) -> list[dict[str, object]]:
 
 
 def install_runtime() -> None:
-    """Use a known API release and remove only the incompatible optional wheel."""
+    """Install the V3-capable code commit, not the stale PyPI wheel alone."""
     subprocess.run(
-        [sys.executable, "-m", "pip", "install", "--quiet", f"chatterbox-tts=={CHATTERBOX_VERSION}", "datasets>=3.0,<4"],
+        [
+            sys.executable, "-m", "pip", "install", "--quiet", "--upgrade",
+            f"git+https://github.com/resemble-ai/chatterbox.git@{CHATTERBOX_SOURCE_COMMIT}",
+            "datasets>=3.0,<4",
+        ],
         check=True,
     )
     subprocess.run([sys.executable, "-m", "pip", "uninstall", "--yes", "torchvision"], check=True)
 
 
-def load_v3(factory):
-    """Keep V3 explicit: omitting this parameter would silently benchmark V2."""
-    return factory.from_pretrained(device="cuda", t3_model="v3")
+def load_v3(factory, snapshot_download):
+    """Load pinned V3 weights; never fall back to V2 or mutable ``main``."""
+    checkpoint_dir = snapshot_download(
+        repo_id=MODEL_REPOSITORY,
+        repo_type="model",
+        revision=MODEL_REVISION,
+        allow_patterns=MODEL_FILES,
+    )
+    return factory.from_local(checkpoint_dir, device="cuda", t3_model="v3")
 
 
 def viable_reference_waveform(audio: object, torch, torchaudio):
@@ -169,6 +188,7 @@ def main() -> None:
     import torchaudio as ta
     from chatterbox.mtl_tts import ChatterboxMultilingualTTS
     from datasets import load_dataset
+    from huggingface_hub import snapshot_download
 
     if not torch.cuda.is_available():
         raise RuntimeError("cuda_required_for_chatterbox_v3_reference_benchmark")
@@ -178,7 +198,7 @@ def main() -> None:
     reference_waveform, source_position = select_reference(source, torch, ta)
     reference_path = OUTPUT / "private-reference.wav"
     ta.save(str(reference_path), reference_waveform, REFERENCE_SAMPLE_RATE)
-    model = load_v3(ChatterboxMultilingualTTS)
+    model = load_v3(ChatterboxMultilingualTTS, snapshot_download)
     audio_dir = OUTPUT / "private-audio"
     audio_dir.mkdir(exist_ok=True)
     records = []
@@ -231,6 +251,9 @@ def main() -> None:
         "device": torch.cuda.get_device_name(0),
         "torch_version": torch.__version__,
         "chatterbox_version": importlib.metadata.version("chatterbox-tts"),
+        "chatterbox_source_commit": CHATTERBOX_SOURCE_COMMIT,
+        "model_repository": MODEL_REPOSITORY,
+        "model_revision": MODEL_REVISION,
         "source_dataset": SOURCE_DATASET,
         "source_revision": SOURCE_REVISION,
         "source_reference": SOURCE_REFERENCE,

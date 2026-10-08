@@ -44,6 +44,9 @@ olamaz. VLM/OCR yalnız aday üretir; karar vermez.
   anlaşılabilirlik değerlendirmesiyle başlatılır.
 - Braille adaptörü: kanonik metin/MathML'den gerçek Türkçe-matematik Braille
   dönüşümü; Unicode görsel taklidi değil.
+- Formül, tablo ve grafik için ayrı ses/Braille sözleşmeleri: formülde kısa ve
+  ayrıntılı MathML okunuşu; tabloda yapısal gezinme; grafikte yalnız
+  doğrulanmış eksen ve özet. Bu sözleşmeler haricinde TTS/AI açıklama üretemez.
 - NVDA+Firefox, TalkBack+Chrome ve klavye görev testleri release kapısıdır.
 
 Başarı ölçütü: öğrenci bir formülü, tabloyu ve grafiği fare kullanmadan

@@ -275,6 +275,7 @@ def output_directory(kernel: str) -> Path:
 
 def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
     """Download only explicit content-free report filenames to a fresh private folder."""
+    kernel = validate_handle(kernel)
     destination = output_directory(kernel)
     results: list[dict[str, object]] = []
     for filename in SUMMARY_FILENAMES:
@@ -283,7 +284,7 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
                 kaggle_cli(),
                 "kernels",
                 "output",
-                validate_handle(kernel),
+                kernel,
                 "--path",
                 str(destination),
                 "--force",
@@ -297,15 +298,24 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
         )
         results.append({"filename": filename, "downloaded": result.returncode == 0})
     downloaded = [path for path in destination.rglob("*") if path.is_file()]
-    unexpected = [path.name for path in downloaded if path.name not in SUMMARY_FILENAMES]
+    # Kaggle CLI materialises a technical kernel log next to matched files.
+    # It is never an accepted report, nor is it recorded in the manifest.
+    _, kernel_slug = kernel.split("/", maxsplit=1)
+    transient_log = f"{kernel_slug}.log"
+    unexpected = [
+        path.name
+        for path in downloaded
+        if path.name not in {*SUMMARY_FILENAMES, transient_log}
+    ]
     if unexpected:
         raise RuntimeError("İndirme allowlist dışı dosya üretti: " + ", ".join(sorted(unexpected)))
+    accepted = [path for path in downloaded if path.name in SUMMARY_FILENAMES]
     manifest = [
         {"path": str(path.relative_to(destination)), "sha256": sha256(path), "bytes": path.stat().st_size}
-        for path in sorted(downloaded)
+        for path in sorted(accepted)
     ]
     (destination / "download_manifest.json").write_text(
-        json.dumps({"kernel": validate_handle(kernel), "files": manifest, "attempts": results}, ensure_ascii=False, indent=2),
+        json.dumps({"kernel": kernel, "files": manifest, "attempts": results}, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
     return destination, results

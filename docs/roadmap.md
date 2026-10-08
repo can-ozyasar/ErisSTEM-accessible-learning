@@ -75,6 +75,11 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
   train/validation ayrımı zorunludur. Herkese açık video veya kanal erişimi
   eğitim rızası yerine geçmez; `tts_training_corpus` yalnız private yapı
   denetimi yapar, ses/model kalitesi kararı vermez.
+- Onaylı TTS sesleri öğrenciye ancak belge sürümü, doğrulanmış konuşma metni
+  hash'i, aday kalite raporu, dinleyici çalışması ve WAV checksum'ı birlikte
+  eşleşirse sunulur. Eşleşmeyen veya eksik ses dosyası için sistem rastgele
+  bir artefact göstermez; onaylı metin üzerindeki tarayıcı TTS'iyle sınırlı
+  kalır.
 
 ## Mevcut durum
 

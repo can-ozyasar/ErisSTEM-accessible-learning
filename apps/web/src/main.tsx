@@ -23,18 +23,47 @@ function Reader() {
   const [currentUnit, setCurrentUnit] = useState(0);
   const [speechStatus, setSpeechStatus] = useState("Sesli okuma hazırlanıyor.");
   const main = useRef<HTMLElement>(null);
+  const approvedAudio = useRef<HTMLAudioElement | null>(null);
+  const approvedAudioUrl = useRef<string | null>(null);
   const speechAvailable = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
   useEffect(() => {
     void Promise.all([
       fetch(`${API}/v1/student/documents/synthetic-geometry-01`, { headers: { "X-Role": "student" } }).then(r => r.ok ? r.json() as Promise<Document> : Promise.reject()),
       fetch(`${API}/v1/student/documents/synthetic-geometry-01/reading-plan`, { headers: { "X-Role": "student" } }).then(r => r.ok ? r.json() as Promise<ReadingPlanResponse> : Promise.reject()),
-    ]).then(([document, readingPlan]) => { setContent(document); setPlan(readingPlan); setSpeechStatus(speechAvailable ? "Doğrulanmış sesli okuma hazır." : "Bu tarayıcı sesli okumayı desteklemiyor."); }).catch(() => { setContent(null); setSpeechStatus("Doğrulanmış okuma planı yüklenemedi."); });
-    return () => { if (speechAvailable) window.speechSynthesis.cancel(); };
+    ]).then(([document, readingPlan]) => { setContent(document); setPlan(readingPlan); setSpeechStatus("Doğrulanmış okuma planı hazır."); }).catch(() => { setContent(null); setSpeechStatus("Doğrulanmış okuma planı yüklenemedi."); });
+    return () => { if (speechAvailable) window.speechSynthesis.cancel(); approvedAudio.current?.pause(); if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current); };
   }, [speechAvailable]);
-  const speak = useCallback((index = currentUnit) => {
+  const stop = useCallback(() => {
+    if (speechAvailable) window.speechSynthesis.cancel();
+    approvedAudio.current?.pause();
+    approvedAudio.current = null;
+    if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current);
+    approvedAudioUrl.current = null;
+    setSpeechStatus("Sesli okuma durduruldu.");
+  }, [speechAvailable]);
+  const speak = useCallback(async (index = currentUnit) => {
     const unit = plan?.plan.units[index];
-    if (!unit || !speechAvailable) return;
-    window.speechSynthesis.cancel();
+    if (!unit || !content) return;
+    if (speechAvailable) window.speechSynthesis.cancel();
+    approvedAudio.current?.pause();
+    if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current);
+    approvedAudio.current = null;
+    approvedAudioUrl.current = null;
+    try {
+      const response = await fetch(`${API}/v1/student/documents/${encodeURIComponent(content.id)}/audio/${encodeURIComponent(unit.id)}`, { headers: { "X-Role": "student" } });
+      if (response.ok) {
+        const url = URL.createObjectURL(await response.blob());
+        const audio = new Audio(url);
+        approvedAudio.current = audio;
+        approvedAudioUrl.current = url;
+        audio.onplay = () => setSpeechStatus(`${unit.navigation_label} onaylı sesle okunuyor.`);
+        audio.onended = () => { setSpeechStatus(`${unit.navigation_label} tamamlandı.`); URL.revokeObjectURL(url); if (approvedAudioUrl.current === url) approvedAudioUrl.current = null; };
+        audio.onerror = () => setSpeechStatus("Onaylı ses dosyası oynatılamadı.");
+        await audio.play();
+        return;
+      }
+    } catch { /* A vetted server asset is optional; use the verified browser fallback below. */ }
+    if (!speechAvailable) { setSpeechStatus("Bu birim için onaylı ses bulunamadı ve tarayıcı sesli okumayı desteklemiyor."); return; }
     const utterance = new SpeechSynthesisUtterance(unit.spoken_text);
     utterance.lang = "tr-TR";
     utterance.rate = 0.95;
@@ -42,12 +71,12 @@ function Reader() {
     utterance.onend = () => setSpeechStatus(`${unit.navigation_label} tamamlandı.`);
     utterance.onerror = () => setSpeechStatus("Sesli okuma bu birimde tamamlanamadı.");
     window.speechSynthesis.speak(utterance);
-  }, [currentUnit, plan, speechAvailable]);
+  }, [content, currentUnit, plan, speechAvailable]);
   const moveUnit = useCallback((change: number) => { if (!plan) return; const next = Math.max(0, Math.min(plan.plan.units.length - 1, currentUnit + change)); setCurrentUnit(next); window.document.getElementById(plan.plan.units[next]?.id)?.focus(); }, [currentUnit, plan]);
-  useEffect(() => { const handler = (event: KeyboardEvent) => { if (event.altKey && event.key.toLowerCase() === "h") window.document.querySelector("h1,h2,h3")?.scrollIntoView(); if (event.altKey && event.key.toLowerCase() === "f") window.document.querySelector(".formula")?.scrollIntoView(); if (event.altKey && event.key === "ArrowRight") { event.preventDefault(); moveUnit(1); } if (event.altKey && event.key === "ArrowLeft") { event.preventDefault(); moveUnit(-1); } if (event.altKey && event.key.toLowerCase() === "r") { event.preventDefault(); speak(); } }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [moveUnit, speak]);
+  useEffect(() => { const handler = (event: KeyboardEvent) => { if (event.altKey && event.key.toLowerCase() === "h") window.document.querySelector("h1,h2,h3")?.scrollIntoView(); if (event.altKey && event.key.toLowerCase() === "f") window.document.querySelector(".formula")?.scrollIntoView(); if (event.altKey && event.key === "ArrowRight") { event.preventDefault(); moveUnit(1); } if (event.altKey && event.key === "ArrowLeft") { event.preventDefault(); moveUnit(-1); } if (event.altKey && event.key.toLowerCase() === "r") { event.preventDefault(); void speak(); } }; window.addEventListener("keydown", handler); return () => window.removeEventListener("keydown", handler); }, [moveUnit, speak]);
   if (!content) return <p role="status">İçerik yükleniyor. API çalışmıyorsa önce API'yi başlatın.</p>;
   const unit = plan?.plan.units[currentUnit];
-  return <><a className="skip" href="#lesson">Ana içeriğe geç</a><header><p className="brand">ErişSTEM</p><p>Öğrenci okuyucusu · <kbd>Alt</kbd>+<kbd>H</kbd> başlıklar · <kbd>Alt</kbd>+<kbd>F</kbd> formüller · <kbd>Alt</kbd>+<kbd>R</kbd> oku</p></header><main id="lesson" ref={main} tabIndex={-1}><article><h1>{content.title}</h1><p className="notice">{content.license_notice}</p><section className="reader-controls" aria-labelledby="reader-controls-title"><h2 id="reader-controls-title">Doğrulanmış sesli okuma</h2><p role="status">{speechStatus}</p>{unit && <p>Seçili birim: {unit.navigation_label} · {currentUnit + 1}/{plan?.plan.units.length}</p>}<div><button type="button" onClick={() => moveUnit(-1)} disabled={!plan || currentUnit === 0}>Önceki birim</button><button type="button" onClick={() => speak()} disabled={!unit || !speechAvailable}>Seçili birimi oku</button><button type="button" onClick={() => { if (speechAvailable) { window.speechSynthesis.cancel(); setSpeechStatus("Sesli okuma durduruldu."); } }}>Durdur</button><button type="button" onClick={() => moveUnit(1)} disabled={!plan || currentUnit >= (plan.plan.units.length - 1)}>Sonraki birim</button></div>{plan?.unavailable_block_ids.length ? <p>Henüz sesli erişime açılmamış doğrulanmayı bekleyen matematiksel/görsel birimler vardır.</p> : null}</section>{content.blocks.map(block => block.kind === "heading" ? <h2 id={block.id} tabIndex={-1} key={block.id}>{block.text}</h2> : block.kind === "paragraph" ? <p id={block.id} tabIndex={-1} key={block.id}>{block.text}</p> : <Formula key={block.id} block={block} />)}</article></main></>;
+  return <><a className="skip" href="#lesson">Ana içeriğe geç</a><header><p className="brand">ErişSTEM</p><p>Öğrenci okuyucusu · <kbd>Alt</kbd>+<kbd>H</kbd> başlıklar · <kbd>Alt</kbd>+<kbd>F</kbd> formüller · <kbd>Alt</kbd>+<kbd>R</kbd> oku</p></header><main id="lesson" ref={main} tabIndex={-1}><article><h1>{content.title}</h1><p className="notice">{content.license_notice}</p><section className="reader-controls" aria-labelledby="reader-controls-title"><h2 id="reader-controls-title">Doğrulanmış sesli okuma</h2><p role="status">{speechStatus}</p>{unit && <p>Seçili birim: {unit.navigation_label} · {currentUnit + 1}/{plan?.plan.units.length}</p>}<div><button type="button" onClick={() => moveUnit(-1)} disabled={!plan || currentUnit === 0}>Önceki birim</button><button type="button" onClick={() => void speak()} disabled={!unit}>Seçili birimi oku</button><button type="button" onClick={stop}>Durdur</button><button type="button" onClick={() => moveUnit(1)} disabled={!plan || currentUnit >= (plan.plan.units.length - 1)}>Sonraki birim</button></div>{plan?.unavailable_block_ids.length ? <p>Henüz sesli erişime açılmamış doğrulanmayı bekleyen matematiksel/görsel birimler vardır.</p> : null}</section>{content.blocks.map(block => block.kind === "heading" ? <h2 id={block.id} tabIndex={-1} key={block.id}>{block.text}</h2> : block.kind === "paragraph" ? <p id={block.id} tabIndex={-1} key={block.id}>{block.text}</p> : <Formula key={block.id} block={block} />)}</article></main></>;
 }
 
 function TeacherReview() {

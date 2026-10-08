@@ -25,6 +25,7 @@ from .job_store import (
 )
 from .pipeline.accessibility_reader import ReadingPlan, build_reading_plan
 from .pipeline.accessible_content import CanonicalAccessibleBlock
+from .pipeline.tts_audio_assets import load_audio_manifest, resolve_verified_audio
 from .table_review import (
     PublishedTable,
     TableReviewApproval,
@@ -375,6 +376,42 @@ def read_verified_plan(document_id: str, _: Role = any_role):
     if not canonical:
         raise HTTPException(status_code=409, detail="Doğrulanmış sesli okuma birimi bulunamadı")
     return StudentReadingPlanResponse(plan=build_reading_plan(canonical), unavailable_block_ids=unavailable)
+
+
+@app.get("/v1/student/documents/{document_id}/audio/{unit_id}")
+def read_verified_audio(document_id: str, unit_id: str, _: Role = any_role):
+    """Serve only a listener-approved WAV bound to the active reading unit."""
+    document = read_published(document_id, _)
+    reading = read_verified_plan(document_id, _)
+    unit = next((item for item in reading.plan.units if item.id == unit_id), None)
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Doğrulanmış ses birimi bulunamadı")
+    root = Path(os.getenv("STUDENT_AUDIO_ROOT", "data/derived/student-audio")).resolve()
+    directory = (root / document_id).resolve()
+    if not directory.is_relative_to(root):
+        raise HTTPException(status_code=404, detail="Ses varlığı bulunamadı")
+    try:
+        manifest = load_audio_manifest(directory / "assets.json")
+        audio, asset = resolve_verified_audio(
+            manifest,
+            directory,
+            document_id=document_id,
+            published_revision=document.published_revision,
+            unit=unit,
+        )
+    except ValueError:
+        # A missing, stale, altered, or unreviewed asset must not fall through
+        # to an arbitrary file or be exposed as a student audio resource.
+        raise HTTPException(status_code=404, detail="Bu birim için onaylı ses bulunamadı") from None
+    return FileResponse(
+        audio,
+        media_type="audio/wav",
+        headers={
+            "ETag": f'"{asset.audio_sha256}"',
+            "Cache-Control": "private, no-cache",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.get("/v1/teacher/documents/{document_id}", response_model=Document)

@@ -87,3 +87,22 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_training_corpu
 Doğrulama yalnız dosya yapısı, WAV standardı, süre istatistikleri ve rıza
 attestasyonunu raporlar. Bu rapor `corpus-structure-valid` dese bile model
 eğitiminin uygun veya başarılı olacağını iddia etmez.
+
+## Öğrenciye ses teslim kapısı
+
+Bir Kaggle/TTS adayının WAV üretmiş olması öğrenciye sunulması için yeterli
+değildir. Öğrenci API'si yalnız `verified-tts-audio-assets-v1` manifestindeki
+şu bağların hepsi doğrulandığında sesi verir:
+
+- öğrenci belgesi ve yayımlanmış sürüm numarası;
+- doğrulanmış okuma biriminin `spoken_text` SHA-256 değeri;
+- dinleyici çalışmasından geçmiş adayın kalite raporu checksum'ı;
+- dinleyici çalışmasının geçtiği açık işaret;
+- WAV dosyasının byte uzunluğu ve SHA-256 değeri.
+
+Belge metni, yayın sürümü veya WAV sonradan değişirse eşleşme bozulur ve API
+`404` döndürür. Öğrenci okuyucusu bu durumda başka bir dosyayı tahmin ederek
+çalmaz; varsa yalnız aynı doğrulanmış metnin tarayıcı/işletim sistemi sesini
+kullanır. Ses varlıkları varsayılan olarak
+`data/derived/student-audio/<document-id>/` altında private tutulur ve Git'e
+eklenmez.

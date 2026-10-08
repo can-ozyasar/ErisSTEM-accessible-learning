@@ -25,6 +25,10 @@ GOLD_FILENAME = "tts-gold-v1.json"
 MAX_ITEMS = 200
 MAX_UTTERANCE_CHARS = 8_000
 ITEM_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
+# The reproducible PyPI package currently exposes the multilingual V2 default
+# API. V3 must be evaluated separately from a source-pinned package, not
+# silently requested through an unsupported parameter.
+CANDIDATE = "chatterbox-multilingual-v2-pypi"
 
 
 class TtsInputError(ValueError):
@@ -113,6 +117,11 @@ def install_chatterbox_runtime() -> None:
     )
 
 
+def load_multilingual_baseline(factory):
+    """Load the exact public-package API selected by this benchmark."""
+    return factory.from_pretrained(device="cuda")
+
+
 def main() -> None:
     OUTPUT.mkdir(parents=True, exist_ok=True)
     install_chatterbox_runtime()
@@ -124,7 +133,7 @@ def main() -> None:
         raise RuntimeError("cuda_required_for_chatterbox_multilingual_benchmark")
     gold_path = resolve_gold()
     items = load_gold(gold_path)
-    model = ChatterboxMultilingualTTS.from_pretrained(device="cuda", t3_model="v3")
+    model = load_multilingual_baseline(ChatterboxMultilingualTTS)
     audio_dir = OUTPUT / "private-audio"
     audio_dir.mkdir(exist_ok=True)
     records = []
@@ -152,7 +161,7 @@ def main() -> None:
     generated = sum(record["status"] == "generated" for record in records)
     summary = {
         "schema_version": "tts-synthesis-run-v1",
-        "candidate": "chatterbox-multilingual-v3",
+        "candidate": CANDIDATE,
         "language": "tr",
         "input_private": True,
         "student_publication": "blocked_pending_local_quality_evaluation",
@@ -167,7 +176,7 @@ def main() -> None:
     (OUTPUT / "run_metadata.json").write_text(
         json.dumps(
             {
-                "candidate": "chatterbox-multilingual-v3",
+                "candidate": CANDIDATE,
                 "language": "tr",
                 "device": torch.cuda.get_device_name(0),
                 "torch_version": torch.__version__,

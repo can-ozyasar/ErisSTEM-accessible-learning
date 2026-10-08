@@ -1,6 +1,7 @@
 import importlib.util
 import json
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 
@@ -71,3 +72,18 @@ def test_tts_runner_removes_only_the_incompatible_optional_vision_package(monkey
 
     assert calls[0][0][-1] == "chatterbox-tts"
     assert calls[1][0][-2:] == ["--yes", "torchvision"]
+
+
+def test_tts_runner_uses_the_reproducible_pypi_multilingual_baseline_api():
+    module = runner_module()
+
+    class FakeModel:
+        calls: ClassVar[list[dict[str, str]]] = []
+
+        @classmethod
+        def from_pretrained(cls, **kwargs):
+            cls.calls.append(kwargs)
+            return "model"
+
+    assert module.load_multilingual_baseline(FakeModel) == "model"
+    assert FakeModel.calls == [{"device": "cuda"}]

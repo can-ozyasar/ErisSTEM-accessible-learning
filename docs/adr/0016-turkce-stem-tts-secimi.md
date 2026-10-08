@@ -28,9 +28,11 @@ TTS üç ayrı katmanda ele alınacaktır:
    denenir. Her sesin model kartı ve kullanım lisansı tek tek incelenmeden
    dağıtıma alınmaz. Güncel Piper kodu GPL-3.0-or-later olduğundan uygulamaya
    gömülmez ve lisans incelemesi tamamlanmadan ürün varsayılanı seçilmez.
-3. **Kalite adayı — Chatterbox Multilingual V3.** Türkçe (`tr`) destekleyen
+3. **Kalite adayı — Chatterbox Multilingual.** Türkçe (`tr`) destekleyen
    0.5B çok dilli model yalnız Kaggle T4 veya CUDA'lı geçici altyapıda
-   karşılaştırma için çalıştırılır. Bu aday daha doğal ses potansiyeli taşır;
+   karşılaştırma için çalıştırılır. İlk tekrarlanabilir PyPI baseline'ı V2
+   varsayılanını kullanır; V3, ancak kaynak sürümü ve API'si ayrıca pinlenmiş
+   bir deneyde değerlendirilir. Bu aday daha doğal ses potansiyeli taşır;
    ancak ağırlık/model kartı, ses klonlama güvenliği, filigran ve gecikme
    sonuçları ayrıca kabul edilmelidir. Kod lisansının MIT olması, model
    ağırlıklarının veya ses verisinin otomatik olarak ürün için uygun olduğu

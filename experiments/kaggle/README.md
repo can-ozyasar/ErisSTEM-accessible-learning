@@ -188,8 +188,8 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.symbol_cell_evalua
 ## Türkçe STEM TTS aday benchmark'ı
 
 `tts_chatterbox_runner.py`, yalnız private `tts-gold-v1.json` içindeki önceden
-doğrulanmış `expected_spoken_text` birimlerinden Chatterbox Multilingual V3
-ile Türkçe WAV üretir. Çalıştırıcı bir sesi öğrenciye yayımlamaz, sesletim
+doğrulanmış `expected_spoken_text` birimlerinden PyPI sürümüyle uyumlu
+Chatterbox Multilingual V2 baseline'ı kullanarak Türkçe WAV üretir. Çalıştırıcı bir sesi öğrenciye yayımlamaz, sesletim
 kalitesi puanı üretmez ve fine-tuning yapmaz. WAV'lar private Notebook
 çıktısında kalır; yalnız içeriksiz `run_metadata.json` ve `run_records.json`
 özetleri otomatik olarak indirilebilir.

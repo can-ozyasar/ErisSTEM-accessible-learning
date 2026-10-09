@@ -5,6 +5,7 @@ services:
       DATABASE_URL: postgresql+psycopg://eristem:eristem@db:5432/eristem
       OBJECT_STORAGE_BACKEND: local
       DERIVED_ROOT: /private/derived
+      LOCAL_TTS_URL: http://tts:5000/synthesize
     volumes:
       - ./data/derived:/private/derived:ro
     depends_on:
@@ -16,6 +17,19 @@ services:
       timeout: 4s
       retries: 10
       start_period: 10s
+    networks: [internal]
+  tts:
+    build: ./apps/tts
+    # No host port: source text and synthesized audio remain in the local
+    # Docker network.  This CPU profile works on machines without a GPU.
+    mem_limit: 1g
+    cpus: 2.0
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/info', timeout=3)"]
+      interval: 10s
+      timeout: 4s
+      retries: 10
+      start_period: 15s
     networks: [internal]
   worker:
     build: ./apps/api

@@ -10,7 +10,7 @@ from typing import Literal
 
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
@@ -26,6 +26,7 @@ from .job_store import (
 )
 from .learning_operations import LearningOperationsStore
 from .learning_routes import learning_router
+from .local_tts import LocalTtsUnavailable, synthesize_verified_text
 from .pipeline.accessibility_reader import ReadingPlan, build_reading_plan
 from .pipeline.accessible_content import CanonicalAccessibleBlock
 from .pipeline.braille_adapter import (
@@ -571,6 +572,29 @@ def read_verified_audio(document_id: str, unit_id: str, _: Role = any_role):
             "Cache-Control": "private, no-cache",
             "X-Content-Type-Options": "nosniff",
         },
+    )
+
+
+@app.get("/v1/student/documents/{document_id}/local-audio/{unit_id}")
+def read_local_audio(document_id: str, unit_id: str, _: Role = any_role):
+    """Synthesize a reviewed reading-plan unit with the offline TTS service.
+
+    This is a local development/runtime voice, not listener-approved released
+    audio.  The route deliberately has no text parameter: unreviewed OCR,
+    MathML and client-provided text can never reach the model through it.
+    """
+    reading = read_verified_plan(document_id, _)
+    unit = next((item for item in reading.plan.units if item.id == unit_id), None)
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Doğrulanmış ses birimi bulunamadı")
+    try:
+        audio = synthesize_verified_text(unit.spoken_text)
+    except LocalTtsUnavailable:
+        raise HTTPException(status_code=503, detail="Yerel Türkçe ses motoru kullanılamıyor") from None
+    return Response(
+        audio,
+        media_type="audio/wav",
+        headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 

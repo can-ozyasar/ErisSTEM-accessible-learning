@@ -8,7 +8,7 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 
 - Kaynak koordinatlı belge öğeleri (`page`, `bbox`, `checksum`, işlem adımı).
 - Güven kuralları: formül şema/render denetimi geçmeden yayımlanamaz.
-- Öğrenci okuyucusu: yayımlanmış belge seçimi, semantik metin ve tablo, doğrulanmış metin için sesli okuma ve Türkçe 1. derece Braille; matematiksel erişim henüz kapalı.
+- Öğrenci okuyucusu: yayımlanmış belge seçimi, semantik metin ve tablo, doğrulanmış metin için sesli okuma ve Türkçe 1. derece Braille; matematiksel erişim henüz kapalı. Yerel kurulumda Docker iç ağındaki Piper Türkçe motoru kullanılır; ayrıntılar [yerel TTS notunda](docs/yerel-tts.md).
 - Öğrenme atölyesi: kümeler, çember ve uçak için ön bilgi yoklaması, katmanlı kavram açıklaması, isteğe bağlı nesne/liste keşfi, rehberli çalışma, yeni sorularla yardımsız deneme ve 24 saat sonra farklı sorularla tekrar. İlk yanıt, kullanılan yardım ve geçilen sorular ayrı tutulur. İçerikler sentetiktir; uzman ve kullanıcı değerlendirmesi bekler.
 - Öğretmen kuyruğu: düşük güvenli formülü düzeltme, sürüm/audit kaydı, onaylayıcıyla yayın.
 - Öğrenme kalite yönetimi: sürüme bağlı uzman kontrolleri, rızalı yetişkin pilotu, görev gözlemleri, kritik hata engeli ve ayrı yayın kararı.

@@ -33,6 +33,8 @@ class TtsSynthesisRecord(BaseModel):
     kind: str
     status: str
     audio_sha256: str = Field(pattern=SHA256_PATTERN)
+    duration_seconds: float | None = Field(default=None, gt=0)
+    generation_seconds: float | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def generated_kind_is_known(self) -> TtsSynthesisRecord:
@@ -288,6 +290,8 @@ def evaluate_listener_study(
         "contains_document_content": False,
         "contains_listener_identity": False,
         "candidate": run.candidate,
+        "candidate_quality_report_sha256": automatic_quality_report_sha256,
+        "synthesis_run_sha256": synthesis_run_sha256,
         "reviewers": len(study.reviewers),
         "minimum_blind_reviewers": MIN_BLIND_REVIEWERS,
         "minimum_reviews_per_sample": MIN_REVIEWS_PER_SAMPLE,

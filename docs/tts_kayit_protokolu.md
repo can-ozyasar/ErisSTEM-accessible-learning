@@ -66,7 +66,7 @@ Bu nedenle her aday aşağıdaki kapılardan sırayla geçer:
    `observed_spoken_text` oluşturulur. Bu dosya ders metni içerdiği için
    `data/private/` altında kalır ve `tts-candidate-v1` şemasını kullanır.
 2. Otomatik sesletim ve kritik belirteç kapısı çalışır. En az 50 Gold örneği
-   ve her içerik türünde en az 10 örnek gerekir. `tts-quality-policy-v2`,
+   ve her içerik türünde en az 10 örnek gerekir. `tts-quality-policy-v3`,
    tek bir küresel yüzde yerine tür-bazlı eşikler kullanır: metin için
    `%98 / %95`, alıştırma için `%96 / %97`, tablo ve grafik için `%95 / %97`,
    formül için `%95 / %98` (sırasıyla sesletim / kritik belirteç). Bunlar
@@ -149,6 +149,45 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.tts_candidate_sele
 dinleyici paketi ve öğrenci yayımı oluşturulmaz. Sonraki iş hata kümelerine
 uygun yeni bir aday veya açık rızalı, eğitim/validation ayrımlı kayıt corpus'u
 hazırlamaktır; değerlendirme Gold'u eğitim verisine dönüştürülmez.
+
+## 2026-10-09 ölçüm denetimi ve geçerli karar
+
+Önceki `v2` tarama, PDF/OCR için yazılmış noktalama duyarlı karşılaştırmayı
+konuşma transkriptine uyguluyordu. Örneğin Gold'daki `birleşim` kritik sözcüğü
+referansta `birleşim.` olarak geçtiğinde bile yanlışlıkla eksik sayılıyordu.
+60 örnekte 17 referans birimi en az bir kritik belirteci bu nedenle birebir
+taşımıyormuş gibi görünüyordu. `tts-quality-policy-v3` Türkçe büyük/küçük
+harfi normalleştirir, konuşulmayan noktalamayı çıkarır, matematik işleçlerini
+korur ve Gold kritik belirteçlerinin kendi referansında bulunmasını zorunlu
+kılar. Eski raporlar değiştirilmedi; yeni raporlar private `*-quality-v3.json`
+dosyalarındadır.
+
+Yeni karar: Chatterbox V3 Nisan referans sesi ve MMS-TUR **yalnız `text`**
+türünde otomatik *dinleyici testine giriş* kapısını geçti. Chatterbox V2 hiçbir
+türde geçmedi. Formül/tablo/grafik/alıştırma hâlâ engelli. Her aday için üç
+özel dinleyici paketi `data/private/tts_evaluation/*-text-v3-listener-packets/`
+altında hazırlandı; her pakette yalnız 12 düz metin birimi vardır. Her iki
+adayın 12/12 metin WAV'ı yerelde manifest SHA-256 ile doğrulandı. Paket
+oluşturmak insan dinlemesini gerçekleştirmek **değildir**; yanıtlar ve
+bağımsız kör dinleme olmadan öğrenciye model sesi açılamaz. Bu Gold ayrıca
+özgün sentetik kalibrasyon cümlelerinden oluşur, gerçek ders sayfalarının
+anlaşılırlığını tek başına kanıtlamaz.
+Offline dinleme arayüzü, üç dinleyicinin görevleri ve yanıtları birleştirme
+komutu `docs/tts-dinleme-pilotu.md` içindedir.
+
+Çalışan öğrenci arayüzünde cihazın **yerel** Türkçe sesi listelenir/seçilir.
+Yerel Türkçe ses yoksa sistem sessizce başka dilin veya uzak TTS servisinin
+sesine geçmez. Onaylı WAV
+bulunmadığında yalnız yayımlanmış metin bu cihaz sesiyle okunabilir;
+matematik veya OCR taslağına ham TTS uygulanmaz.
+
+**Bir sonraki karar noktası:** üç bağımsız dinleyici, iki adayın metin
+örneklerini aday kimliği gizli biçimde dinler; eksik/yanlış sözcük, anlaşılma
+ve artefact işaretler. Başarılı sonuçtan sonra bile gerçek yayımlanmış ders
+metni için ayrı kaynak-bağlı Gold ve öğrenci görev testi gerekir. Formül ve
+tablo için önce kanonik Türkçe okunuş/gold hatalarını kapatıp sonra yeni
+sentez denemesi yapılmalıdır. Fine-tuning henüz yapılmadı; aynı hatalı
+değerlendirme üstüne eğitim başlatmak GPU ve veri israfı olurdu.
 
 ## Private manifest ve doğrulama
 
@@ -242,7 +281,7 @@ tarayıcı TTS'i aynı matematik dilbilgisini paylaşır.
 ## Öğrenciye ses teslim kapısı
 
 Bir Kaggle/TTS adayının WAV üretmiş olması öğrenciye sunulması için yeterli
-değildir. Öğrenci API'si yalnız `verified-tts-audio-assets-v1` manifestindeki
+değildir. Öğrenci API'si yalnız `verified-tts-audio-assets-v2` manifestindeki
 şu bağların hepsi doğrulandığında sesi verir:
 
 - öğrenci belgesi ve yayımlanmış sürüm numarası;
@@ -250,6 +289,14 @@ değildir. Öğrenci API'si yalnız `verified-tts-audio-assets-v1` manifestindek
 - dinleyici çalışmasından geçmiş adayın kalite raporu checksum'ı;
 - dinleyici çalışmasının geçtiği açık işaret;
 - WAV dosyasının byte uzunluğu ve SHA-256 değeri.
+
+Manifestin kendi `listener_study_passed` bayrağı artık yeterli değildir.
+Ses klasöründeki `quality_report.json` ve `listener_report.json` dosyalarının
+hash'leri manifestle eşleşir; kalite raporu en az 50 Gold/ilgili türde en az
+10 örnek, uygun otomatik karar ve **`source-bound-release`** kapsamı taşımalı;
+dinleyici raporu aynı adaya ve kalite raporuna bağlı, en az üç tam incelemeyle
+geçmiş olmalıdır. Bu turn'deki 60 sentetik kalibrasyon Gold'u
+`evaluation_scope=calibration` sayılır; kendi başına öğrenci WAV'ı açamaz.
 
 Belge metni, yayın sürümü veya WAV sonradan değişirse eşleşme bozulur ve API
 `404` döndürür. Öğrenci okuyucusu bu durumda başka bir dosyayı tahmin ederek

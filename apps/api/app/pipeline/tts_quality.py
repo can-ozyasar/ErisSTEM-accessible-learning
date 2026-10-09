@@ -10,14 +10,15 @@ import argparse
 import json
 from collections import Counter
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from .benchmark import character_error_rate, normalized
+from .tts_text_metrics import speech_character_accuracy, speech_tokens
 
 MIN_TTS_GOLD_SAMPLES = 50
 MIN_KIND_GOLD_SAMPLES = 10
-QUALITY_POLICY_VERSION = "tts-quality-policy-v2"
+QUALITY_POLICY_VERSION = "tts-quality-policy-v3"
 
 # These are *screening* thresholds, rather than a claim that ASR is a perfect
 # proxy for learner comprehension.  Passing only permits a blind listener
@@ -48,6 +49,7 @@ class TtsGoldManifest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     schema_version: str
+    evaluation_scope: Literal["calibration", "source-bound-release"] = "calibration"
     items: list[TtsGoldItem] = Field(min_length=1)
 
     @model_validator(mode="after")
@@ -55,6 +57,11 @@ class TtsGoldManifest(BaseModel):
         ids = [item.id for item in self.items]
         if len(ids) != len(set(ids)):
             raise ValueError("TTS Gold ids must be unique")
+        for item in self.items:
+            expected = Counter(speech_tokens(item.expected_spoken_text))
+            critical = Counter(token for phrase in item.critical_tokens for token in speech_tokens(phrase))
+            if not critical or critical - expected:
+                raise ValueError("TTS Gold critical tokens must occur in the reference reading")
         return self
 
 
@@ -83,7 +90,7 @@ class TtsCandidateManifest(BaseModel):
 
 
 def _tokens(value: str) -> list[str]:
-    return normalized(value).split()
+    return speech_tokens(value)
 
 
 def evaluate_tts_candidate(gold: TtsGoldManifest, candidate: TtsCandidateManifest) -> dict:
@@ -111,7 +118,7 @@ def evaluate_tts_candidate(gold: TtsGoldManifest, candidate: TtsCandidateManifes
             critical_total += len(item.critical_tokens)
             summary["critical_token_total"] = int(summary["critical_token_total"]) + len(item.critical_tokens)
             continue
-        accuracy = 1 - character_error_rate(item.expected_spoken_text, result.observed_spoken_text)
+        accuracy = speech_character_accuracy(item.expected_spoken_text, result.observed_spoken_text)
         observed_tokens = Counter(_tokens(result.observed_spoken_text))
         expected_tokens = Counter(token for value in item.critical_tokens for token in _tokens(value))
         exact = sum((observed_tokens & expected_tokens).values())
@@ -171,6 +178,7 @@ def evaluate_tts_candidate(gold: TtsGoldManifest, candidate: TtsCandidateManifes
         "report_type": "tts-quality-evaluation-v1",
         "contains_document_content": False,
         "quality_policy_version": QUALITY_POLICY_VERSION,
+        "evaluation_scope": gold.evaluation_scope,
         "candidate": candidate.candidate,
         "gold_samples": len(gold.items),
         "minimum_gold_samples": MIN_TTS_GOLD_SAMPLES,

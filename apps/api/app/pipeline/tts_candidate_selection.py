@@ -26,6 +26,7 @@ def _read_quality_report(path: Path) -> dict[str, object]:
         or report.get("report_type") != "tts-quality-evaluation-v1"
         or report.get("contains_document_content") is not False
         or not isinstance(report.get("candidate"), str)
+        or not isinstance(report.get("quality_policy_version"), str)
         or not isinstance(report.get("decision"), str)
         or not isinstance(report.get("eligible_kinds"), list)
         or not isinstance(report.get("kind_results"), dict)
@@ -36,8 +37,13 @@ def _read_quality_report(path: Path) -> dict[str, object]:
 
 def select_tts_candidates(reports: list[tuple[Path, dict[str, object]]]) -> dict[str, object]:
     """Select only listener-study-eligible kinds; fail closed for all others."""
+    if not reports:
+        raise ValueError("no_tts_quality_reports")
     candidates: list[dict[str, object]] = []
     seen = set()
+    policies = {str(report["quality_policy_version"]) for _, report in reports}
+    if len(policies) != 1:
+        raise ValueError("mixed_tts_quality_policy_versions")
     for path, report in reports:
         candidate = str(report["candidate"])
         if candidate in seen:
@@ -58,6 +64,7 @@ def select_tts_candidates(reports: list[tuple[Path, dict[str, object]]]) -> dict
     return {
         "report_type": "tts-candidate-selection-v1",
         "contains_document_content": False,
+        "quality_policy_version": next(iter(policies)),
         "candidates": candidates,
         "selection": (
             "no_candidate_eligible"

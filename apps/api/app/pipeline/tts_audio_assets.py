@@ -45,12 +45,13 @@ class TtsAudioAssetManifest(BaseModel):
     candidate: str = Field(min_length=1, max_length=100)
     voice_profile: str = Field(min_length=1, max_length=100)
     candidate_quality_report_sha256: str = Field(pattern=SHA256_PATTERN)
+    listener_study_report_sha256: str = Field(pattern=SHA256_PATTERN)
     listener_study_passed: bool
     assets: list[TtsAudioAsset] = Field(min_length=1)
 
     @model_validator(mode="after")
     def final_quality_gate_and_unique_assets(self) -> TtsAudioAssetManifest:
-        if self.schema_version != "verified-tts-audio-assets-v1":
+        if self.schema_version != "verified-tts-audio-assets-v2":
             raise ValueError("invalid_tts_audio_asset_schema")
         if not self.listener_study_passed:
             raise ValueError("listener_study_required_before_student_audio")
@@ -80,6 +81,73 @@ def load_audio_manifest(path: Path) -> TtsAudioAssetManifest:
         raise ValueError("invalid_or_missing_tts_audio_asset_manifest") from error
 
 
+def _require_release_evidence(manifest: TtsAudioAssetManifest, root: Path, unit: ReadingUnit) -> None:
+    """Do not trust a manifest's self-declared listener flag without evidence."""
+    reports = []
+    for filename, expected_sha in (
+        ("quality_report.json", manifest.candidate_quality_report_sha256),
+        ("listener_report.json", manifest.listener_study_report_sha256),
+    ):
+        path = (root / filename).resolve()
+        if not path.is_relative_to(root) or not path.is_file() or sha256_file(path) != expected_sha:
+            raise ValueError("tts_release_evidence_integrity_mismatch")
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as error:
+            raise ValueError("invalid_tts_release_evidence") from error
+        if not isinstance(report, dict):
+            raise ValueError("invalid_tts_release_evidence")
+        reports.append(report)
+    quality, listener = reports
+    kind = "text" if unit.kind in {"heading", "paragraph"} else unit.kind
+    eligible = quality.get("eligible_kinds")
+    kind_results = quality.get("kind_results")
+    kind_result = kind_results.get(kind) if isinstance(kind_results, dict) else None
+    if (
+        quality.get("report_type") != "tts-quality-evaluation-v1"
+        or quality.get("contains_document_content") is not False
+        or quality.get("quality_policy_version") != "tts-quality-policy-v3"
+        or quality.get("evaluation_scope") != "source-bound-release"
+        or quality.get("candidate") != manifest.candidate
+        or quality.get("decision") not in {
+            "tts-candidate-passed-listener-study-required",
+            "tts-candidate-kind-limited-listener-study-required",
+        }
+        or not isinstance(eligible, list)
+        or kind not in eligible
+        or not isinstance(quality.get("gold_samples"), int)
+        or quality["gold_samples"] < 50
+        or not isinstance(kind_result, dict)
+        or not isinstance(kind_result.get("gold_samples"), int)
+        or kind_result["gold_samples"] < 10
+        or kind_result.get("automatic_screen") != "passed"
+    ):
+        raise ValueError("tts_quality_release_evidence_not_eligible")
+    records = listener.get("records")
+    kind_records = [record for record in records if isinstance(record, dict) and record.get("kind") == kind] if isinstance(records, list) else []
+    if (
+        listener.get("report_type") != "tts-listener-study-evaluation-v1"
+        or listener.get("decision") != "tts-listener-study-passed"
+        or listener.get("candidate") != manifest.candidate
+        or listener.get("candidate_quality_report_sha256") != manifest.candidate_quality_report_sha256
+        or not isinstance(listener.get("reviewers"), int)
+        or listener["reviewers"] < 3
+        or listener.get("malformed_reviewer_count") != 0
+        or not isinstance(records, list)
+        or len(kind_records) < 10
+        or not all(
+            isinstance(record, dict)
+            and isinstance(record.get("valid_reviews"), int)
+            and record["valid_reviews"] >= 3
+            and record.get("all_match_reference") is True
+            and record.get("all_intelligible") is True
+            and record.get("serious_artifact_count") == 0
+            for record in kind_records
+        )
+    ):
+        raise ValueError("tts_listener_release_evidence_not_passed")
+
+
 def resolve_verified_audio(
     manifest: TtsAudioAssetManifest,
     audio_root: Path,
@@ -95,6 +163,7 @@ def resolve_verified_audio(
     if asset is None or asset.spoken_text_sha256 != sha256_text(unit.spoken_text):
         raise ValueError("audio_manifest_unit_mismatch")
     root = audio_root.resolve()
+    _require_release_evidence(manifest, root, unit)
     path = (root / asset.filename).resolve()
     if not path.is_relative_to(root) or not path.is_file():
         raise ValueError("audio_asset_missing_or_outside_root")

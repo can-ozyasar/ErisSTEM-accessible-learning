@@ -51,6 +51,7 @@ class TeacherTableCell(BaseModel):
     column: int = Field(ge=1)
     role: Literal["header", "data", "unknown"]
     text: str = Field(max_length=4000)
+    spoken_text: str | None = Field(default=None, min_length=1, max_length=1000)
 
     @field_validator("text")
     @classmethod
@@ -58,6 +59,16 @@ class TeacherTableCell(BaseModel):
         if _LATEX_COMMAND.search(value):
             raise ValueError("LaTeX komutları kabul edilmez")
         return value
+
+    @field_validator("spoken_text")
+    @classmethod
+    def plain_spoken_override(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = " ".join(value.split())
+        if not cleaned or any(character in cleaned for character in "<>\\") or any(ord(character) < 32 for character in cleaned):
+            raise ValueError("Hücre okunuşu sade Türkçe metin olmalı")
+        return cleaned
 
 
 class TeacherTableSource(BaseModel):
@@ -121,7 +132,7 @@ def teacher_projection(payload: dict, status: str, revision: int) -> TeacherTabl
             "document_id": payload["document_id"],
             "source": {"page": payload["source"]["page"], "bbox": payload["source"]["bbox"]},
             "cells": [
-                {key: cell[key] for key in ("row", "column", "role", "text")}
+                {key: cell[key] for key in ("row", "column", "role", "text", "spoken_text") if key in cell}
                 for cell in payload["cells"]
             ],
             "status": status,

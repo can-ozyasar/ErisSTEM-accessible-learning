@@ -8,6 +8,7 @@ def quality(candidate: str, eligible_kinds: list[str]) -> dict:
     return {
         "report_type": "tts-quality-evaluation-v1",
         "contains_document_content": False,
+        "quality_policy_version": "tts-quality-policy-v3",
         "candidate": candidate,
         "decision": "tts-candidate-blocked" if not eligible_kinds else "tts-candidate-kind-limited-listener-study-required",
         "eligible_kinds": eligible_kinds,
@@ -38,3 +39,14 @@ def test_selection_allows_listener_study_only_for_explicitly_eligible_kinds(tmp_
 
     assert report["selection"] == "listener_study_required_before_any_audio_asset"
     assert report["candidates"][0]["eligible_kinds"] == ["text"]
+
+
+def test_selection_rejects_mixed_scoring_policies(tmp_path: Path):
+    import pytest
+
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(quality("voice-a", ["text"])), encoding="utf-8")
+    second.write_text(json.dumps(quality("voice-b", ["text"]) | {"quality_policy_version": "tts-quality-policy-v2"}), encoding="utf-8")
+    with pytest.raises(ValueError, match="mixed_tts_quality_policy_versions"):
+        select_tts_candidates([(first, _read_quality_report(first)), (second, _read_quality_report(second))])

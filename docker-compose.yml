@@ -10,6 +10,12 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/openapi.json', timeout=3)"]
+      interval: 5s
+      timeout: 4s
+      retries: 10
+      start_period: 10s
     networks: [internal]
   worker:
     build: ./apps/api
@@ -28,9 +34,23 @@ services:
     networks: [internal]
   web:
     build: ./apps/web
-    ports: ["5173:80"]
-    depends_on: [api]
+    # Development X-Role headers are not authentication; do not expose private
+    # review routes and MEB-derived content on the LAN.
+    ports: ["127.0.0.1:5173:80"]
+    depends_on:
+      api:
+        condition: service_healthy
     networks: [internal, edge]
+  exam-maintenance:
+    build: ./apps/api
+    command: ["python", "-m", "app.exam_maintenance", "--watch"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://eristem:eristem@db:5432/eristem
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks: [internal]
   db:
     image: postgres:16-alpine
     environment:

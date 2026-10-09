@@ -294,6 +294,14 @@ class DocumentStore:
                 session.scalars(select(ContentDocument.draft_payload).order_by(ContentDocument.id))
             )
 
+    def list_published(self) -> list[dict]:
+        with self.sessions() as session:
+            return [
+                payload for payload in session.scalars(
+                    select(ContentDocument.published_payload).order_by(ContentDocument.id)
+                ) if payload and payload.get("blocks")
+            ]
+
     def save_draft(self, payload: dict) -> None:
         with self.sessions.begin() as session:
             record = session.get(ContentDocument, payload["id"])
@@ -370,6 +378,14 @@ class TableReviewStore:
                     .order_by(TableReview.created_at)
                 )
             )
+
+    def list_published_for_document(self, document_id: str) -> list[TableReview]:
+        with self.sessions() as session:
+            return list(session.scalars(
+                select(TableReview)
+                .where(TableReview.document_id == document_id, TableReview.status == "published")
+                .order_by(TableReview.created_at, TableReview.id)
+            ))
 
     def save(self, table_id: str, payload: dict, *, status: str, revision: int) -> TableReview:
         with self.sessions.begin() as session:

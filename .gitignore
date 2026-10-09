@@ -5,6 +5,8 @@ __pycache__/
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 *.pyc
 *.egg-info/
 data/private/

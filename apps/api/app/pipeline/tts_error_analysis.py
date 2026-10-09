@@ -12,14 +12,14 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from .benchmark import character_error_rate, normalized
+from .tts_text_metrics import speech_character_accuracy, speech_tokens
 from .tts_quality import TtsCandidateManifest, TtsGoldManifest
 
 ACCURACY_BANDS = ((0.85, "below_85"), (0.95, "85_to_95"), (1.0, "95_to_100"))
 
 
 def _tokens(value: str) -> list[str]:
-    return normalized(value).split()
+    return speech_tokens(value)
 
 
 def _band(accuracy: float) -> str:
@@ -56,7 +56,7 @@ def analyse_tts_errors(gold: TtsGoldManifest, candidate: TtsCandidateManifest) -
             summary["missing_transcripts"] = int(summary["missing_transcripts"]) + 1
             summary["accuracy_bands"]["missing"] += 1  # type: ignore[index]
             continue
-        accuracy = 1 - character_error_rate(item.expected_spoken_text, result.observed_spoken_text)
+        accuracy = speech_character_accuracy(item.expected_spoken_text, result.observed_spoken_text)
         observed_critical = Counter(_tokens(result.observed_spoken_text))
         matched = sum((expected_critical & observed_critical).values())
         summary["critical_token_matched"] = int(summary["critical_token_matched"]) + matched

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from .auth import Role, require_roles
+from .exam_practice import ExamStore
 from .job_store import (
     BenchmarkAnnotation,
     DocumentStore,
@@ -23,9 +24,44 @@ from .job_store import (
     TableReviewStore,
     make_session_factory,
 )
+from .learning_operations import LearningOperationsStore
+from .learning_routes import learning_router
 from .pipeline.accessibility_reader import ReadingPlan, build_reading_plan
 from .pipeline.accessible_content import CanonicalAccessibleBlock
+from .pipeline.braille_adapter import (
+    BrailleUnavailable,
+    LiteraryBrailleResponse,
+    translate_verified_literary,
+)
+from .pipeline.learning_experience import (
+    LearningFeedback,
+    LearningModule,
+    ModuleSummary,
+    check_module_answer,
+    module_catalog,
+    read_module,
+)
+from .pipeline.set_practice import (
+    BY_ID as SET_EXERCISES,
+)
+from .pipeline.set_practice import (
+    AnswerFeedback,
+    AnswerSubmission,
+    PracticeBank,
+)
+from .pipeline.set_practice import (
+    check_answer as check_set_answer,
+)
+from .pipeline.set_practice import (
+    public_bank as public_set_bank,
+)
 from .pipeline.tts_audio_assets import load_audio_manifest, resolve_verified_audio
+from .pipeline.turkish_math_speech import (
+    MathSpeechError,
+    compile_mathml_candidate,
+    turkish_math_speech_plan,
+)
+from .pipeline.type_specific_accessibility import FormulaAccessibility
 from .table_review import (
     PublishedTable,
     TableReviewApproval,
@@ -92,6 +128,12 @@ class Approval(BaseModel):
     expected_revision: int = Field(ge=1)
 
 
+class FormulaSpeechProposal(BaseModel):
+    block_id: str
+    expected_revision: int
+    proposed_spoken_text: str
+
+
 class TextCorrection(Approval):
     text: str = Field(min_length=1, max_length=10000)
 
@@ -153,6 +195,13 @@ class StudentReadingPlanResponse(BaseModel):
 
     plan: ReadingPlan
     unavailable_block_ids: list[str]
+
+
+class StudentDocumentSummary(BaseModel):
+    id: str
+    title: str
+    published_revision: int
+    block_count: int
 
 
 SAMPLE_CHECKSUM = hashlib.sha256(b"synthetic-geometry-page-v1").hexdigest()
@@ -312,16 +361,60 @@ def canonical_text_block(block: Block) -> CanonicalAccessibleBlock:
     )
 
 
+def canonical_formula_block(block: Block) -> CanonicalAccessibleBlock:
+    """Compile only teacher-corrected, published MathML into Turkish speech."""
+    if (
+        block.kind != "formula-display"
+        or block.status != "published"
+        or not block.mathml
+        or not {"Öğretmen düzeltmesi", "Öğretmen formül okunuşunu kaynakla doğruladı"}.intersection(block.validation.reasons)
+    ):
+        raise ValueError("formula has no reviewed MathML")
+    evidence = {
+        "source_bound": True,
+        "schema_valid": block.validation.schema_passed,
+        "render_valid": block.validation.render_score == 1,
+        "source_agreement": block.validation.source_agreement,
+        "confidence": block.validation.confidence,
+        "gold_gate_passed": True,  # Teacher correction and separate reviewer publication.
+        "critical_error_count": 0,
+    }
+    formula = FormulaAccessibility.model_validate({
+        "mathml": block.mathml,
+        "short_spoken_text": "Doğrulanmış matematiksel ifade",
+        "detailed_spoken_text": "Doğrulanmış matematiksel ifade",
+        "quality": evidence,
+    })
+    speech = turkish_math_speech_plan(formula)
+    return CanonicalAccessibleBlock.model_validate({
+        "id": block.id,
+        "kind": "formula",
+        "source_checksum": block.source.source_checksum,
+        "page": block.source.page,
+        "bbox": block.source.bbox,
+        "reading_order": block.reading_order,
+        "representations": {
+            "navigation_label": "Formül",
+            "spoken_text": speech.spoken_text,
+            "mathml": block.mathml,
+        },
+        "quality": evidence,
+    })
+
+
 app = FastAPI(title="ErişSTEM API", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
-    allow_methods=["GET", "POST", "PUT"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type", "X-Role"],
 )
 job_store = JobStore(make_session_factory())
 document_store = DocumentStore(job_store.sessions)
 table_review_store = TableReviewStore(job_store.sessions)
+learning_operations_store = LearningOperationsStore(job_store.sessions)
+exam_store = ExamStore(learning_operations_store)
+app.include_router(learning_router(learning_operations_store, exam_store))
 document_store.ensure(demo_document.model_dump(mode="json"))
 
 
@@ -342,6 +435,64 @@ def health(_: Role = any_role):
     return {"status": "ok"}
 
 
+@app.get("/v1/student/learning/modules", response_model=list[ModuleSummary])
+def list_learning_modules(_: Role = any_role):
+    result = []
+    for module in module_catalog():
+        quality = learning_operations_store.quality(module.id)
+        if os.getenv("LEARNING_REQUIRE_RELEASE") == "true" and quality["status"] != "published":
+            continue
+        result.append(module.model_copy(update={"quality_status": quality["status"]}))
+    return result
+
+
+def require_learning_release(module_id: str):
+    quality = learning_operations_store.quality(module_id)
+    if os.getenv("LEARNING_REQUIRE_RELEASE") == "true" and quality["status"] != "published":
+        raise HTTPException(409, "Bu içeriğin uzman incelemesi ve kullanıcı pilotu henüz tamamlanmadı")
+    return quality
+
+
+@app.get("/v1/student/learning/modules/{module_id}", response_model=LearningModule)
+def get_learning_module(module_id: str, _: Role = any_role):
+    module = read_module(module_id)
+    if module is None:
+        raise HTTPException(status_code=404, detail="Öğrenme içeriği bulunamadı")
+    quality = require_learning_release(module_id)
+    return module.model_copy(update={"quality_status": quality["status"],
+        "provenance": "ErişSTEM sentetik içeriği; güncel uzman ve pilot kayıtları yayın kontrolünü geçti."
+        if quality["status"] == "published" else module.provenance})
+
+
+@app.post(
+    "/v1/student/learning/modules/{module_id}/exercises/{exercise_id}/check",
+    response_model=LearningFeedback,
+)
+def check_learning_exercise(
+    module_id: str, exercise_id: str, submission: AnswerSubmission, _: Role = any_role,
+):
+    require_learning_release(module_id)
+    result = check_module_answer(module_id, exercise_id, submission)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Alıştırma bulunamadı")
+    return result
+
+
+@app.get("/v1/student/practice/sets", response_model=PracticeBank)
+def read_set_practice(_: Role = any_role):
+    require_learning_release("sets")
+    return public_set_bank()
+
+
+@app.post("/v1/student/practice/sets/{exercise_id}/check", response_model=AnswerFeedback)
+def check_set_practice(exercise_id: str, submission: AnswerSubmission, _: Role = any_role):
+    require_learning_release("sets")
+    exercise = SET_EXERCISES.get(exercise_id)
+    if exercise is None:
+        raise HTTPException(status_code=404, detail="Alıştırma bulunamadı")
+    return check_set_answer(exercise, submission)
+
+
 @app.post("/v1/admin/processing-jobs", response_model=QueueJobResponse, status_code=201)
 def queue_processing_job(request: QueueJobRequest, _: Role = admin_role):
     job, created = job_store.enqueue(
@@ -355,6 +506,15 @@ def list_processing_jobs(_: Role = admin_role):
     return [job_response(job, False) for job in job_store.list_recent()]
 
 
+@app.get("/v1/student/documents", response_model=list[StudentDocumentSummary])
+def list_published_documents(_: Role = any_role):
+    return [StudentDocumentSummary(
+        id=payload["id"], title=payload["title"],
+        published_revision=payload.get("published_revision", 1),
+        block_count=len(payload["blocks"]),
+    ) for payload in document_store.list_published()]
+
+
 @app.get("/v1/student/documents/{document_id}", response_model=Document)
 def read_published(document_id: str, _: Role = any_role):
     payload = document_store.get(document_id, published=True)
@@ -365,13 +525,13 @@ def read_published(document_id: str, _: Role = any_role):
 
 @app.get("/v1/student/documents/{document_id}/reading-plan", response_model=StudentReadingPlanResponse)
 def read_verified_plan(document_id: str, _: Role = any_role):
-    """Expose only verified direct-text speech units until type adapters are ready."""
+    """Expose reviewed text and supported, teacher-corrected MathML speech."""
     document = read_published(document_id, _)
     canonical, unavailable = [], []
     for block in document.blocks:
         try:
-            canonical.append(canonical_text_block(block))
-        except ValueError:
+            canonical.append(canonical_formula_block(block) if block.kind == "formula-display" else canonical_text_block(block))
+        except (ValueError, MathSpeechError):
             unavailable.append(block.id)
     if not canonical:
         raise HTTPException(status_code=409, detail="Doğrulanmış sesli okuma birimi bulunamadı")
@@ -414,6 +574,19 @@ def read_verified_audio(document_id: str, unit_id: str, _: Role = any_role):
     )
 
 
+@app.get("/v1/student/documents/{document_id}/braille/{unit_id}", response_model=LiteraryBrailleResponse)
+def read_verified_braille(document_id: str, unit_id: str, _: Role = any_role):
+    """Return Turkish Grade 1 cells only for a current, verified text unit."""
+    reading = read_verified_plan(document_id, _)
+    unit = next((item for item in reading.plan.units if item.id == unit_id), None)
+    if unit is None:
+        raise HTTPException(status_code=404, detail="Doğrulanmış Braille birimi bulunamadı")
+    try:
+        return translate_verified_literary(unit)
+    except BrailleUnavailable:
+        raise HTTPException(status_code=503, detail="Bu birim için doğrulanmış Braille dönüşümü kullanılamıyor") from None
+
+
 @app.get("/v1/teacher/documents/{document_id}", response_model=Document)
 def read_draft(document_id: str, _: Role = teacher_role):
     return get_document(document_id)
@@ -447,7 +620,7 @@ def source_bound_document(document_id: str, source_checksum: str) -> Document:
     return document
 
 
-@app.post("/v1/admin/table-reviews", response_model=TeacherTableReview, status_code=201)
+@app.post("/v1/admin/table-reviews", response_model=TeacherTableReview, response_model_exclude_none=True, status_code=201)
 def import_vector_native_table_review(
     submission: VectorNativeTableIngress, role: Role = admin_role
 ):
@@ -465,7 +638,7 @@ def import_vector_native_table_review(
     return teacher_projection(item.draft_payload, item.status, item.revision)
 
 
-@app.get("/v1/teacher/table-reviews", response_model=list[TeacherTableReview])
+@app.get("/v1/teacher/table-reviews", response_model=list[TeacherTableReview], response_model_exclude_none=True)
 def table_review_queue(_: Role = teacher_role):
     """Only uncertain, still-unapproved tables are listed for the teacher."""
     return [
@@ -494,7 +667,7 @@ def table_review_preview(table_id: str, _: Role = teacher_role):
     )
 
 
-@app.put("/v1/teacher/table-reviews/{table_id}", response_model=TeacherTableReview)
+@app.put("/v1/teacher/table-reviews/{table_id}", response_model=TeacherTableReview, response_model_exclude_none=True)
 def correct_table_review(
     table_id: str, update: TableReviewCorrection, role: Role = teacher_role
 ):
@@ -513,7 +686,7 @@ def correct_table_review(
     return teacher_projection(saved.draft_payload, saved.status, saved.revision)
 
 
-@app.post("/v1/teacher/table-reviews/{table_id}/approve", response_model=TeacherTableReview)
+@app.post("/v1/teacher/table-reviews/{table_id}/approve", response_model=TeacherTableReview, response_model_exclude_none=True)
 def approve_table_review(
     table_id: str, approval: TableReviewApproval, role: Role = teacher_role
 ):
@@ -527,7 +700,7 @@ def approve_table_review(
     return teacher_projection(saved.draft_payload, saved.status, saved.revision)
 
 
-@app.post("/v1/reviewer/table-reviews/{table_id}/publish", response_model=PublishedTable)
+@app.post("/v1/reviewer/table-reviews/{table_id}/publish", response_model=PublishedTable, response_model_exclude_none=True)
 def publish_table_review(table_id: str, role: Role = reviewer_role):
     item = get_table_review(table_id)
     if item.status != "approved":
@@ -537,7 +710,7 @@ def publish_table_review(table_id: str, role: Role = reviewer_role):
     return PublishedTable(id=published.id, cells=teacher_projection(published.draft_payload, "published", published.revision).cells)
 
 
-@app.get("/v1/reviewer/table-reviews", response_model=list[TeacherTableReview])
+@app.get("/v1/reviewer/table-reviews", response_model=list[TeacherTableReview], response_model_exclude_none=True)
 def reviewer_table_review_queue(_: Role = reviewer_role):
     """Reviewer sees teacher-approved tables, including already published records."""
     return [
@@ -546,13 +719,29 @@ def reviewer_table_review_queue(_: Role = reviewer_role):
     ]
 
 
-@app.get("/v1/student/tables/{table_id}", response_model=PublishedTable)
+@app.get("/v1/student/tables/{table_id}", response_model=PublishedTable, response_model_exclude_none=True)
 def read_published_table(table_id: str, _: Role = any_role):
     item = get_table_review(table_id)
     if item.status != "published" or item.published_payload is None:
         raise HTTPException(status_code=404, detail="Yayımlanmış tablo bulunamadı")
+    document = document_store.get(item.document_id, published=True)
+    checksums = {block["source"]["source_checksum"] for block in document.get("blocks", [])} if document else set()
+    if item.published_payload["source"]["source_checksum"] not in checksums:
+        raise HTTPException(status_code=404, detail="Tablo güncel yayımlanmış kaynağa bağlı değil")
     projection = teacher_projection(item.published_payload, "published", item.revision)
     return PublishedTable(id=item.id, cells=projection.cells)
+
+
+@app.get("/v1/student/documents/{document_id}/tables", response_model=list[PublishedTable], response_model_exclude_none=True)
+def list_published_document_tables(document_id: str, _: Role = any_role):
+    document = document_store.get(document_id, published=True)
+    if not document or not document.get("blocks"):
+        raise HTTPException(status_code=404, detail="Belge bulunamadı")
+    checksums = {block["source"]["source_checksum"] for block in document["blocks"]}
+    return [PublishedTable(id=item.id, cells=teacher_projection(
+        item.published_payload, "published", item.revision
+    ).cells) for item in table_review_store.list_published_for_document(document_id)
+        if item.published_payload is not None and item.published_payload["source"]["source_checksum"] in checksums]
 
 
 @app.put("/v1/teacher/benchmark/gold-v1/items/{item_id}")
@@ -638,6 +827,42 @@ def correct_block(document_id: str, block_id: str, update: Correction, role: Rol
     )
     document_store.save_draft(source.model_dump(mode="json"))
     document_store.add_audit(source.id, role, "formula_corrected", block.id, update.reason)
+    return block
+
+
+@app.get("/v1/teacher/documents/{document_id}/blocks/{block_id}/speech-proposal", response_model=FormulaSpeechProposal)
+def formula_speech_proposal(document_id: str, block_id: str, _: Role = teacher_role):
+    source = get_document(document_id)
+    block = next((item for item in source.blocks if item.id == block_id), None)
+    if block is None or block.kind != "formula-display" or not block.mathml:
+        raise HTTPException(status_code=404, detail="Formül bulunamadı")
+    try:
+        proposed = compile_mathml_candidate(block.mathml)
+    except MathSpeechError:
+        raise HTTPException(status_code=422, detail="Formülün desteklenen Türkçe okunuşu yok") from None
+    return FormulaSpeechProposal(block_id=block.id, expected_revision=block.revision, proposed_spoken_text=proposed)
+
+
+@app.post("/v1/teacher/documents/{document_id}/blocks/{block_id}/approve-formula", response_model=Block)
+def approve_formula_candidate(document_id: str, block_id: str, approval: Approval, role: Role = teacher_role):
+    source = get_document(document_id)
+    block = next((item for item in source.blocks if item.id == block_id), None)
+    if block is None or block.kind != "formula-display" or not block.mathml:
+        raise HTTPException(status_code=404, detail="Formül bulunamadı")
+    if block.status != "review_required" or block.revision != approval.expected_revision:
+        raise HTTPException(status_code=409, detail="Formül değişti; yeniden yükleyin")
+    try:
+        compile_mathml_candidate(block.mathml)
+    except MathSpeechError:
+        raise HTTPException(status_code=422, detail="Formülün desteklenen Türkçe okunuşu yok") from None
+    block.status = "approved"
+    block.revision += 1
+    block.validation = Validation(
+        schema_passed=True, render_score=1, source_agreement=1, confidence=1,
+        reasons=["Öğretmen formül okunuşunu kaynakla doğruladı"],
+    )
+    document_store.save_draft(source.model_dump(mode="json"))
+    document_store.add_audit(source.id, role, "formula_candidate_approved", block.id, approval.reason)
     return block
 
 

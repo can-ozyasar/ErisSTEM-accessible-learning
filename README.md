@@ -8,8 +8,11 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 
 - Kaynak koordinatlı belge öğeleri (`page`, `bbox`, `checksum`, işlem adımı).
 - Güven kuralları: formül şema/render denetimi geçmeden yayımlanamaz.
-- Öğrenci okuyucusu: semantik başlıklar, MathML, kaynak/denetim durumu ve klavye kısayolları.
+- Öğrenci okuyucusu: yayımlanmış belge seçimi, semantik metin ve tablo, doğrulanmış metin için sesli okuma ve Türkçe 1. derece Braille; matematiksel erişim henüz kapalı.
+- Öğrenme atölyesi: kümeler, çember ve uçak için ön bilgi yoklaması, katmanlı kavram açıklaması, isteğe bağlı nesne/liste keşfi, rehberli çalışma, yeni sorularla yardımsız deneme ve 24 saat sonra farklı sorularla tekrar. İlk yanıt, kullanılan yardım ve geçilen sorular ayrı tutulur. İçerikler sentetiktir; uzman ve kullanıcı değerlendirmesi bekler.
 - Öğretmen kuyruğu: düşük güvenli formülü düzeltme, sürüm/audit kaydı, onaylayıcıyla yayın.
+- Öğrenme kalite yönetimi: sürüme bağlı uzman kontrolleri, rızalı yetişkin pilotu, görev gözlemleri, kritik hata engeli ve ayrı yayın kararı.
+- Sınav erişim provası: kaynak-bağlı 2026 LGS/YKS/EKPSS düzenlemeleri, altı sentetik soruda süre ve yanıt gezinmesi, sonuçların bitişe kadar gizlenmesi ve veri silme.
 
 ## Çalıştırma
 
@@ -21,7 +24,14 @@ Linux'ta worker'ın türetilmiş private dosyaları size ait kalması için gere
 
 Web: `http://localhost:5173` · Geliştirme API dokümantasyonu: `http://localhost:5173/api/docs`
 
-Web uygulaması API'ye aynı origin üzerinden `/api` ile ulaşır. API container'ı doğrudan dışa açılmaz; bu özellikle IDE/uzak önizleme ortamlarında tarayıcının yanlış `localhost` adresine bağlanmasını önler.
+Sınav provası `?view=exam`, uzman incelemesi `?mode=learning-review`, kullanıcı
+pilotu `?mode=pilot`, öğrenme yayın kontrolü `?mode=learning-release` adreslerinde
+açılır. Birlikte çalışma, veri saklama ve resmî profil sınırları
+[işletim kılavuzunda](docs/tam-uygulama-isletim.md) açıklanır.
+
+Öğrenme atölyesi doğrudan `http://localhost:5173/?view=practice` adresinden de açılır. Uygulanan kapsam ve test komutları [atölye uygulama notunda](docs/ogrenme-atolyesi-uygulama.md), kullanıcı görüşmesi ve görevler [pilot protokolünde](docs/ogrenme-atolyesi-pilot.md) açıklanır. Ürün kararlarının araştırma dayanağı [kullanıcı anlayışı ve öğrenme tasarımında](docs/kullanici-anlayisi-ve-ogrenme-tasarimi.md) bulunur.
+
+Web uygulaması API'ye aynı origin üzerinden `/api` ile ulaşır. API container'ı doğrudan dışa açılmaz ve geliştirme web portu yalnız `127.0.0.1` adresine bağlanır; `X-Role` başlığı gerçek kimlik doğrulama değildir. Bu kurulum telefon/LAN erişimine veya üretime açılmamalıdır.
 
 Yerelde:
 
@@ -31,6 +41,17 @@ cd apps/web && npm install && npm run dev
 ```
 
 Demo yetkileri API'de yalnızca geliştirme amacıyla `X-Role` başlığıyla seçilir: `student`, `teacher`, `reviewer`, `admin`. Üretimde OIDC doğrulanmış claim'leri bu bağımlılığı beslemelidir.
+
+Mobil öğrencinin menü/geri akışı ve cihazın Braille klavyesiyle yazı girişi
+[mobil erişilebilirlik sözleşmesinde](docs/mobil-erisebilirlik.md) anlatılır.
+
+Öğrenci Braille uç noktası sistem Python'undaki Liblouis ve `tr-g1.ctb`
+tablosunu kullanır. Docker imajı bağımlılıkları kurar. Yerel API çalıştırırken
+Debian/Ubuntu'da ayrıca `python3-louis` ve `liblouis-data` kurulu olmalıdır;
+kurulu değilse dönüşüm 503 ile güvenli şekilde kapanır. Yalnız doğrulanmış
+başlık/paragraf çevrilir; formül veya matematik sembolü edebî Braille tablosuna
+zorlanmaz. Unicode hücre görünümü, fiziksel Braille ekranı ile kullanıcı
+doğrulamasının yerine geçmez.
 
 Yetkili yerel PDF'nin metin katmanını çıkarmak için (çıktı `data/derived/` altında kalır):
 
@@ -78,7 +99,7 @@ This repository contains **no MEB PDFs, page images, or converted real textbook 
 
 - Source-coordinate document blocks (`page`, `bbox`, `checksum`, processing step).
 - Safety rules: a formula cannot be published before schema and render validation.
-- Student reader: semantic headings, MathML, source/review state, and keyboard shortcuts.
+- Student reader: published-document selection, semantic text/tables, verified-text speech, and Turkish Grade 1 literary Braille; mathematical access remains gated.
 - Teacher queue: correct a low-confidence formula, preserve revision/audit history, then publish through an approver.
 
 ## Run
@@ -91,7 +112,7 @@ On Linux, if needed, start Compose with `LOCAL_UID=$(id -u) LOCAL_GID=$(id -g) d
 
 Web: `http://localhost:5173` · Development API docs: `http://localhost:5173/api/docs`
 
-The web app reaches the API through the same-origin `/api` path. The API container is not directly exposed, preventing a browser in an IDE or remote preview from connecting to the wrong `localhost` address.
+The web app reaches the API through the same-origin `/api` path. The API container is not directly exposed, and the development web port binds only to `127.0.0.1`; `X-Role` is not authentication. Do not expose this setup to a phone/LAN or production.
 
 For local development:
 

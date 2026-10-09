@@ -230,9 +230,13 @@ def turkish_math_speech_plan(formula: FormulaAccessibility) -> TurkishMathSpeech
     workflow.
     """
     require_release_quality(formula.quality)
-    root = _bounded_tree(formula.mathml)
-    spoken_text = _render(root).text
+    spoken_text = compile_mathml_candidate(formula.mathml)
     return TurkishMathSpeechPlan(
         source_mathml_sha256=hashlib.sha256(formula.mathml.encode("utf-8")).hexdigest(),
         spoken_text=spoken_text,
     )
+
+
+def compile_mathml_candidate(mathml: str) -> str:
+    """Teacher-only preview; compiling a candidate never publishes it."""
+    return _render(_bounded_tree(mathml)).text

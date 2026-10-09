@@ -1,5 +1,16 @@
 # ErişSTEM ürün ve mühendislik yol haritası
 
+## 9 Ekim 2026 — Modüler öğrenme atölyesi
+
+Öğrenci çalışma rotası kümeler, çember ve uçak için ön bilgi → kavram keşfi ve
+rehberli çalışma → yeni yardımsız görev → 24 saat sonra farklı görev akışına
+genişletildi. İlk yanıt, yardım ve geçilen sorular ayrı yerel kayıtlardır;
+resmî sınav puanı veya kalıcı öğrenme başarısı olarak sunulmaz.
+Uygulanan kapsam ve teknik doğrulama [atölye uygulama notunda](ogrenme-atolyesi-uygulama.md),
+görme engelli kullanıcılarla yapılacak görevler [pilot protokolünde](ogrenme-atolyesi-pilot.md)
+bulunur. Uzman içerik incelemesi, gerçek ekran okuyucu görevleri ve öğrenme etkisi
+hâlâ kabul kapılarıdır. Aşağıdaki aşamalar içerik dönüşümü omurgasını anlatır.
+
 Amaç PDF OCR çıktısını göstermek değil; doğrulanmış STEM içeriğini öğrenciye
 ekran okuyucu, TTS ve Braille ile güvenilir biçimde sunmaktır. Öğretmen,
 her içeriği yeniden yazan kişi değil; yalnız otomatik kalite kapısının belirsiz
@@ -52,6 +63,24 @@ olamaz. VLM/OCR yalnız aday üretir; karar vermez.
 Başarı ölçütü: öğrenci bir formülü, tabloyu ve grafiği fare kullanmadan
 anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
 
+### Etkin öğrenme dikey dilimi (uygulandı; kullanıcı doğrulaması bekliyor)
+
+- `sets-grade9-v1`: MEB PDF'sinden çıkarılmamış, sürümlü ve sentetik 9. sınıf
+  kümeler alıştırmaları. Birleşim, kesişim ve fark için rehberli soru → benzer
+  yardımsız tekrar akışı. Yanıtlar deterministik küme cebriyle denetlenir;
+  cevap anahtarı veya ipuçları öğrenciye indirilen soru verisinde bulunmaz.
+- Yanlış rehberli yanıta en çok üç basamaklı, cevabı açık etmeyen, önceden
+  yazılmış ipucu; aktarım sorusunda ipucu yok. Yanıt metni saklanmaz; yalnız
+  tamamlanan adımlar, sürüm anahtarıyla öğrencinin cihazında tutulur.
+- Standart metin girişi cihazın Braille klavyesine açıktır. Soru yerel Türkçe
+  TTS varsa seslendirilebilir; yoksa yanlış dilde ses seçilmez, ekran okuyucu
+  metni kullanılır. Bu, matematiksel Braille veya erişilebilirlik kullanıcı
+  testlerinin tamamlandığı anlamına gelmez.
+- Sonraki kalite kapısı: görme engelli öğrencilerle gerçek görev testi,
+  bağımsız ilk-deneme/tekrar başarısı ve geri bildirim ölçümü. Ardından ancak
+  öğretmen doğrulamalı özgün ders soruları sisteme alınacak; LLM yalnız kaynak
+  bağlı, sınırlı açıklama adayı olabilir ve deterministik denetimi geçemez.
+
 ## Aşama 4 — Öğrenen kalite sistemi
 
 - Öğretmen düzeltmeleri anonimleştirilmiş private Gold örneklerine dönüşür.
@@ -97,8 +126,49 @@ anlayıp gezinebilir; ses ve Braille aynı doğrulanmış kaynaktan gelir.
 
 ## Mevcut durum
 
+Öğrenme atölyesine uzman içerik incelemesi, rıza referanslı yetişkin pilotu,
+sürüm bağlı yayın kontrolü ve kaynaklı 2026 sınav erişim provası eklendi.
+Prova kayıtları gerçek katılımcı kanıtı sayılmaz; kritik kullanıcı sorunu,
+eski içerik kanıtı veya eksik uzman onayı yayını engeller. Sınav akışı altı
+özgün prosedür sorusuyla gezinme ve zaman yönetimi çalıştırır; tam müfredat
+denemesi değildir. Kurulum, ekranlar ve kalan insan doğrulamaları
+[tam uygulama işletim notlarında](tam-uygulama-isletim.md) açıklanır.
+
 Kaynak bağlama, tablo öğretmen istisna kuyruğu, immutable kalite raporu ve
 sembol Gold kapısı mevcuttur. PaddleOCR-VL, 9 kritik sembolde yüzde 0 exact
-doğruluk verdiği için otomatik yayın adayı değildir. TTS/Braille henüz ürün
-özelliği değildir; Aşama 3'ün kabul kriterleri sağlanmadan tamamlandı diye
-işaretlenmeyecektir.
+doğruluk verdiği için otomatik yayın adayı değildir. Öğrenci arayüzü artık
+yayımlanmış belge listesini, doğrulanmış metin okuma planını ve yayımlanmış
+tabloları yapısal HTML ile gösterir. Başlık/paragraf için Türkçe Liblouis
+Grade 1 dönüşümü kaynak metne geri dönüş denetimiyle açılır; desteklenmeyen
+karakter veya matematik sembolünde kapalı kalır. Bu, matematiksel Braille
+veya fiziksel Braille ekranı doğrulaması anlamına gelmez.
+Mobil öğrenci kabuğu ekran okuyucunun yerel kaydırma/çift dokunma
+davranışlarıyla uyumlu menü, History API geri dönüşü ve cihazın Braille
+klavyesine açık standart yazı alanı içerir. Ayrıntılar
+`docs/mobil-erisebilirlik.md` dosyasındadır.
+Yayımlanmış metin için kaynak sürümüne bağlı, cihazda saklanan isteğe bağlı
+hatırlama/tekrar akışı ve basit yayımlanmış tablolar için hücre odaklı gezinme
+eklendi. Bunlar öğrenciyle görev testinden geçmedikçe erişilebilirlik başarısı
+olarak sayılmaz. Araştırma, uygulanmış kapsam, P0–P2 işleri ve kabul kapıları
+`docs/ogrenci-ogrenme-deneyimi.md` dosyasındadır.
+Öğretmen tarafından kaynak PDF üzerinde Türkçe okunuşu onaylanıp bağımsız
+onaylayıcı tarafından yayımlanmış, desteklenen MathML formülleri artık
+deterministik Türkçe okuma planına girer. Öğretmen paneli LaTeX göstermeden
+önerilen okunuşu sunar; yanlışsa onay engellenir ve özel düzeltme gerekir.
+Yayımlanmış tablolarda her hücre satır/sütun ve başlığıyla odaklanabilir;
+bilinen matematik sembolleri Türkçe sözcüklere çevrilir. Bilinmeyen sembol
+için uygulama TTS'i anlam uydurmaz; öğretmen yalnız istisna hücrenin Türkçe
+okunuşunu kaynakla karşılaştırarak yazabilir. Bunlar ses modelinin başarısı değil,
+ses modelinden önceki içerik ve gezinme katmanıdır.
+
+Üç TTS adayının ilk 60 örneklik ASR/Gold karşılaştırmasındaki "hiçbir aday
+uygun değil" sonucu, konuşulmayan noktalamayı hata sayan ölçümden
+etkilenmişti. Düzeltme ve immutable v3 yeniden puanlamasında Nisan referanslı
+Chatterbox V3 ile MMS-TUR yalnız düz metin dinleyici çalışmasına giriş hakkı
+kazandı; diğer türler engelli ve aday sesleri öğrenciye açılmadı. Ayrıntı ve
+sonraki insan değerlendirmesi `docs/tts_kayit_protokolu.md` içindedir.
+Öğrenci WAV kapısı artık yalnız manifestteki onay bayrağına güvenmez; hash'li
+kalite/dinleyici raporlarını ve kaynak-bağlı release Gold kapsamını da arar.
+Desteklenmeyen formüller için düzeltme akışı ve matematiksel Braille, grafik ve alıştırma yapısal
+gezinmesi, masaüstü ve mobil ekran okuyucularla kör görev testleri ile
+doğrulanmış matematik Braille standardı hâlâ Aşama 3 release engelleridir.

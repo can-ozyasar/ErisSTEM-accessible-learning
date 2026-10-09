@@ -8,6 +8,9 @@ Bu belge, mevcut öğrenme mimarisini tamamlar. Aşağıdaki ürün önerileri u
 Uygulama güncellemesi: bu araştırmanın ardından önerilerin bir bölümü
 [modüler öğrenme atölyesine](ogrenme-atolyesi-uygulama.md) taşındı. Bu belge
 araştırma başlangıcını, uygulama notu güncel çalışan kapsamı anlatır.
+Seviye ve içerik kaynağından bağımsız ürün yönü, kurumlaşma hedefi ve sonraki
+araştırma aşamaları [ürün vizyonu belgesinde](urun-vizyonu-ve-arastirma-programi.md)
+tanımlanır.
 
 ## 1. Ürün amacı ve temel ayrım
 

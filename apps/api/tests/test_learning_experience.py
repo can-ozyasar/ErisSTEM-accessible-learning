@@ -40,12 +40,24 @@ def test_catalog_requires_role_and_unknown_modules_do_not_fall_back():
     assert submit("unknown", "circle-baseline", "option-1").status_code == 404
 
 
+def test_catalog_describes_usage_and_representations_without_requiring_school_year_or_diagnosis():
+    catalog = client.get(ROOT, headers=HEADERS).json()
+    contexts = {context for item in catalog for context in item["scope"]["applicable_contexts"]}
+    assert {"formal_learning", "exam_preparation", "higher_education", "daily_or_professional"} <= contexts
+    for item in catalog:
+        scope = item["scope"]
+        assert scope["applicable_contexts"] and scope["representation_options"]
+        assert scope["context_note"]
+        assert "school_year" not in item and "diagnosis" not in item
+
+
 @pytest.mark.parametrize("module_id", ["sets", "circle", "airplane"])
 def test_public_contract_separates_lessons_and_phases_and_never_ships_marking_keys(module_id):
     response = client.get(f"{ROOT}/{module_id}", headers=HEADERS)
     assert response.status_code == 200
     public = response.json()
     assert "Uzman ve kullanıcı değerlendirmesi bekliyor" in public["provenance"]
+    assert public["scope"]["applicable_contexts"]
     stages = [item["stage"] for item in public["exercises"]]
     order = {"baseline": 0, "guided": 1, "transfer": 2, "review": 3}
     assert stages == sorted(stages, key=order.get)

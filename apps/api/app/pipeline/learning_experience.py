@@ -28,6 +28,7 @@ from .set_practice import (
 )
 
 Stage = Literal["baseline", "guided", "transfer", "review"]
+LearningContext = Literal["formal_learning", "exam_preparation", "higher_education", "daily_or_professional"]
 
 
 class Choice(BaseModel):
@@ -56,12 +57,21 @@ class LearningExercise(BaseModel):
     choices: list[Choice] = Field(default_factory=list)
 
 
+class LearningScope(BaseModel):
+    """Authored usage and representation metadata, never a learner diagnosis."""
+
+    applicable_contexts: list[LearningContext] = Field(min_length=1)
+    context_note: str
+    representation_options: list[str] = Field(min_length=1)
+
+
 class ModuleSummary(BaseModel):
     id: str
     version: str
     title: str
     goal: str
     materials: str
+    scope: LearningScope
     quality_status: Literal["unreviewed", "expert-approved", "published"] = "unreviewed"
 
 
@@ -252,13 +262,28 @@ AIRPLANE_TASKS = (
 SUMMARIES = (
     ModuleSummary(id="sets", version="sets-learning-v2", title="Kümeler ve ilişkiler",
                   goal="En az birinde, ikisinde de ve yalnız ilkinde bulunmayı yeni sorularda kullanın.",
-                  materials="Metin veya sesli listeler yeterli; çizim gerekmez."),
+                  materials="Metin veya sesli listeler yeterli; çizim gerekmez.",
+                  scope=LearningScope(
+                      applicable_contexts=["formal_learning", "exam_preparation", "higher_education"],
+                      context_note="Bu, belirli bir sınıf düzeyine yerleştirilmiş içerik değildir; temel kavramı öğrenme veya pekiştirme için tasarlanmıştır.",
+                      representation_options=["Yapılandırılmış metin ve sesli listeler", "Standart klavye veya cihazın Braille girişi"],
+                  )),
     ModuleSummary(id="circle", version="circle-learning-v1", title="Çemberi keşfet",
                   goal="Çemberi eşit uzaklık ilişkisiyle tanıyın; çevre, iç bölge ve merkezi ayırın.",
-                  materials="İsteğe bağlı halka veya merkezi işaretlenmiş kabartma çizim."),
+                  materials="İsteğe bağlı halka veya merkezi işaretlenmiş kabartma çizim.",
+                  scope=LearningScope(
+                      applicable_contexts=["formal_learning", "exam_preparation", "higher_education"],
+                      context_note="Amaç şekli ezberletmek değil, ilişkiyi kurmaktır. Dokunsal materyal isteğe bağlı bir temsil yoludur.",
+                      representation_options=["Katmanlı metin ve sesli ilişki açıklaması", "İsteğe bağlı halka veya kabartma çizim"],
+                  )),
     ModuleSummary(id="airplane", version="airplane-learning-v1", title="Uçak: parçalar ve yönler",
                   goal="Bir modelde parçaların konumunu ve yön referansını anlayın.",
-                  materials="İsteğe bağlı güvenli uçak modeli; model olmadan ilişki soruları kullanılabilir."),
+                  materials="İsteğe bağlı güvenli uçak modeli; model olmadan ilişki soruları kullanılabilir.",
+                  scope=LearningScope(
+                      applicable_contexts=["formal_learning", "higher_education", "daily_or_professional"],
+                      context_note="Bu içerik parça-bütün ve yön ilişkisini çalıştırır; gerçek ortamda yönelim veya uçuş eğitimi yerine geçmez.",
+                      representation_options=["Yapılandırılmış parça ve yön açıklaması", "İsteğe bağlı güvenli üç boyutlu model"],
+                  )),
 )
 
 

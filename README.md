@@ -12,6 +12,7 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 - Öğrenme atölyesi: kümeler, çember ve uçak için ön bilgi yoklaması, katmanlı kavram açıklaması, isteğe bağlı nesne/liste keşfi, rehberli çalışma, yeni sorularla yardımsız deneme ve 24 saat sonra farklı sorularla tekrar. İlk yanıt, kullanılan yardım ve geçilen sorular ayrı tutulur. İçerikler sentetiktir; uzman ve kullanıcı değerlendirmesi bekler.
 - Öğretmen kuyruğu: düşük güvenli formülü düzeltme, sürüm/audit kaydı, onaylayıcıyla yayın.
 - Öğrenme kalite yönetimi: sürüme bağlı uzman kontrolleri, rızalı yetişkin pilotu, görev gözlemleri, kritik hata engeli ve ayrı yayın kararı.
+- Ürün yönü: MEB veya tek okul seviyesiyle sınırlı olmayan, Türkçe görme yetersizliği bağlamında öğrenme görevlerine odaklanan araştırma ve mimari çerçeve [ürün vizyonunda](docs/urun-vizyonu-ve-arastirma-programi.md).
 - Sınav erişim provası: kaynak-bağlı 2026 LGS/YKS/EKPSS düzenlemeleri, altı sentetik soruda süre ve yanıt gezinmesi, sonuçların bitişe kadar gizlenmesi ve veri silme.
 
 ## Çalıştırma

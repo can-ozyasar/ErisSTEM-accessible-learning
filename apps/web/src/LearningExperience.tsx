@@ -8,6 +8,10 @@ const STAGE_LABELS: Record<LearningStage, string> = {
   baseline: "Ön bilgi yoklaması", guided: "Rehberli çalışma",
   transfer: "Yeni sorularla yardımsız deneme", review: "Gecikmeli yardımsız deneme",
 };
+const CONTEXT_LABELS: Record<ModuleSummary["scope"]["applicable_contexts"][number], string> = {
+  formal_learning: "Örgün öğrenme", exam_preparation: "Sınava hazırlık",
+  higher_education: "Yükseköğretimde pekiştirme", daily_or_professional: "Gündelik veya mesleki öğrenme",
+};
 const PREFERENCES_KEY = "eristem:learning-preferences:v1";
 type Preferences = { detail: "short" | "detailed"; rate: number; largeText: boolean };
 function readPreferences(): Preferences {
@@ -136,6 +140,7 @@ function ModuleSession({ module, api, preferences, onBack }: {
     <button type="button" onClick={() => { stop(); onBack(); }}>Öğrenme konularına dön</button>
     <h1 ref={heading} tabIndex={-1}>{module.title}{active ? ` — ${STAGE_LABELS[active.stage]}` : " — Çalışma özeti"}</h1>
     <p>{module.goal}</p>
+    <p className="source-note">{module.scope.context_note}</p>
     <p className="notice">{module.provenance}</p>
     <p role="status">{storageStatus}</p>
     {active ? <section className="study-card" aria-labelledby="learning-question-title">
@@ -270,7 +275,7 @@ export function LearningExperience({ api, onBack }: { api: string; onBack: () =>
         <p className="notice">Çalışma kayıtları ve tercihler yalnız bu tarayıcıda tutulur. Yanıt metinleri kaydedilmez. Paylaşılan cihazda aşağıdaki silme düğmesini kullanın.</p>
         <p role="status">{loading ? status || "Öğrenme konuları yükleniyor." : status}</p>
         {!loading && catalog.length === 0 && <button type="button" onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Yeniden yükle</button>}
-        <ul className="learning-catalog">{catalog.map(item => <li className="study-card" key={item.id}><h2>{item.title}</h2><p>{item.goal}</p><p>{item.materials}</p><button type="button" disabled={loading} onClick={() => void openModule(item.id)}>{item.title}: çalışmayı aç</button></li>)}</ul>
+        <ul className="learning-catalog">{catalog.map(item => <li className="study-card" key={item.id}><h2>{item.title}</h2><p>{item.goal}</p><p><strong>Çalışma bağlamları:</strong> {item.scope.applicable_contexts.map(context => CONTEXT_LABELS[context]).join(", ")}.</p><p>{item.materials}</p><details><summary>Temsil ve erişim seçenekleri</summary><p>{item.scope.context_note}</p><ul>{item.scope.representation_options.map(option => <li key={option}>{option}</li>)}</ul></details><button type="button" disabled={loading} onClick={() => void openModule(item.id)}>{item.title}: çalışmayı aç</button></li>)}</ul>
         <button type="button" className="learning-secondary" onClick={clearDeviceData}>Bu cihazdaki atölye kayıtlarını ve tercihleri sil</button>
       </>}
     </main>

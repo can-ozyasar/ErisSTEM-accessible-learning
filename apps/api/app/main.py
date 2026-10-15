@@ -15,6 +15,8 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from .auth import Role, require_roles
+from .history_source import router as history_router
+from .question_bank_routes import question_bank_router
 from .exam_practice import ExamStore
 from .job_store import (
     BenchmarkAnnotation,
@@ -34,6 +36,7 @@ from .pipeline.braille_adapter import (
     LiteraryBrailleResponse,
     translate_verified_literary,
 )
+from .pipeline.latex_ocr_adapter import LatexOcrError, latex_ocr_candidate
 from .pipeline.learning_experience import (
     LearningFeedback,
     LearningModule,
@@ -42,6 +45,7 @@ from .pipeline.learning_experience import (
     module_catalog,
     read_module,
 )
+from .pipeline.math_notation import MathNotationError, notation_speech_candidate
 from .pipeline.set_practice import (
     BY_ID as SET_EXERCISES,
 )
@@ -105,6 +109,7 @@ class Block(BaseModel):
     text: str | None = None
     latex: str | None = None
     mathml: str | None = None
+    spoken_text: str | None = None
     status: Literal["published", "review_required", "approved"]
     revision: int = 1
 
@@ -120,6 +125,7 @@ class Document(BaseModel):
 class Correction(BaseModel):
     latex: str = Field(min_length=1, max_length=1000)
     mathml: str = Field(min_length=1, max_length=5000)
+    spoken_text: str | None = Field(default=None, min_length=1, max_length=5000)
     reason: str = Field(min_length=5, max_length=500)
     expected_revision: int = Field(ge=1)
 
@@ -133,6 +139,21 @@ class FormulaSpeechProposal(BaseModel):
     block_id: str
     expected_revision: int
     proposed_spoken_text: str
+
+
+class FormulaNotationRequest(BaseModel):
+    visible_notation: str = Field(min_length=1, max_length=1000)
+    measurement_label: str | None = Field(default=None, max_length=120)
+
+
+class FormulaNotationProposal(BaseModel):
+    visible_notation: str
+    mathml: str
+    proposed_spoken_text: str
+
+
+class FormulaOcrRequest(BaseModel):
+    latex: str = Field(min_length=1, max_length=1000)
 
 
 class TextCorrection(Approval):
@@ -311,7 +332,7 @@ def gold_manifest() -> dict:
 
 
 def validate_formula(update: Correction) -> None:
-    if not re.fullmatch(r"[a-zA-Z0-9^_+\-=/(){}\\ ]+", update.latex):
+    if not re.fullmatch(r"[a-zA-Z0-9α-ωΑ-Ωℝ^_+\-−=/(){}\[\]\\,.·×÷<>≤≥≠∈∉| ]+", update.latex):
         raise HTTPException(status_code=422, detail="LaTeX izinli sembol kümesinin dışında")
     if "<math" not in update.mathml or "</math>" not in update.mathml:
         raise HTTPException(status_code=422, detail="MathML kök math öğesi içermeli")
@@ -387,6 +408,8 @@ def canonical_formula_block(block: Block) -> CanonicalAccessibleBlock:
         "quality": evidence,
     })
     speech = turkish_math_speech_plan(formula)
+    if block.spoken_text is not None and not valid_formula_speech(block.spoken_text, speech.spoken_text):
+        raise ValueError("stored_formula_speech_does_not_match_mathml")
     return CanonicalAccessibleBlock.model_validate({
         "id": block.id,
         "kind": "formula",
@@ -396,11 +419,16 @@ def canonical_formula_block(block: Block) -> CanonicalAccessibleBlock:
         "reading_order": block.reading_order,
         "representations": {
             "navigation_label": "Formül",
-            "spoken_text": speech.spoken_text,
+            "spoken_text": block.spoken_text or speech.spoken_text,
             "mathml": block.mathml,
         },
         "quality": evidence,
     })
+
+
+def valid_formula_speech(stored: str, base: str) -> bool:
+    """Allow only a teacher-verified geometry anchor before deterministic maths."""
+    return stored == base or bool(re.fullmatch(rf"[^:]{{2,120}} ölçüsü: {re.escape(base)}", stored))
 
 
 app = FastAPI(title="ErişSTEM API", version="0.1.0")
@@ -416,7 +444,8 @@ table_review_store = TableReviewStore(job_store.sessions)
 learning_operations_store = LearningOperationsStore(job_store.sessions)
 exam_store = ExamStore(learning_operations_store)
 app.include_router(learning_router(learning_operations_store, exam_store))
-document_store.ensure(demo_document.model_dump(mode="json"))
+app.include_router(history_router)
+app.include_router(question_bank_router(learning_operations_store))
 
 
 def job_response(job: ProcessingJob, created: bool) -> QueueJobResponse:
@@ -434,6 +463,25 @@ def job_response(job: ProcessingJob, created: bool) -> QueueJobResponse:
 @app.get("/health")
 def health(_: Role = any_role):
     return {"status": "ok"}
+
+
+class InterfaceSpeechRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=600)
+
+
+@app.post("/v1/student/interface-speech")
+def interface_speech(request: InterfaceSpeechRequest, _: Role = any_role):
+    """Local-only, ephemeral TTS for short UI labels; never stored as lesson audio."""
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(503, "Arayüz seslendirmesi üretime açılmadı")
+    value = re.sub(r"\s+", " ", request.text).strip()
+    if not value or any(ord(char) < 32 for char in value):
+        raise HTTPException(422, "Geçersiz arayüz metni")
+    try:
+        audio = synthesize_verified_text(value)
+    except LocalTtsUnavailable as error:
+        raise HTTPException(503, "Yerel Türkçe ses kullanılamıyor") from error
+    return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
 
 
 @app.get("/v1/student/learning/modules", response_model=list[ModuleSummary])
@@ -840,6 +888,13 @@ def correct_block(document_id: str, block_id: str, update: Correction, role: Rol
         )
     validate_formula(update)
     block.latex, block.mathml = update.latex, update.mathml
+    try:
+        base_speech = compile_mathml_candidate(update.mathml)
+    except MathSpeechError:
+        raise HTTPException(status_code=422, detail="Formülün desteklenen Türkçe okunuşu yok") from None
+    if update.spoken_text is not None and not valid_formula_speech(update.spoken_text, base_speech):
+        raise HTTPException(status_code=422, detail="Türkçe okunuş MathML ile eşleşmiyor")
+    block.spoken_text = update.spoken_text or base_speech
     block.status = "approved"
     block.revision += 1
     block.validation = Validation(
@@ -867,6 +922,50 @@ def formula_speech_proposal(document_id: str, block_id: str, _: Role = teacher_r
     return FormulaSpeechProposal(block_id=block.id, expected_revision=block.revision, proposed_spoken_text=proposed)
 
 
+@app.post(
+    "/v1/teacher/documents/{document_id}/blocks/{block_id}/notation-proposal",
+    response_model=FormulaNotationProposal,
+)
+def formula_notation_proposal(
+    document_id: str, block_id: str, request: FormulaNotationRequest, _: Role = teacher_role
+):
+    """Compile one teacher-visible expression; never join independent PDF fragments."""
+    source = get_document(document_id)
+    block = next((item for item in source.blocks if item.id == block_id), None)
+    if block is None or block.kind != "formula-display":
+        raise HTTPException(status_code=404, detail="Formül bulunamadı")
+    try:
+        mathml, spoken = notation_speech_candidate(
+            request.visible_notation, measurement_label=request.measurement_label
+        )
+    except MathNotationError as error:
+        raise HTTPException(status_code=422, detail=f"Desteklenmeyen gösterim: {error}") from error
+    return FormulaNotationProposal(
+        visible_notation=request.visible_notation, mathml=mathml, proposed_spoken_text=spoken
+    )
+
+
+@app.post(
+    "/v1/teacher/documents/{document_id}/blocks/{block_id}/ocr-latex-proposal",
+    response_model=FormulaNotationProposal,
+)
+def formula_ocr_latex_proposal(
+    document_id: str, block_id: str, request: FormulaOcrRequest, _: Role = teacher_role
+):
+    """Adapt a whole-expression OCR result; it is still only a teacher proposal."""
+    source = get_document(document_id)
+    block = next((item for item in source.blocks if item.id == block_id), None)
+    if block is None or block.kind != "formula-display":
+        raise HTTPException(status_code=404, detail="Formül bulunamadı")
+    try:
+        visible, mathml, spoken = latex_ocr_candidate(request.latex)
+    except LatexOcrError as error:
+        raise HTTPException(status_code=422, detail=f"OCR gösterimi desteklenmiyor: {error}") from error
+    return FormulaNotationProposal(
+        visible_notation=visible, mathml=mathml, proposed_spoken_text=spoken
+    )
+
+
 @app.post("/v1/teacher/documents/{document_id}/blocks/{block_id}/approve-formula", response_model=Block)
 def approve_formula_candidate(document_id: str, block_id: str, approval: Approval, role: Role = teacher_role):
     source = get_document(document_id)
@@ -876,7 +975,7 @@ def approve_formula_candidate(document_id: str, block_id: str, approval: Approva
     if block.status != "review_required" or block.revision != approval.expected_revision:
         raise HTTPException(status_code=409, detail="Formül değişti; yeniden yükleyin")
     try:
-        compile_mathml_candidate(block.mathml)
+        block.spoken_text = compile_mathml_candidate(block.mathml)
     except MathSpeechError:
         raise HTTPException(status_code=422, detail="Formülün desteklenen Türkçe okunuşu yok") from None
     block.status = "approved"

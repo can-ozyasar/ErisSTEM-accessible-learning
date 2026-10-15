@@ -39,6 +39,53 @@
 .practice-shell #practice-feedback { min-height: 2rem; margin: 1rem 0; }
 .practice-shell #practice-feedback .study-answer { font-weight: 700; }
 
+.history-shell { max-width: 1450px; }
+.history-navigation { display: flex; align-items: end; gap: .7rem; flex-wrap: wrap; margin: 1rem 0; }
+.history-navigation input { display: block; width: 7rem; min-height: 44px; font: inherit; }
+.history-layout { display: grid; grid-template-columns: minmax(300px, 1fr) minmax(320px, 410px); gap: 1rem; align-items: start; }
+.history-page { position: relative; width: 100%; background: #fff; border: 1px solid #597487; }
+.history-page img { display: block; width: 100%; height: 100%; }
+.history-hotspot { position: absolute; min-height: 0; padding: 0; border: 2px solid #008fa3; border-radius: 0; background: rgb(0 203 223 / 6%); color: transparent; font-size: 0; cursor: pointer; }
+.history-hotspot:hover, .history-hotspot-selected { border: 3px solid #e05d00; background: rgb(224 93 0 / 15%); }
+.history-panel { background: #fff; padding: 1rem; border: 1px solid #8da4b8; border-radius: .5rem; }
+.history-panel ol { max-height: 36rem; overflow: auto; padding-left: 1.8rem; }
+.history-panel li { margin: .4rem 0; }
+.history-panel li button { display: block; width: 100%; text-align: left; background: #edf3f8; color: #102a43; font-weight: 500; }
+.history-panel li .history-selected { border: 2px solid #0b5cab; background: #d8ebff; }
+.history-detail { padding: 1rem; border: 2px solid #164e7a; overflow-wrap: anywhere; }
+.history-detail audio { display: block; max-width: 100%; margin-top: .7rem; }
+.history-study { margin-top: 1.5rem; padding: 1rem; background: #fff; border: 2px solid #164e7a; }
+.history-study label { display: block; margin: .7rem 0; font-weight: 700; }
+.history-study textarea { min-height: 6rem; }
+.history-study li button { text-align: left; margin: .3rem 0; }
+@media (max-width: 900px) { .history-layout { grid-template-columns: 1fr; } }
+.question-bank-question { margin: 1rem 0; padding: 1rem; background: #fff; border: 2px solid #164e7a; border-radius: .5rem; }
+.question-bank-question nav { display: flex; gap: .5rem; flex-wrap: wrap; }
+.question-bank-units { list-style: none; padding: 0; }
+.question-bank-units li { margin: .5rem 0; }
+.question-bank-units button { display: block; width: 100%; text-align: left; background: #edf3f8; color: #102a43; font-weight: 500; }
+.question-bank-units [aria-current="true"] { border: 3px solid #e05d00; background: #fff2e8; }
+.bank-review { max-width: 1480px; }
+.bank-review-grid { display: grid; grid-template-columns: 190px minmax(300px, 1fr) minmax(330px, 410px); gap: 1rem; align-items: start; }
+.bank-review-grid > * { background: #fff; padding: 1rem; border: 1px solid #8da4b8; border-radius: .5rem; min-width: 0; }
+.bank-review-grid aside ol { padding-left: 1.4rem; }
+.bank-review-grid aside li { margin: .5rem 0; }
+.bank-review-grid aside button { width: 100%; text-align: left; background: #edf3f8; color: #102a43; }
+.bank-review-grid aside .history-selected { background: #d8ebff; border: 2px solid #0b5cab; }
+.bank-source-image { width: 100%; max-width: 100%; height: auto; display: block; border: 1px solid #597487; }
+.bank-editor { max-height: 80vh; overflow: auto; }
+.bank-editor label { display: block; margin: .8rem 0; font-weight: 700; }
+.bank-editor textarea { min-height: 4.8rem; }
+.bank-editor .bank-check { display: flex; gap: .5rem; align-items: start; font-weight: 400; }
+.bank-editor .bank-check input { width: 1.4rem; height: 1.4rem; flex: 0 0 1.4rem; }
+.bank-editor fieldset { border: 2px solid #164e7a; margin: 1rem 0; }
+.bank-page-approval { margin: 1rem 0; padding: 1rem; background: #fff; border: 2px solid #164e7a; border-radius: .5rem; }
+.bank-page-approval details { max-width: 850px; margin: .7rem 0; }
+.bank-page-approval summary { cursor: pointer; min-height: 44px; font-weight: 700; }
+.bank-page-approval label { display: block; margin: .5rem 0; }
+.bank-page-approval input[type="checkbox"] { width: 1.4rem; height: 1.4rem; vertical-align: middle; }
+@media (max-width: 1050px) { .bank-review-grid { grid-template-columns: 1fr; } .bank-editor { max-height: none; } }
+
 .learning-shell { max-width: 54rem; line-height: 1.65; }
 .learning-shell .study-card { background: #fff; }
 .learning-shell .learning-catalog { list-style: none; padding: 0; }

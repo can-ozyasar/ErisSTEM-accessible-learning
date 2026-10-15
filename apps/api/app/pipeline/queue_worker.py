@@ -31,8 +31,12 @@ def process_one(
             return True
         write_text_layer(result, output_dir)
         if documents is not None:
+            # A teacher can distinguish several imported books without having to
+            # inspect their checksums.  The file never leaves the private source
+            # root; only its harmless display name is used in the draft title.
+            title = Path(job.source_relative_path).stem.replace("-", " ").replace("_", " ").strip()
             draft = draft_from_text_layer(
-                result, "İçe aktarılan kaynak taslağı", job.selected_pages
+                result, title or "İçe aktarılan kaynak taslağı", job.selected_pages
             )
             documents.create_draft(draft)
             write_review_previews(

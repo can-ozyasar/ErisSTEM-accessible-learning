@@ -24,8 +24,11 @@ SUMMARY_FILENAMES = (
     "structural_report.json",
     "region_records.json",
     "native_agreement_report.json",
+    "formula_evaluation_report.json",
+    "layout_probe_summary.json",
 )
 SYMBOL_PREDICTIONS_FILENAME = "symbol_predictions.json"
+FORMULA_PREDICTIONS_FILENAME = "formula_predictions.json"
 TTS_CANDIDATE_TRANSCRIPTS_FILENAME = "candidate_transcripts.json"
 TTS_AUDIO_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 MAX_TTS_AUDIO_FILES = 200
@@ -642,6 +645,122 @@ def download_symbol_predictions(kernel: str, input_manifest: Path) -> Path:
     return predictions
 
 
+def formula_input_ids(input_manifest: Path) -> set[str]:
+    """Read formula region IDs without ever loading the separate Gold file."""
+    path = private_path(input_manifest)
+    if not path.is_file():
+        raise ValueError("Formül input manifesti private dosya olarak bulunamadı")
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        regions = payload["regions"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Formül input manifesti okunamadı") from exc
+    if payload.get("schema_version") != "formula-region-benchmark-input-v1" or not isinstance(regions, list):
+        raise ValueError("Formül input şeması geçersiz")
+    ids = {item.get("id") for item in regions if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    if not ids or len(ids) != len(regions) or "expected" in payload:
+        raise ValueError("Formül input manifesti aday benchmark sınırını karşılamıyor")
+    return ids
+
+
+def validate_formula_predictions(path: Path, expected_ids: set[str]) -> None:
+    """Accept only bounded OCR output from the registered private formula run."""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        predictions = payload["predictions"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Formül prediction dosyası okunamadı") from exc
+    if (
+        set(payload) != {"schema_version", "candidate", "predictions"}
+        or payload.get("schema_version") != "formula-region-predictions-v1"
+        or not isinstance(payload.get("candidate"), str)
+        or not 1 <= len(payload["candidate"]) <= 80
+        or not isinstance(predictions, list)
+    ):
+        raise ValueError("Formül prediction şeması geçersiz")
+    seen: set[str] = set()
+    for item in predictions:
+        if not isinstance(item, dict) or set(item) != {"id", "visible_notation", "confidence", "status"}:
+            raise ValueError("Formül prediction alanları geçersiz")
+        region_id, notation, confidence, status = (
+            item.get("id"), item.get("visible_notation"), item.get("confidence"), item.get("status")
+        )
+        if (
+            not isinstance(region_id, str)
+            or region_id not in expected_ids
+            or region_id in seen
+            or not isinstance(notation, str)
+            or len(notation) > 1000
+            or not isinstance(confidence, (int, float))
+            or not 0 <= confidence <= 1
+            or status not in {"completed", "no-formula", "failed"}
+        ):
+            raise ValueError("Formül prediction kaydı geçersiz")
+        seen.add(region_id)
+    if seen != expected_ids:
+        raise ValueError("Formül prediction kayıtları aday input bölgeleriyle eşleşmiyor")
+
+
+def quarantine_oversize_formula_predictions(path: Path, expected_ids: set[str]) -> tuple[Path, list[str]]:
+    """Replace only overlong model strings with failed records before import.
+
+    Formula OCR occasionally hallucinates a page-sized sequence for a bad crop.
+    It must not prevent valid independent rows from reaching teacher review, nor
+    must that unbounded string enter the application database.
+    """
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if set(payload) != {"schema_version", "candidate", "predictions"} or payload.get("schema_version") != "formula-region-predictions-v1":
+        raise ValueError("Formül prediction şeması geçersiz")
+    cleaned, quarantined, seen = [], [], set()
+    for item in payload.get("predictions", []):
+        if not isinstance(item, dict) or not isinstance(item.get("id"), str) or item["id"] not in expected_ids or item["id"] in seen:
+            raise ValueError("Formül prediction kayıtları aday input bölgeleriyle eşleşmiyor")
+        seen.add(item["id"])
+        notation = item.get("visible_notation")
+        if isinstance(notation, str) and len(notation) > 1000:
+            quarantined.append(item["id"])
+            cleaned.append({"id": item["id"], "visible_notation": "", "confidence": 0.0, "status": "failed"})
+        else:
+            cleaned.append(item)
+    if seen != expected_ids:
+        raise ValueError("Formül prediction kayıtları aday input bölgeleriyle eşleşmiyor")
+    safe_path = path.with_name("formula_predictions.safe.json")
+    safe_path.write_text(json.dumps({"schema_version": payload["schema_version"], "candidate": payload["candidate"], "predictions": cleaned}, ensure_ascii=False), encoding="utf-8")
+    validate_formula_predictions(safe_path, expected_ids)
+    return safe_path, quarantined
+
+
+def download_formula_predictions(kernel: str, input_manifest: Path) -> Path:
+    """Download precisely one validated private formula OCR result file."""
+    expected_ids = formula_input_ids(input_manifest)
+    destination = output_directory(kernel)
+    result = subprocess.run(
+        [
+            kaggle_cli(), "kernels", "output", validate_handle(kernel), "--path", str(destination),
+            "--force", "--quiet", "--file-pattern", output_filename_pattern(FORMULA_PREDICTIONS_FILENAME),
+        ], text=True, capture_output=True, check=False,
+    )
+    prediction_files = [path for path in destination.rglob(FORMULA_PREDICTIONS_FILENAME) if path.is_file()]
+    _, kernel_slug = validate_handle(kernel).split("/", maxsplit=1)
+    transient_log = f"{kernel_slug}.log"
+    unexpected = [
+        path.name for path in destination.rglob("*")
+        if path.is_file() and path.name not in {FORMULA_PREDICTIONS_FILENAME, transient_log}
+    ]
+    if result.returncode != 0 or len(prediction_files) != 1 or unexpected:
+        raise RuntimeError("Yalnız izinli formül prediction dosyası indirilemedi")
+    predictions, quarantined = quarantine_oversize_formula_predictions(prediction_files[0], expected_ids)
+    manifest = {
+        "schema_version": "kaggle-formula-prediction-download-v1",
+        "kernel": validate_handle(kernel),
+        "input_manifest_relative_path": str(private_path(input_manifest).relative_to(private_root())),
+        "files": [{"path": str(predictions.relative_to(destination)), "sha256": sha256(predictions), "bytes": predictions.stat().st_size}],
+        "quarantined_prediction_ids": quarantined,
+    }
+    (destination / "download_manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    return predictions
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="ErişSTEM safe Kaggle private Dataset and Notebook operations")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -675,6 +794,11 @@ def main() -> int:
     )
     predictions.add_argument("--kernel", required=True)
     predictions.add_argument("--input-manifest", type=Path, required=True)
+    formula_predictions = commands.add_parser(
+        "download-formula-predictions", help="Yalnız şema-doğrulanmış private formül OCR sonuçlarını indirir"
+    )
+    formula_predictions.add_argument("--kernel", required=True)
+    formula_predictions.add_argument("--input-manifest", type=Path, required=True)
     audio = commands.add_parser(
         "download-tts-audio", help="Yalnız synthesis raporunda checksum'ı bulunan private TTS WAV'lerini indirir"
     )
@@ -716,6 +840,10 @@ def main() -> int:
         return 0
     if args.command == "download-symbol-predictions":
         prediction_path = download_symbol_predictions(args.kernel, args.input_manifest)
+        print(json.dumps({"status": "download-complete", "predictions": str(prediction_path)}, ensure_ascii=False))
+        return 0
+    if args.command == "download-formula-predictions":
+        prediction_path = download_formula_predictions(args.kernel, args.input_manifest)
         print(json.dumps({"status": "download-complete", "predictions": str(prediction_path)}, ensure_ascii=False))
         return 0
     if args.command == "download-tts-audio":

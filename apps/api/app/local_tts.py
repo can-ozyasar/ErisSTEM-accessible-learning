@@ -1,9 +1,9 @@
 """Boundary for the internal, offline Turkish TTS service.
 
-The browser never chooses the text sent to the service.  Student endpoints
-resolve an already-reviewed reading-plan unit first, then pass only that text
-over Docker's internal network.  Keeping this boundary small also lets us
-replace the runtime with a tested fine-tuned model later.
+Lesson-audio endpoints resolve an already-reviewed reading-plan unit first.
+The separate, development-only interface-exploration endpoint accepts short
+UI labels from the browser but never stores them as reviewed lesson audio.
+Both paths send text only over Docker's internal network.
 """
 
 from __future__ import annotations

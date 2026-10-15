@@ -14,6 +14,7 @@ const CONTEXT_LABELS: Record<ModuleSummary["scope"]["applicable_contexts"][numbe
 };
 const PREFERENCES_KEY = "eristem:learning-preferences:v1";
 type Preferences = { detail: "short" | "detailed"; rate: number; largeText: boolean };
+type PublishedBook = { id: string; title: string; published_revision: number; block_count: number };
 function readPreferences(): Preferences {
   const fallback: Preferences = { detail: "short", rate: 1, largeText: false };
   try {
@@ -213,8 +214,11 @@ function ModuleSession({ module, api, preferences, onBack }: {
   </>;
 }
 
-export function LearningExperience({ api, onBack }: { api: string; onBack: () => void }) {
+export function LearningExperience({ api, onBack, onOpenDocument }: {
+  api: string; onBack: () => void; onOpenDocument: (documentId: string) => void;
+}) {
   const [catalog, setCatalog] = useState<ModuleSummary[]>([]);
+  const [books, setBooks] = useState<PublishedBook[]>([]);
   const [module, setModule] = useState<LearningModule | null>(null);
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("");
@@ -225,9 +229,11 @@ export function LearningExperience({ api, onBack }: { api: string; onBack: () =>
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     const controller = new AbortController();
-    void fetch(`${api}/v1/student/learning/modules`, { headers: { "X-Role": "student" }, signal: controller.signal })
-      .then(response => { if (!response.ok) throw new Error("catalog"); return response.json() as Promise<ModuleSummary[]>; })
-      .then(items => { if (!controller.signal.aborted) { setCatalog(items); setStatus(""); } })
+    void Promise.all([
+      fetch(`${api}/v1/student/learning/modules`, { headers: { "X-Role": "student" }, signal: controller.signal }).then(response => { if (!response.ok) throw new Error("catalog"); return response.json() as Promise<ModuleSummary[]>; }),
+      fetch(`${api}/v1/student/documents`, { headers: { "X-Role": "student" }, signal: controller.signal }).then(response => response.ok ? response.json() as Promise<PublishedBook[]> : []),
+    ])
+      .then(([items, publishedBooks]) => { if (!controller.signal.aborted) { setCatalog(items); setBooks(publishedBooks); setStatus(""); } })
       .catch(() => { if (!controller.signal.aborted) setStatus("Öğrenme konuları yüklenemedi. Bağlantıyı kontrol edip yeniden deneyin."); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => { controller.abort(); request.current?.abort(); };
@@ -276,6 +282,7 @@ export function LearningExperience({ api, onBack }: { api: string; onBack: () =>
         <p role="status">{loading ? status || "Öğrenme konuları yükleniyor." : status}</p>
         {!loading && catalog.length === 0 && <button type="button" onClick={() => { setLoading(true); setRetry(value => value + 1); }}>Yeniden yükle</button>}
         <ul className="learning-catalog">{catalog.map(item => <li className="study-card" key={item.id}><h2>{item.title}</h2><p>{item.goal}</p><p><strong>Çalışma bağlamları:</strong> {item.scope.applicable_contexts.map(context => CONTEXT_LABELS[context]).join(", ")}.</p><p>{item.materials}</p><details><summary>Temsil ve erişim seçenekleri</summary><p>{item.scope.context_note}</p><ul>{item.scope.representation_options.map(option => <li key={option}>{option}</li>)}</ul></details><button type="button" disabled={loading} onClick={() => void openModule(item.id)}>{item.title}: çalışmayı aç</button></li>)}</ul>
+        {books.length > 0 && <section aria-labelledby="book-catalog-title"><h2 id="book-catalog-title">Yayımlanmış ders kitapları</h2><p>Kitabı sayfa sayfa okuyabilir, doğrulanmış metin birimlerini seslendirebilir ve Braille’e uygun metinleri açabilirsiniz.</p><ul className="learning-catalog">{books.map(book => <li className="study-card" key={book.id}><h3>{book.title}</h3><p>{book.block_count} doğrulanmış bölüm · sürüm {book.published_revision}</p><button type="button" onClick={() => onOpenDocument(book.id)}>Kitabı aç</button></li>)}</ul></section>}
         <button type="button" className="learning-secondary" onClick={clearDeviceData}>Bu cihazdaki atölye kayıtlarını ve tercihleri sil</button>
       </>}
     </main>

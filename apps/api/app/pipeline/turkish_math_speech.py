@@ -35,6 +35,7 @@ _OPERATORS = {
     "∪": "birleşim", "∩": "kesişim", "⊆": "alt kümesidir", "⊂": "öz alt kümesidir",
     "∅": "boş küme", "(": "aç parantez", ")": "kapa parantez", "[": "aç köşeli parantez",
     "]": "kapa köşeli parantez", "{": "aç küme parantezi", "}": "kapa küme parantezi", "!": "faktöriyel",
+    ",": "virgül",
 }
 _GREEK = {"α": "alfa", "β": "beta", "γ": "gama", "δ": "delta", "π": "pi", "θ": "teta", "λ": "lambda", "μ": "mü", "σ": "sigma", "φ": "fi", "ω": "omega"}
 _ONES = ("", "bir", "iki", "üç", "dört", "beş", "altı", "yedi", "sekiz", "dokuz")
@@ -184,7 +185,11 @@ def _render(node: ET.Element) -> _Rendered:
     if name in {"math", "mrow"}:
         if not children:
             raise MathSpeechError("empty_mathml_group")
-        return _Rendered(" ".join(_render(child).text for child in children), len(children) > 1)
+        rendered = [_render(child) for child in children]
+        # Unary minus is part of one number, not an implicit parenthesised
+        # expression (``-8`` must read "eksi sekiz").
+        unary_minus = len(children) == 2 and _tag(children[0]) == "mo" and (children[0].text or "") in {"-", "−"}
+        return _Rendered(" ".join(item.text for item in rendered), len(children) > 1 and not unary_minus)
     if name == "mfenced":
         if not children:
             raise MathSpeechError("empty_fenced_expression")
@@ -202,7 +207,9 @@ def _render(node: ET.Element) -> _Rendered:
         if len(children) != 2:
             raise MathSpeechError("invalid_root")
         radicand, degree = (_render(child) for child in children)
-        return _Rendered(f"{_group(degree)} dereceden kök içinde {_group(radicand)}", True)
+        # The radical bar already scopes its radicand in spoken Turkish; extra
+        # literal parentheses make routine school expressions hard to follow.
+        return _Rendered(f"{degree.text} dereceden kök içinde {radicand.text}", True)
     if name == "msup":
         if len(children) != 2:
             raise MathSpeechError("invalid_superscript")
@@ -212,7 +219,7 @@ def _render(node: ET.Element) -> _Rendered:
         elif exponent.text == "üç":
             suffix = "küpü"
         else:
-            suffix = f"üzeri {_group(exponent)}"
+            suffix = f"üzeri {exponent.text}"
         return _Rendered(f"{_group(base)} {suffix}", True)
     if name == "msub":
         if len(children) != 2:

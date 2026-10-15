@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import "./style.css";
+import "./design.css";
 import { dueUnitIds, parseProgress, progressKey, progressPrefix, recordSelfReview, type ReviewProgress } from "./study_progress";
-import { turkishVoices } from "./speech_voices";
 import { cellNavigationLabel, cellSpeechLabel } from "./table_reading";
-import { SetPractice } from "./SetPractice";
-import { ExamPractice } from "./ExamPractice";
 import { LearningManagement } from "./LearningManagement";
+import { HistoryReader } from "./HistoryReader";
+import { QuestionBankReview } from "./QuestionBankReview";
+import { QuestionBankStudent } from "./QuestionBankStudent";
+import { StudentLibrary } from "./StudentLibrary";
+import { VoiceCommandPanel } from "./VoiceCommandPanel";
+import { WritingSpace } from "./WritingSpace";
+import { ExploreSpeech } from "./ExploreSpeech";
 
 type Block = { id: string; kind: "heading" | "paragraph" | "formula-display"; text?: string; latex?: string; mathml?: string; status: string; revision: number; source: { page: number; bbox: number[]; source_checksum: string; extraction_step: string }; validation: { confidence: number; reasons: string[] } };
 type Document = { id: string; title: string; license_notice: string; published_revision: number; blocks: Block[] };
@@ -41,10 +46,9 @@ function Reader({ documentId, onBack }: { documentId: string; onBack: () => void
   const [tables, setTables] = useState<StudentTable[]>([]);
   const [loadStatus, setLoadStatus] = useState("Yayımlanmış belgeler yükleniyor.");
   const [currentUnit, setCurrentUnit] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [speechStatus, setSpeechStatus] = useState("Sesli okuma hazırlanıyor.");
   const [rate, setRate] = useState(1);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [voiceURI, setVoiceURI] = useState("");
   const [paused, setPaused] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
@@ -62,30 +66,21 @@ function Reader({ documentId, onBack }: { documentId: string; onBack: () => void
   const approvedAudioUrl = useRef<string | null>(null);
   const requestSerial = useRef(0);
   const navigationCursor = useRef({ heading: -1, formula: -1 });
-  const speechAvailable = "speechSynthesis" in window && "SpeechSynthesisUtterance" in window;
-  useEffect(() => {
-    if (!speechAvailable) return;
-    const refresh = () => setVoices(turkishVoices(window.speechSynthesis.getVoices()));
-    refresh();
-    window.speechSynthesis.addEventListener("voiceschanged", refresh);
-    return () => window.speechSynthesis.removeEventListener("voiceschanged", refresh);
-  }, [speechAvailable]);
   useEffect(() => {
     const controller = new AbortController();
     void Promise.all([
       fetch(`${API}/v1/student/documents/${encodeURIComponent(documentId)}`, { headers: { "X-Role": "student" }, signal: controller.signal }).then(r => r.ok ? r.json() as Promise<Document> : Promise.reject()),
       fetch(`${API}/v1/student/documents/${encodeURIComponent(documentId)}/reading-plan`, { headers: { "X-Role": "student" }, signal: controller.signal }).then(r => r.ok ? r.json() as Promise<ReadingPlanResponse> : null),
       fetch(`${API}/v1/student/documents/${encodeURIComponent(documentId)}/tables`, { headers: { "X-Role": "student" }, signal: controller.signal }).then(r => r.ok ? r.json() as Promise<StudentTable[]> : Promise.reject()),
-    ]).then(([document, readingPlan, publishedTables]) => { if (controller.signal.aborted) return; setContent(document); setPlan(readingPlan); setTables(publishedTables); setLoadStatus(""); setSpeechStatus(readingPlan ? "Doğrulanmış okuma planı hazır." : "Bu belgede sesli okunabilecek doğrulanmış metin yok."); try { setProgress(parseProgress(window.localStorage.getItem(progressKey(document.id, document.published_revision)), readingPlan?.plan.units.map(unit => unit.id) ?? [])); } catch { setProgress({}); setStudyStatus("Bu tarayıcıda çalışma geçmişi saklanamıyor; oturum boyunca çalışabilirsiniz."); } }).catch(() => { if (!controller.signal.aborted) setLoadStatus("Belge yüklenemedi."); });
+    ]).then(([document, readingPlan, publishedTables]) => { if (controller.signal.aborted) return; setContent(document); setCurrentPage(Math.min(...document.blocks.map(block => block.source.page))); setPlan(readingPlan); setTables(publishedTables); setLoadStatus(""); setSpeechStatus(readingPlan ? "Doğrulanmış okuma planı hazır." : "Bu belgede sesli okunabilecek doğrulanmış metin yok."); try { setProgress(parseProgress(window.localStorage.getItem(progressKey(document.id, document.published_revision)), readingPlan?.plan.units.map(unit => unit.id) ?? [])); } catch { setProgress({}); setStudyStatus("Bu tarayıcıda çalışma geçmişi saklanamıyor; oturum boyunca çalışabilirsiniz."); } }).catch(() => { if (!controller.signal.aborted) setLoadStatus("Belge yüklenemedi."); });
     return () => controller.abort();
   }, [documentId]);
   useEffect(() => { if (content) main.current?.querySelector<HTMLElement>("h1")?.focus(); }, [content]);
   useEffect(() => { if (studyMode) studyHeading.current?.focus(); }, [studyMode, currentUnit]);
   useEffect(() => { if (answerVisible) answerHeading.current?.focus(); }, [answerVisible]);
-  useEffect(() => () => { requestSerial.current += 1; if (speechAvailable) window.speechSynthesis.cancel(); approvedAudio.current?.pause(); if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current); }, [speechAvailable]);
+  useEffect(() => () => { requestSerial.current += 1; approvedAudio.current?.pause(); if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current); }, []);
   const stop = useCallback(() => {
     requestSerial.current += 1;
-    if (speechAvailable) window.speechSynthesis.cancel();
     approvedAudio.current?.pause();
     approvedAudio.current = null;
     if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current);
@@ -94,12 +89,11 @@ function Reader({ documentId, onBack }: { documentId: string; onBack: () => void
     setPaused(false);
     setIsPlaying(false);
     setSpeechStatus("Sesli okuma durduruldu.");
-  }, [speechAvailable]);
+  }, []);
   const speak = useCallback(async (index = currentUnit) => {
     const unit = plan?.plan.units[index];
     if (!unit || !content) return;
     const serial = ++requestSerial.current;
-    if (speechAvailable) window.speechSynthesis.cancel();
     approvedAudio.current?.pause();
     if (approvedAudioUrl.current) URL.revokeObjectURL(approvedAudioUrl.current);
     approvedAudio.current = null;
@@ -144,37 +138,34 @@ function Reader({ documentId, onBack }: { documentId: string; onBack: () => void
       }
       if (localResponse.status !== 503 && localResponse.status !== 404) { setSpeechStatus("Yerel ses hizmeti yanıt vermedi; otomatik yedeğe geçilmedi."); return; }
     } catch { if (serial !== requestSerial.current) return; setSpeechStatus("Yerel Türkçe ses hizmetine erişilemedi. Tekrar deneyin."); return; }
-    if (serial !== requestSerial.current) return;
-    if (!speechAvailable) { setSpeechStatus("Bu birim için onaylı ses bulunamadı ve tarayıcı sesli okumayı desteklemiyor."); return; }
-    const voice = voices.find(item => item.voiceURI === voiceURI) ?? voices[0];
-    if (!voice) { setSpeechStatus("Bu cihazda yerel Türkçe ses bulunamadı. Cihazınızın konuşma ayarlarından Türkçe ses yükleyin veya ekran okuyucunuzla metni okuyun."); return; }
-    const utterance = new SpeechSynthesisUtterance(unit.spoken_text);
-    utterance.lang = "tr-TR";
-    utterance.voice = voice;
-    utterance.rate = rate;
-    utterance.onstart = () => { setIsPlaying(true); setSpeechStatus(`${unit.navigation_label} okunuyor.`); };
-    utterance.onend = () => { setIsPlaying(false); setSpeechStatus(`${unit.navigation_label} tamamlandı.`); };
-    utterance.onerror = () => { setIsPlaying(false); setSpeechStatus("Sesli okuma bu birimde tamamlanamadı."); };
-    window.speechSynthesis.speak(utterance);
-  }, [content, currentUnit, plan, rate, speechAvailable, voices, voiceURI]);
-  const speakTableCell = useCallback((spoken: string | null, label: string) => {
+    if (serial === requestSerial.current) setSpeechStatus("Yerel ses kullanılamıyor. Metni ekran okuyucunuzla inceleyebilirsiniz.");
+  }, [content, currentUnit, plan, rate]);
+  const speakTableCell = useCallback(async (spoken: string | null, label: string) => {
     stop();
     if (!spoken) { setSpeechStatus("Bu hücrede desteklenmeyen bir işaret var; yanlış okunuş üretilmedi. Ekran okuyucunuzla kaynak metni inceleyin."); return; }
-    if (!speechAvailable) { setSpeechStatus("Bu cihaz sesli okumayı desteklemiyor; hücreye odaklanıp ekran okuyucunuzu kullanın."); return; }
-    const voice = voices.find(item => item.voiceURI === voiceURI) ?? voices[0];
-    if (!voice) { setSpeechStatus("Yerel Türkçe ses bulunamadı; hücreye odaklanıp ekran okuyucunuzu kullanın."); return; }
-    const utterance = new SpeechSynthesisUtterance(spoken);
-    utterance.lang = "tr-TR";
-    utterance.voice = voice;
-    utterance.rate = rate;
-    utterance.onstart = () => { setIsPlaying(true); setSpeechStatus(`${label} okunuyor.`); };
-    utterance.onend = () => { setIsPlaying(false); setSpeechStatus("Hücre okundu."); };
-    utterance.onerror = () => { setIsPlaying(false); setSpeechStatus("Hücre seslendirilemedi."); };
-    window.speechSynthesis.speak(utterance);
-  }, [rate, speechAvailable, stop, voices, voiceURI]);
+    const serial = requestSerial.current;
+    try {
+      const response = await fetch(`${API}/v1/student/interface-speech`, {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Role": "student" },
+        body: JSON.stringify({ text: spoken }),
+      });
+      if (serial !== requestSerial.current) return;
+      if (!response.ok) throw new Error("tts");
+      const url = URL.createObjectURL(await response.blob());
+      if (serial !== requestSerial.current) { URL.revokeObjectURL(url); return; }
+      const audio = new Audio(url);
+      audio.playbackRate = rate;
+      approvedAudio.current = audio;
+      approvedAudioUrl.current = url;
+      setPlaybackUrl(url);
+      audio.onplay = () => { setIsPlaying(true); setSpeechStatus(`${label} yerel sesle okunuyor.`); };
+      audio.onended = () => { if (serial === requestSerial.current) { setIsPlaying(false); setSpeechStatus("Hücre okundu."); } };
+      audio.onerror = () => { if (serial === requestSerial.current) { setIsPlaying(false); setSpeechStatus("Hücre seslendirilemedi."); } };
+      await audio.play();
+    } catch { if (serial === requestSerial.current) setSpeechStatus("Yerel ses kullanılamıyor. Hücre metnini ekran okuyucunuzla inceleyin."); }
+  }, [rate, stop]);
   const togglePause = () => {
     if (approvedAudio.current) { if (paused) void approvedAudio.current.play(); else approvedAudio.current.pause(); }
-    else if (speechAvailable) { if (paused) window.speechSynthesis.resume(); else window.speechSynthesis.pause(); }
     setPaused(!paused);
     setSpeechStatus(paused ? "Sesli okuma sürüyor." : "Sesli okuma duraklatıldı.");
   };
@@ -211,21 +202,36 @@ function Reader({ documentId, onBack }: { documentId: string; onBack: () => void
   const selectedBraille = braille?.unitId === unit?.id ? braille : null;
   const brailleStatus = !unit?.braille_available ? "Bu birimde doğrulanmış metin Braille'i bulunmuyor." : selectedBraille ? "Türkçe edebî metin Braille'i hazır." : brailleErrorId === unit.id ? "Bu birim için doğrulanmış metin Braille'i kullanılamıyor." : "Türkçe metin Braille'i hazırlanıyor.";
   const dueCount = dueUnitIds(plan?.plan.units.map(item => item.id) ?? [], progress, reviewNow).length;
+  const pages = [...new Set(content.blocks.map(block => block.source.page))].sort((a, b) => a - b);
+  const pageIndex = pages.indexOf(currentPage);
+  const visibleBlocks = content.blocks.filter(block => block.source.page === currentPage);
   return <><a className="skip" href="#lesson">Ana içeriğe geç</a><header><p className="brand">ErişSTEM</p><p>{studyMode ? <>Tekrar çalışması · <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> birim değiştir · Kaynak açılınca <kbd>Alt</kbd>+<kbd>R</kbd> oku</> : <>Öğrenci okuyucusu · <kbd>Alt</kbd>+<kbd>H</kbd> başlık · <kbd>Alt</kbd>+<kbd>F</kbd> formül · <kbd>Alt</kbd>+<kbd>R</kbd> oku · <kbd>Alt</kbd>+<kbd>←</kbd>/<kbd>→</kbd> birim değiştir</>}</p></header><main id="lesson" ref={main} tabIndex={-1}><button type="button" onClick={() => { stop(); onBack(); }}>Kütüphaneye dön</button><h1 tabIndex={-1}>{content.title}</h1><p className="notice">{content.license_notice}</p>
+    {pages.length > 1 && <nav className="reader-controls" aria-label="Kitap sayfaları"><h2>Kitapta gezinme</h2><p>Sayfa {currentPage} / {pages[pages.length - 1]}</p><div><button type="button" disabled={pageIndex <= 0} onClick={() => setCurrentPage(pages[pageIndex - 1])}>Önceki sayfa</button><label>Sayfaya git <select value={currentPage} onChange={event => setCurrentPage(Number(event.target.value))}>{pages.map(page => <option value={page} key={page}>Sayfa {page}</option>)}</select></label><button type="button" disabled={pageIndex < 0 || pageIndex >= pages.length - 1} onClick={() => setCurrentPage(pages[pageIndex + 1])}>Sonraki sayfa</button></div></nav>}
+    <VoiceCommandPanel title="Okuyucuda sesli ilerle" examples={["sonraki bölüm", "seçili bölümü oku", "sonraki sayfa", "sayfa kırk", "kütüphaneye dön"]}
+      available={["stop_audio", "back", ...(unit && currentUnit < (plan?.plan.units.length ?? 0) - 1 ? ["next_unit" as const] : []), ...(currentUnit > 0 ? ["previous_unit" as const] : []), ...(unit && (!studyMode || answerVisible) ? ["read_selected" as const] : []), ...(pages.length > 1 ? ["go_page" as const] : []), ...(pageIndex < pages.length - 1 ? ["next_page" as const] : []), ...(pageIndex > 0 ? ["previous_page" as const] : [])]}
+      onCommand={command => {
+        if (command.kind === "next_unit" || command.kind === "previous_unit") { const next = Math.max(0, Math.min((plan?.plan.units.length ?? 1) - 1, currentUnit + (command.kind === "next_unit" ? 1 : -1))); moveUnit(command.kind === "next_unit" ? 1 : -1); if (!studyMode) void speak(next); }
+        else if (command.kind === "read_selected") void speak();
+        else if (command.kind === "stop_audio") stop();
+        else if (command.kind === "next_page" && pages[pageIndex + 1]) setCurrentPage(pages[pageIndex + 1]);
+        else if (command.kind === "previous_page" && pages[pageIndex - 1]) setCurrentPage(pages[pageIndex - 1]);
+        else if (command.kind === "go_page") { if (pages.includes(command.number)) setCurrentPage(command.number); else setSpeechStatus("Bu belge içinde o sayfa bulunmuyor."); }
+        else if (command.kind === "back") { stop(); onBack(); }
+      }} />
     <section className="reader-controls" aria-labelledby="study-title"><h2 id="study-title">Kendini yokla</h2><p>Yalnız yayımlanmış, doğrulanmış metin birimleriyle çalışır. Sorular veya doğru-yanlış notları yapay zekâ tarafından üretilmez; hatırlama durumunu siz işaretlersiniz.</p><p role="status">{studyStatus}</p><p>{dueCount} birim tekrar listesinde.</p><div>{studyMode ? <button type="button" onClick={finishStudy}>Normal okumaya dön</button> : <button type="button" onClick={startStudy} disabled={!unit}>Tekrar çalışmasını başlat</button>}<button type="button" onClick={clearStudy} disabled={!Object.keys(progress).length}>Bu cihazdaki geçmişi sil</button></div><p className="source-note">Yalnız birim kimliği, deneme sayısı ve tekrar zamanı bu tarayıcıda saklanır; metin, yanıt veya ses sunucuya gönderilmez. Paylaşılan cihazda geçmişi silin.</p>
       {studyMode && unit && <div className="study-card"><h3 tabIndex={-1} ref={studyHeading}>Birim {currentUnit + 1}/{plan?.plan.units.length}</h3><p>Bu birimi kaynaktan ne kadar hatırlıyorsunuz? Hazır olduğunuzda doğrulanmış metni açın.</p><div><button type="button" onClick={() => moveUnit(-1)} disabled={currentUnit === 0}>Önceki birim</button><button type="button" onClick={() => moveUnit(1)} disabled={currentUnit >= (plan?.plan.units.length ?? 0) - 1}>Sonraki birim</button><button type="button" onClick={() => setAnswerVisible(true)} disabled={answerVisible}>Kaynak metni göster</button></div>{answerVisible && <div className="study-answer"><h4 tabIndex={-1} ref={answerHeading}>Doğrulanmış kaynak metni</h4><p>{unit.spoken_text}</p><div><button type="button" onClick={() => selfReview(true)}>Hatırladım</button><button type="button" onClick={() => selfReview(false)}>Tekrar çalışacağım</button></div></div>}</div>}
     </section>
-    {(!studyMode || answerVisible) && <><section className="reader-controls" aria-labelledby="reader-controls-title"><h2 id="reader-controls-title">Doğrulanmış sesli okuma</h2><p role="status">{speechStatus}</p>{unit && <p>Seçili birim: {unit.navigation_label} · {currentUnit + 1}/{plan?.plan.units.length}</p>}<div><button type="button" onClick={() => moveUnit(-1)} disabled={!plan || currentUnit === 0}>Önceki birim</button><button type="button" onClick={() => void speak()} disabled={!unit}>Seçili birimi oku</button><button type="button" onClick={togglePause} disabled={!isPlaying}>{paused ? "Devam et" : "Duraklat"}</button><button type="button" onClick={stop}>Durdur</button><button type="button" onClick={() => moveUnit(1)} disabled={!plan || currentUnit >= (plan.plan.units.length - 1)}>Sonraki birim</button></div>{playbackUrl && <div className="audio-player"><label htmlFor="generated-audio">Hazır ses kaydı</label><audio id="generated-audio" controls src={playbackUrl}>Tarayıcınız ses oynatmayı desteklemiyor.</audio><p>Otomatik başlatılmazsa bu denetimdeki oynat düğmesine basın ve ses düzeyini kontrol edin.</p></div>}<label className="reader-rate">Okuma hızı <select value={rate} onChange={event => setRate(Number(event.target.value))}><option value="0.75">0,75×</option><option value="1">1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option></select></label><label className="reader-rate">Cihazdaki yerel Türkçe ses <select value={voiceURI} onChange={event => setVoiceURI(event.target.value)} disabled={!voices.length}><option value="">{voices.length ? "Önerilen yerel Türkçe ses" : "Yerel Türkçe ses bulunamadı"}</option>{voices.map(voice => <option key={voice.voiceURI} value={voice.voiceURI}>{voice.name} ({voice.lang})</option>)}</select></label><p className="source-note">Önce onaylı kayıt varsa o, yoksa bu bilgisayardaki Piper Türkçe motoru kullanılır. Cihazdaki ses en son yedektir; uzak servis kullanılmaz. Piper sesi dinleyici değerlendirmesi tamamlanana kadar geliştirme amaçlıdır.</p>{plan?.unavailable_block_ids.length ? <p>Henüz sesli erişime açılmamış matematiksel veya görsel birimler vardır.</p> : null}</section><section className="reader-controls" aria-labelledby="braille-title"><h2 id="braille-title">Türkçe Braille</h2><p role="status">{brailleStatus}</p>{selectedBraille && <><p>Türkçe kabartma yazı, 1. derece · Liblouis {selectedBraille.engine_version}</p><output className="braille-cells" aria-label="Seçili birimin Braille hücreleri">{selectedBraille.cells}</output><button type="button" onClick={() => void navigator.clipboard.writeText(selectedBraille.cells)}>Braille hücrelerini kopyala</button></>}</section></>}
-    {!studyMode && <article>{content.blocks.map(block => block.kind === "heading" ? <h2 id={block.id} tabIndex={-1} key={block.id}>{block.text}</h2> : block.kind === "paragraph" ? <p id={block.id} tabIndex={-1} key={block.id}>{block.text}</p> : <Formula key={block.id} block={block} reading={plan?.plan.units.find(item => item.id === block.id && item.kind === "formula")} onSelect={() => { const index = plan?.plan.units.findIndex(item => item.id === block.id) ?? -1; if (index >= 0) setCurrentUnit(index); }} />)}{tables.map(table => <PublishedTableView key={table.id} table={table} onSpeak={speakTableCell} />)}</article>}</main></>;
+    {(!studyMode || answerVisible) && <><section className="reader-controls" aria-labelledby="reader-controls-title"><h2 id="reader-controls-title">Doğrulanmış sesli okuma</h2><p role="status">{speechStatus}</p>{unit && <p>Seçili birim: {unit.navigation_label} · {currentUnit + 1}/{plan?.plan.units.length}</p>}<div><button type="button" onClick={() => moveUnit(-1)} disabled={!plan || currentUnit === 0}>Önceki birim</button><button type="button" onClick={() => void speak()} disabled={!unit}>Seçili birimi oku</button><button type="button" onClick={togglePause} disabled={!isPlaying}>{paused ? "Devam et" : "Duraklat"}</button><button type="button" onClick={stop}>Durdur</button><button type="button" onClick={() => moveUnit(1)} disabled={!plan || currentUnit >= (plan.plan.units.length - 1)}>Sonraki birim</button></div>{playbackUrl && <div className="audio-player"><label htmlFor="generated-audio">Hazır ses kaydı</label><audio id="generated-audio" controls src={playbackUrl}>Tarayıcınız ses oynatmayı desteklemiyor.</audio><p>Otomatik başlatılmazsa bu denetimdeki oynat düğmesine basın ve ses düzeyini kontrol edin.</p></div>}<label className="reader-rate">Okuma hızı <select value={rate} onChange={event => setRate(Number(event.target.value))}><option value="0.75">0,75×</option><option value="1">1×</option><option value="1.25">1,25×</option><option value="1.5">1,5×</option></select></label><p className="source-note">Önce onaylı kayıt varsa o, yoksa bu bilgisayardaki Piper Türkçe motoru kullanılır. Ses hizmeti çalışmazsa metin ekran okuyucuya açık kalır; tarayıcı sesine sessizce geçilmez. Piper sesi dinleyici değerlendirmesi tamamlanana kadar geliştirme amaçlıdır.</p>{plan?.unavailable_block_ids.length ? <p>Henüz sesli erişime açılmamış matematiksel veya görsel birimler vardır.</p> : null}</section><section className="reader-controls" aria-labelledby="braille-title"><h2 id="braille-title">Türkçe Braille</h2><p role="status">{brailleStatus}</p>{selectedBraille && <><p>Türkçe kabartma yazı, 1. derece · Liblouis {selectedBraille.engine_version}</p><output className="braille-cells" aria-label="Seçili birimin Braille hücreleri">{selectedBraille.cells}</output><button type="button" onClick={() => void navigator.clipboard.writeText(selectedBraille.cells)}>Braille hücrelerini kopyala</button></>}</section></>}
+    {!studyMode && <article>{visibleBlocks.map(block => block.kind === "heading" ? <h2 id={block.id} tabIndex={-1} key={block.id}>{block.text}</h2> : block.kind === "paragraph" ? <p id={block.id} tabIndex={-1} key={block.id}>{block.text}</p> : <Formula key={block.id} block={block} reading={plan?.plan.units.find(item => item.id === block.id && item.kind === "formula")} onSelect={() => { const index = plan?.plan.units.findIndex(item => item.id === block.id) ?? -1; if (index >= 0) setCurrentUnit(index); }} />)}{tables.map(table => <PublishedTableView key={table.id} table={table} onSpeak={speakTableCell} />)}</article>}</main></>;
 }
 
-type StudentView = "library" | "reader" | "writing" | "practice" | "exam";
+type StudentView = "library" | "reader" | "writing" | "history" | "question-bank";
 
 function currentStudentRoute(): { view: StudentView; documentId: string } {
   const url = new URL(window.location.href);
   const view = url.searchParams.get("view");
   const documentId = url.searchParams.get("document") ?? "";
-  return { view: view === "reader" && documentId ? "reader" : view === "writing" ? "writing" : view === "practice" ? "practice" : view === "exam" ? "exam" : "library", documentId };
+  return { view: view === "reader" && documentId ? "reader" : view === "writing" ? "writing" : view === "history" ? "history" : view === "question-bank" ? "question-bank" : "library", documentId };
 }
 
 function StudentApp() {
@@ -235,7 +241,6 @@ function StudentApp() {
   const [search, setSearch] = useState("");
   const [writing, setWriting] = useState("");
   const [writingStatus, setWritingStatus] = useState("Bu yazı yalnız bu oturumda tutulur; sunucuya gönderilmez.");
-  const writingInput = useRef<HTMLTextAreaElement>(null);
   useEffect(() => {
     const controller = new AbortController();
     void fetch(`${API}/v1/student/documents`, { headers: { "X-Role": "student" }, signal: controller.signal })
@@ -278,12 +283,13 @@ function StudentApp() {
     window.addEventListener("keydown", onEscape);
     return () => window.removeEventListener("keydown", onEscape);
   });
-  if (route.view === "reader") return <Reader key={route.documentId} documentId={route.documentId} onBack={back} />;
-  if (route.view === "practice") return <SetPractice api={API} onBack={back} />;
-  if (route.view === "exam") return <ExamPractice api={API} onBack={back} />;
-  if (route.view === "writing") return <><a className="skip" href="#writing-main">Ana içeriğe geç</a><header><p className="brand">ErişSTEM</p></header><main id="writing-main" className="student-shell"><button type="button" onClick={back}>Geri dön</button><h1 tabIndex={-1}>Braille klavyeyle yazma alanı</h1><p>Bu alan standart metin girişidir. Telefonunuzda TalkBack veya VoiceOver açıksa metin alanına odaklanıp çift dokunun; destekleniyorsa cihazınızın Braille giriş yöntemini seçin. Uygulama ekran okuyucu hareketlerini değiştirmez.</p><label htmlFor="student-writing">Yazınız</label><textarea id="student-writing" ref={writingInput} lang="tr" inputMode="text" autoComplete="off" spellCheck={false} value={writing} onChange={event => setWriting(event.target.value)} maxLength={5000} /><p role="status">{writingStatus}</p><div className="student-actions"><button type="button" onClick={() => writingInput.current?.focus()}>Yazı alanına odaklan</button><button type="button" disabled={!writing} onClick={() => { void navigator.clipboard.writeText(writing).then(() => setWritingStatus("Yazı panoya kopyalandı.")).catch(() => setWritingStatus("Panoya kopyalanamadı; metni seçerek kopyalayın.")); }}>Yazıyı kopyala</button><button type="button" disabled={!writing} onClick={() => { if (window.confirm("Bu oturumdaki yazı silinsin mi?")) { setWriting(""); setWritingStatus("Yazı temizlendi."); writingInput.current?.focus(); } }}>Yazıyı temizle</button></div><p className="notice">Bu alan henüz ödev veya mesaj göndermez. Yazı sunucuya kaydedilmez ve sayfa yenilenirse kaybolur.</p></main></>;
-  const matches = documents.filter(item => item.title.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")));
-  return <><a className="skip" href="#student-main">Ana içeriğe geç</a><header><p className="brand">ErişSTEM</p><p>Öğrenci kütüphanesi</p></header><main id="student-main" className="student-shell"><h1 tabIndex={-1}>Dersleri seçin</h1><p>Sağa ve sola kaydırarak öğeler arasında gezinin; odaklanan düğmeyi çift dokunarak açın. Bu hareketleri telefonunuzun ekran okuyucusu yönetir.</p><nav aria-label="Ana menü" className="student-menu"><button type="button" onClick={() => navigate("practice")}>Öğrenme atölyesi: kümeler, çember ve uçak</button><button type="button" onClick={() => navigate("exam")}>Sınav erişim provası</button><button type="button" onClick={() => navigate("writing")}>Braille klavyeyle yazma alanı</button></nav><label htmlFor="student-search">Derslerde ara</label><input id="student-search" type="search" lang="tr" value={search} onChange={event => setSearch(event.target.value)} placeholder="Ders adı" /><p role="status">{catalogStatus || `${matches.length} yayımlanmış belge bulundu.`}</p><ul className="student-document-list">{matches.map(item => <li key={item.id}><button type="button" onClick={() => navigate("reader", item.id)}>{item.title} · {item.block_count} bölüm · Okumayı aç</button></li>)}</ul><details className="student-help"><summary>Dokunmatik kullanım yardımı</summary><p>TalkBack ve VoiceOver ile sağa/sola kaydırma öğe seçer, çift dokunma etkinleştirir. Geri dönmek için ekrandaki Geri düğmesini veya cihazın geri hareketini kullanın. Klavyede Escape de geri döner. Yazı girişinde cihazın kendi Braille klavyesini kullanabilirsiniz; dil desteği cihaza bağlıdır.</p></details></main></>;
+  const screen = route.view === "reader" ? <Reader key={route.documentId} documentId={route.documentId} onBack={back} />
+    : route.view === "history" ? <HistoryReader onBack={back} />
+    : route.view === "question-bank" ? <QuestionBankStudent api={API} onBack={back} />
+    : route.view === "writing" ? <WritingSpace writing={writing} onWriting={setWriting} status={writingStatus} onStatus={setWritingStatus} onBack={back} />
+    : <StudentLibrary documents={documents} search={search} onSearch={setSearch} status={catalogStatus}
+      onNavigate={view => navigate(view)} onDocument={id => navigate("reader", id)} />;
+  return <><ExploreSpeech routeKey={`${route.view}:${route.documentId}`} />{screen}</>;
 }
 
 function TeacherReview() {
@@ -298,16 +304,19 @@ function TeacherReview() {
   const [message, setMessage] = useState("Belge yükleniyor.");
   const [formulaProposal, setFormulaProposal] = useState<{ blockId: string; revision: number; spoken: string } | null>(null);
   const [formulaProposalStatus, setFormulaProposalStatus] = useState("Türkçe okunuş önerisi hazırlanıyor.");
+  const [notation, setNotation] = useState("");
+  const [measurementLabel, setMeasurementLabel] = useState("");
+  const [notationProposal, setNotationProposal] = useState<{ mathml: string; spoken: string } | null>(null);
   useEffect(() => {
     void fetch(`${API}/v1/teacher/documents`, { headers: { "X-Role": "teacher" } }).then(r => r.json()).then((items: TeacherDocument[]) => {
       const source = items.find(item => item.id.startsWith("source-")) ?? items[0]; setDocuments(items); if (source) setDocumentId(source.id);
     }).catch(() => setMessage("Belge listesi yüklenemedi."));
   }, []);
-  const load = async (id = documentId) => { if (!id) return; const r = await fetch(`${API}/v1/teacher/documents/${id}`, { headers: { "X-Role": "teacher" } }); const next = await r.json() as Document; setDocument(next); const first = next.blocks.find(b => b.status === "review_required") ?? next.blocks[0]; setPage(first?.source.page ?? 0); setSelectedId(first?.id ?? ""); setDraftText(first?.text ?? ""); setFormulaProposal(null); setFormulaProposalStatus("Türkçe okunuş önerisi hazırlanıyor."); setMessage("Sayfadaki işaretli alanı kaynakla karşılaştırın."); };
+  const load = async (id = documentId) => { if (!id) return; const r = await fetch(`${API}/v1/teacher/documents/${id}`, { headers: { "X-Role": "teacher" } }); const next = await r.json() as Document; setDocument(next); const first = next.blocks.find(b => b.status === "review_required") ?? next.blocks[0]; setPage(first?.source.page ?? 0); setSelectedId(first?.id ?? ""); setDraftText(first?.text ?? ""); setNotation(first?.kind === "formula-display" ? first.text ?? "" : ""); setFormulaProposal(null); setFormulaProposalStatus("Türkçe okunuş önerisi hazırlanıyor."); setMessage("Sayfadaki işaretli alanı kaynakla karşılaştırın."); };
   useEffect(() => {
     if (!documentId) return;
     void fetch(`${API}/v1/teacher/documents/${documentId}`, { headers: { "X-Role": "teacher" } }).then(r => r.json()).then((next: Document) => {
-      setDocument(next); const first = next.blocks.find(b => b.status === "review_required") ?? next.blocks[0]; setPage(first?.source.page ?? 0); setSelectedId(first?.id ?? ""); setDraftText(first?.text ?? ""); setMessage("Sayfadaki işaretli alanı kaynakla karşılaştırın.");
+      setDocument(next); const first = next.blocks.find(b => b.status === "review_required") ?? next.blocks[0]; setPage(first?.source.page ?? 0); setSelectedId(first?.id ?? ""); setDraftText(first?.text ?? ""); setNotation(first?.kind === "formula-display" ? first.text ?? "" : ""); setMessage("Sayfadaki işaretli alanı kaynakla karşılaştırın.");
     }).catch(() => setMessage("Belge yüklenemedi."));
   }, [documentId]);
   useEffect(() => { if (documentId && page) void fetch(`${API}/v1/teacher/documents/${documentId}/pages/${page}/preview-metadata`, { headers: { "X-Role": "teacher" } }).then(r => r.json()).then(setPageSize).catch(() => setPageSize(null)); }, [documentId, page]);
@@ -325,21 +334,53 @@ function TeacherReview() {
   const selected = blocks.find(b => b.id === selectedId) ?? blocks[0];
   const formulaId = selected?.kind === "formula-display" ? selected.id : "";
   const formulaRevision = selected?.revision;
+  const pendingFormulaStatus = selected?.source.extraction_step === "math-ocr-pending"
+    ? "Görsel formül tanıma sonucu bekleniyor; bozuk PDF metni seslendirilmez."
+    : selected?.source.extraction_step === "math-table-ocr-pending"
+      ? "Tablo içindeki matematik alanı için hücre yapısı tanıma bekleniyor; ham PDF metni seslendirilmez."
+      : selected?.source.extraction_step === "math-geometry-ocr-pending"
+        ? "Şekil veya ölçü bağlamı için ilişki tanıma bekleniyor; yalnız sayı seslendirilmez."
+        : null;
   useEffect(() => {
     if (!documentId || !formulaId) return;
+    if (pendingFormulaStatus) return;
     const controller = new AbortController();
     void fetch(`${API}/v1/teacher/documents/${documentId}/blocks/${formulaId}/speech-proposal`, { headers: { "X-Role": "teacher" }, signal: controller.signal })
       .then(response => { if (!response.ok) throw new Error("unsupported"); return response.json() as Promise<{ block_id: string; expected_revision: number; proposed_spoken_text: string }>; })
       .then(result => { if (!controller.signal.aborted) { setFormulaProposal({ blockId: result.block_id, revision: result.expected_revision, spoken: result.proposed_spoken_text }); setFormulaProposalStatus(""); } })
-      .catch(() => { if (!controller.signal.aborted) setFormulaProposalStatus("Bu formül için güvenli otomatik Türkçe okunuş önerisi yok; özel denetim gerekiyor."); });
+      .catch(() => { if (!controller.signal.aborted) setFormulaProposalStatus("Bu formül için doğrulanabilir bir Türkçe okunuş henüz hazır değil; kaynakla karşılaştırarak görünen ifadeyi girin."); });
     return () => controller.abort();
-  }, [documentId, formulaId, formulaRevision]);
-  const select = (block: Block) => { setSelectedId(block.id); setDraftText(block.text ?? ""); setFormulaProposal(null); setFormulaProposalStatus("Türkçe okunuş önerisi hazırlanıyor."); };
+  }, [documentId, formulaId, formulaRevision, pendingFormulaStatus]);
+  const select = (block: Block) => { setSelectedId(block.id); setDraftText(block.text ?? ""); setNotation(block.kind === "formula-display" ? block.text ?? "" : ""); setMeasurementLabel(""); setNotationProposal(null); setFormulaProposal(null); setFormulaProposalStatus("Türkçe okunuş önerisi hazırlanıyor."); };
   const submit = async (correct: boolean) => { if (!selected || !documentId) return; const url = correct ? `${API}/v1/teacher/documents/${documentId}/blocks/${selected.id}/text` : `${API}/v1/teacher/documents/${documentId}/blocks/${selected.id}/approve`; const body = correct ? { text: draftText, reason: "Öğretmen kaynak sayfayla karşılaştırarak metni düzeltti.", expected_revision: selected.revision } : { reason: "Öğretmen kaynak sayfayla karşılaştırdı.", expected_revision: selected.revision }; const r = await fetch(url, { method: correct ? "PUT" : "POST", headers: { "Content-Type": "application/json", "X-Role": "teacher" }, body: JSON.stringify(body) }); setMessage(r.ok ? "Taslak güncellendi; yayımlanmadı." : "İşlem tamamlanamadı; sayfayı yenileyin."); if (r.ok) await load(); };
   const approvePage = async () => { if (!documentId || !page || !window.confirm("Bu sayfadaki tüm metin blokları kaynakla karşılaştırıldı mı?")) return; const r = await fetch(`${API}/v1/teacher/documents/${documentId}/pages/${page}/approve-text`, { method: "POST", headers: { "Content-Type": "application/json", "X-Role": "teacher" }, body: JSON.stringify({ reason: "Öğretmen kaynak sayfayı bütün olarak karşılaştırdı." }) }); setMessage(r.ok ? "Sayfadaki metinler onaylandı; yayımlanmadı." : "Bu sayfada güvenilir olmayan matematiksel metin var; yeniden yapılandırılmış çıkarım bekliyor."); if (r.ok) await load(); };
   const approveFormula = async () => { if (!selected || !documentId || selected.kind !== "formula-display" || formulaProposal?.blockId !== selected.id || formulaProposal.revision !== selected.revision || !window.confirm("Türkçe okunuş kaynak PDF'deki işaretli formülle tamamen aynı mı?")) return; const r = await fetch(`${API}/v1/teacher/documents/${documentId}/blocks/${selected.id}/approve-formula`, { method: "POST", headers: { "Content-Type": "application/json", "X-Role": "teacher" }, body: JSON.stringify({ reason: "Öğretmen Türkçe okunuş önerisini kaynak PDF formülüyle karşılaştırdı.", expected_revision: selected.revision }) }); setMessage(r.ok ? "Formül okunuşu onaylandı; henüz yayımlanmadı." : "Formül onaylanamadı; kaynağı yeniden yükleyin."); if (r.ok) await load(); };
+  const proposeNotation = async () => { if (!selected || !documentId || !notation.trim()) return; const response = await fetch(`${API}/v1/teacher/documents/${documentId}/blocks/${selected.id}/notation-proposal`, { method: "POST", headers: { "Content-Type": "application/json", "X-Role": "teacher" }, body: JSON.stringify({ visible_notation: notation, measurement_label: measurementLabel || null }) }); if (!response.ok) { setNotationProposal(null); setMessage("Gösterim desteklenmiyor; ifadeyi kaynakla karşılaştırın veya uzman incelemesine gönderin."); return; } const data = await response.json() as { mathml: string; proposed_spoken_text: string }; setNotationProposal({ mathml: data.mathml, spoken: data.proposed_spoken_text }); setMessage("İfade tek bir matematiksel yapı olarak hazırlandı; Türkçe okunuşu kaynaktan doğrulayın."); };
+  const saveNotation = async () => { if (!selected || !documentId || !notationProposal || !window.confirm("Görünen ifade ve Türkçe okunuş kaynak PDF ile tamamen aynı mı?")) return; const response = await fetch(`${API}/v1/teacher/documents/${documentId}/blocks/${selected.id}`, { method: "PUT", headers: { "Content-Type": "application/json", "X-Role": "teacher" }, body: JSON.stringify({ latex: notation, mathml: notationProposal.mathml, spoken_text: notationProposal.spoken, reason: "Öğretmen bütün matematiksel ifadeyi ve Türkçe okunuşunu kaynakla karşılaştırdı.", expected_revision: selected.revision }) }); setMessage(response.ok ? "Matematiksel ifade ve Türkçe okunuşu taslağa kaydedildi." : "Kaydetme tamamlanamadı; sayfayı yenileyin."); if (response.ok) await load(); };
   const box = selected && pageSize ? { left: `${selected.source.bbox[0] / pageSize.width * 100}%`, top: `${selected.source.bbox[1] / pageSize.height * 100}%`, width: `${(selected.source.bbox[2] - selected.source.bbox[0]) / pageSize.width * 100}%`, height: `${(selected.source.bbox[3] - selected.source.bbox[1]) / pageSize.height * 100}%` } : undefined;
-  return <main className="teacher review-workspace"><header><p className="brand">ErişSTEM</p><h1>Kaynak üzerinde öğretmen denetimi</h1><p>PDF’de turuncu çerçeveli alanı okuyun; metni onaylayın veya sade metin olarak düzeltin.</p></header><p role="status">{message}</p><label>Belge<select value={documentId} onChange={e => setDocumentId(e.target.value)}>{documents.map(d => <option key={d.id} value={d.id}>{d.title} · {d.review_required_count} bekleyen</option>)}</select></label><div className="review-layout"><aside><h2>Sayfalar</h2>{[...new Set(document?.blocks.map(b => b.source.page))].map(n => <button className={n === page ? "selected-page" : ""} onClick={() => { setPage(n); const b = document?.blocks.find(x => x.source.page === n); if (b) select(b); }} key={n}>Sayfa {n}</button>)}</aside><section className="page-canvas">{page && <div className="pdf-preview">{previewUrl ? <img alt={`Kaynak PDF sayfası ${page}`} src={previewUrl} /> : <p>Sayfa önizlemesi yükleniyor.</p>}{box && <span className="source-highlight" style={box} />}</div>}<button onClick={() => void approvePage()}>Bu sayfadaki metinleri onayla</button></section><section className="editor">{selected?.kind === "formula-display" ? <div className="edit-card"><h2>Matematiksel ifade</h2><p>Turuncu alandaki formülle aşağıdaki Türkçe okunuşu karşılaştırın. Teknik LaTeX gösterilmez; yanlışsa onaylamayın.</p><p role="status">{formulaProposalStatus}</p>{formulaProposal?.blockId === selected.id && formulaProposal.revision === selected.revision && <><p className="formula-proposal">{formulaProposal.spoken}</p><button type="button" onClick={() => void approveFormula()} disabled={selected.status !== "review_required"}>Kaynakla aynı, okunuşu onayla</button></>}</div> : selected && <div className="edit-card"><h2>Seçili metin</h2><label htmlFor="review-text">Öğrenciye gösterilecek metin</label><textarea id="review-text" value={draftText} onChange={e => setDraftText(e.target.value)} /><div><button onClick={() => void submit(false)}>Kaynakla aynı, onayla</button><button onClick={() => void submit(true)}>Düzelt ve onayla</button></div></div>}<h2>Sayfadaki bölümler</h2><div className="block-list">{blocks.map(b => <button className={b.id === selected?.id ? "selected-block" : ""} onClick={() => select(b)} key={b.id}>{b.kind === "formula-display" ? "Matematiksel ifade" : b.text}</button>)}</div></section></div></main>;
+  return <main className="teacher review-workspace">
+    <header><p className="brand">ErişSTEM</p><h1>Kaynak üzerinde öğretmen denetimi</h1><p>PDF’de turuncu çerçeveli alanı okuyun; metni onaylayın veya sade metin olarak düzeltin.</p></header>
+    <p role="status">{message}</p>
+    <label>Belge<select value={documentId} onChange={e => setDocumentId(e.target.value)}>{documents.map(d => <option key={d.id} value={d.id}>{d.title} · {d.review_required_count} bekleyen</option>)}</select></label>
+    <div className="review-layout">
+      <aside><h2>Sayfalar</h2>{[...new Set(document?.blocks.map(b => b.source.page))].map(n => <button className={n === page ? "selected-page" : ""} onClick={() => { setPage(n); const b = document?.blocks.find(x => x.source.page === n); if (b) select(b); }} key={n}>Sayfa {n}</button>)}</aside>
+      <section className="page-canvas">{page && <div className="pdf-preview">{previewUrl ? <img alt={`Kaynak PDF sayfası ${page}`} src={previewUrl} /> : <p>Sayfa önizlemesi yükleniyor.</p>}{box && <span className="source-highlight" style={box} />}</div>}<button onClick={() => void approvePage()}>Bu sayfadaki metinleri onayla</button></section>
+      <section className="editor">
+        {selected?.kind === "formula-display" ? <div className="edit-card">
+          <h2>Matematiksel ifade</h2>
+          <p>Kaynakta turuncu çerçeveli bütün işlemi kontrol edin. Teknik OCR ya da LaTeX kodu gösterilmez.</p>
+          <label htmlFor="formula-notation">Görünen matematiksel ifade</label>
+          <input id="formula-notation" value={notation} onChange={event => { setNotation(event.target.value); setNotationProposal(null); }} placeholder="Örn. √[5](24) × √[5](4) / √[5](3)" />
+          <label htmlFor="measurement-label">Şekil üzerindeki ölçü bağlamı (varsa)</label>
+          <input id="measurement-label" value={measurementLabel} onChange={event => { setMeasurementLabel(event.target.value); setNotationProposal(null); }} placeholder="Örn. AB kenarı" />
+          <div><button type="button" onClick={() => void proposeNotation()} disabled={!notation.trim()}>Gösterim ve okunuş öner</button></div>
+          {notationProposal && <div className="formula-proposal"><p><strong>Görünen ifade:</strong> {notation}</p><p><strong>Türkçe okunuş:</strong> {notationProposal.spoken}</p><button type="button" onClick={() => void saveNotation()}>Kaynakla aynı, ifade ve okunuşu kaydet</button></div>}
+          {!notationProposal && <><p role="status">{pendingFormulaStatus ?? formulaProposalStatus}</p>{!pendingFormulaStatus && formulaProposal?.blockId === selected.id && formulaProposal.revision === selected.revision && <><p className="formula-proposal">{formulaProposal.spoken}</p><button type="button" onClick={() => void approveFormula()} disabled={selected.status !== "review_required"}>Kaynakla aynı, okunuşu onayla</button></>}</>}
+        </div> : selected && <div className="edit-card"><h2>Seçili metin</h2><label htmlFor="review-text">Öğrenciye gösterilecek metin</label><textarea id="review-text" value={draftText} onChange={e => setDraftText(e.target.value)} /><div><button onClick={() => void submit(false)}>Kaynakla aynı, onayla</button><button onClick={() => void submit(true)}>Düzelt ve onayla</button></div></div>}
+        <h2>Sayfadaki bölümler</h2><div className="block-list">{blocks.map(b => <button className={b.id === selected?.id ? "selected-block" : ""} onClick={() => select(b)} key={b.id}>{b.kind === "formula-display" ? "Matematiksel ifade" : b.text}</button>)}</div>
+      </section>
+    </div>
+  </main>;
 }
 
 type TeacherDocument = { id: string; title: string; published_revision: number; review_required_count: number };
@@ -399,5 +440,5 @@ function ReviewerPublish() {
 }
 
 const mode = new URLSearchParams(window.location.search).get("mode");
-createRoot(document.getElementById("root")!).render(mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "teacher" ? <TeacherReview /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : <StudentApp />);
+createRoot(document.getElementById("root")!).render(mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "question-bank-review" ? <QuestionBankReview api={API} /> : mode === "teacher" ? <TeacherReview /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : <StudentApp />);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

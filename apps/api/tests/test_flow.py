@@ -155,6 +155,36 @@ def test_teacher_can_approve_supported_formula_speech_without_editing_latex():
     assert reading["plan"]["units"][-1]["spoken_text"] == proposal.json()["proposed_spoken_text"]
 
 
+def test_teacher_visible_notation_proposal_keeps_a_whole_expression_and_persists_speech():
+    path = "/v1/teacher/documents/synthetic-geometry-01/blocks/formula-1"
+    proposal = client.post(f"{path}/notation-proposal", headers={"X-Role": "teacher"}, json={
+        "visible_notation": "2·3 + 2·1 = 8 cm",
+        "measurement_label": "AB kenarı",
+    })
+    assert proposal.status_code == 200
+    assert proposal.json()["proposed_spoken_text"] == "AB kenarı ölçüsü: iki çarpı üç artı iki çarpı bir eşittir sekiz santimetre"
+    draft = client.get("/v1/teacher/documents/synthetic-geometry-01", headers={"X-Role": "teacher"}).json()
+    formula = next(item for item in draft["blocks"] if item["id"] == "formula-1")
+    corrected = client.put(path, headers={"X-Role": "teacher"}, json={
+        "latex": proposal.json()["visible_notation"], "mathml": proposal.json()["mathml"],
+        "spoken_text": proposal.json()["proposed_spoken_text"],
+        "reason": "Öğretmen tek satırlık işlemi kaynakla karşılaştırdı.",
+        "expected_revision": formula["revision"],
+    })
+    assert corrected.status_code == 200
+    assert corrected.json()["spoken_text"] == "AB kenarı ölçüsü: iki çarpı üç artı iki çarpı bir eşittir sekiz santimetre"
+
+
+def test_formula_ocr_latex_proposal_becomes_visible_notation_and_turkish_speech():
+    path = "/v1/teacher/documents/synthetic-geometry-01/blocks/formula-1"
+    response = client.post(f"{path}/ocr-latex-proposal", headers={"X-Role": "teacher"}, json={
+        "latex": r"2^{\frac{3}{2}} = \sqrt{2^3} = \sqrt{8}",
+    })
+    assert response.status_code == 200
+    assert response.json()["visible_notation"] == "2^(3/2) = √(2^3) = √(8)"
+    assert "karekök içinde sekiz" in response.json()["proposed_spoken_text"]
+
+
 def test_only_admin_can_queue_and_duplicate_job_is_reused():
     payload = {
         "source_checksum": hashlib.sha256(uuid4().bytes).hexdigest(),
@@ -263,8 +293,9 @@ def test_teacher_can_supply_only_an_exceptional_cell_pronunciation():
 
 
 def test_table_pronunciation_rejects_markup_and_control_text():
-    from app.table_review import TeacherTableCell
     from pydantic import ValidationError
+
+    from app.table_review import TeacherTableCell
 
     for spoken in ("<script>", "\\frac", "  ", "a\n\x00b"):
         with pytest.raises(ValidationError):

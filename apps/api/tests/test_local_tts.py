@@ -77,3 +77,19 @@ def test_student_local_audio_uses_only_reviewed_reading_unit(monkeypatch):
         headers={"X-Role": "student"},
     )
     assert missing.status_code == 404
+
+
+def test_interface_exploration_speech_is_short_local_only_and_ephemeral(monkeypatch):
+    client = TestClient(main.app)
+    spoken = []
+    monkeypatch.setenv("APP_ENV", "development")
+    monkeypatch.setattr(main, "synthesize_verified_text", lambda text: spoken.append(text) or b"R" * 44)
+    response = client.post("/v1/student/interface-speech", json={"text": "  Tarih   kitabı, düğme  "}, headers={"X-Role": "student"})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/wav"
+    assert response.headers["cache-control"] == "no-store"
+    assert spoken == ["Tarih kitabı, düğme"]
+    assert client.post("/v1/student/interface-speech", json={"text": "x" * 601}, headers={"X-Role": "student"}).status_code == 422
+    monkeypatch.setenv("APP_ENV", "production")
+    assert client.post("/v1/student/interface-speech", json={"text": "Düğme"}, headers={"X-Role": "student"}).status_code == 503
+    assert spoken == ["Tarih kitabı, düğme"]

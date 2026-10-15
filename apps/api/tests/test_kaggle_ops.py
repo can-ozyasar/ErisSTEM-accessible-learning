@@ -173,6 +173,7 @@ def test_download_summaries_ignores_kaggle_technical_log_but_keeps_it_out_of_man
         {"filename": "structural_report.json", "downloaded": False},
         {"filename": "region_records.json", "downloaded": False},
         {"filename": "native_agreement_report.json", "downloaded": False},
+        {"filename": "formula_evaluation_report.json", "downloaded": False},
     ]
     manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
     assert [item["path"] for item in manifest["files"]] == ["run_metadata.json"]

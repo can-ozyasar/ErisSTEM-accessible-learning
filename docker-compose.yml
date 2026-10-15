@@ -8,6 +8,8 @@ services:
       LOCAL_TTS_URL: http://tts:5000/synthesize
     volumes:
       - ./data/derived:/private/derived:ro
+      - ./data/meb:/private/meb:ro
+      - ./data/soru_bankasi:/private/question-bank:ro
     depends_on:
       db:
         condition: service_healthy
@@ -43,6 +45,7 @@ services:
     volumes:
       - ./data/meb:/private/meb:ro
       - ./data/derived:/private/derived
+      - ./data/private:/private/private
     mem_limit: 1g
     cpus: 1.0
     networks: [internal]
@@ -54,6 +57,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
+        # Nginx resolves an upstream name when it starts.  Restart it whenever
+        # Compose explicitly recreates API, so it cannot retain an old IP.
+        restart: true
     networks: [internal, edge]
   exam-maintenance:
     build: ./apps/api

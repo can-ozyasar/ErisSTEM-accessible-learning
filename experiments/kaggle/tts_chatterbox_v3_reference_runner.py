@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import importlib.metadata
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -19,9 +20,9 @@ import time
 import zipfile
 from pathlib import Path
 
-INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-tts-gold-v1")
-OUTPUT = Path("/kaggle/working/eristem-private-tts-chatterbox-v3-reference-v1")
-GOLD_FILENAME = "tts-gold-v1.json"
+INPUT = Path(os.getenv("ERISTEM_TTS_INPUT", "/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-tts-gold-v1"))
+OUTPUT = Path(os.getenv("ERISTEM_TTS_OUTPUT", "/kaggle/working/eristem-private-tts-chatterbox-v3-reference-v1"))
+GOLD_FILENAME = os.getenv("ERISTEM_TTS_MANIFEST", "tts-gold-v1.json")
 SOURCE_DATASET = "omersaidd/tts_nisan_kumru_tur"
 SOURCE_REVISION = "678712b026da89058feb010886de23983cc8563b"
 SOURCE_REFERENCE = "target-voice-001"
@@ -86,7 +87,7 @@ def load_gold(path: Path) -> list[dict[str, object]]:
         items = payload["items"]
     except (OSError, KeyError, TypeError, json.JSONDecodeError) as error:
         raise TtsInputError("invalid_tts_gold") from error
-    if payload.get("schema_version") != "tts-gold-v1" or not isinstance(items, list):
+    if payload.get("schema_version") not in {"tts-gold-v1", "tts-history-eval-v1"} or not isinstance(items, list):
         raise TtsInputError("invalid_tts_gold_schema")
     if not 1 <= len(items) <= MAX_ITEMS:
         raise TtsInputError("invalid_tts_gold_item_count")
@@ -194,6 +195,7 @@ def main() -> None:
         raise RuntimeError("cuda_required_for_chatterbox_v3_reference_benchmark")
     gold_path = resolve_gold()
     items = load_gold(gold_path)
+    input_sha256 = sha256(gold_path)
     source = load_dataset(SOURCE_DATASET, split="train", streaming=True, revision=SOURCE_REVISION)
     reference_waveform, source_position = select_reference(source, torch, ta)
     reference_path = OUTPUT / "private-reference.wav"
@@ -234,6 +236,8 @@ def main() -> None:
     }
     summary = {
         "schema_version": "tts-synthesis-run-v1",
+        "input_schema": json.loads(gold_path.read_text(encoding="utf-8"))["schema_version"],
+        "input_sha256": input_sha256,
         "candidate": CANDIDATE,
         "language": "tr",
         "input_private": True,

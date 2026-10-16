@@ -16,6 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
 from .local_tts import LocalTtsUnavailable, synthesize_verified_text
+from .history_speech import history_spoken_text
 
 BOOK = Path("/private/meb/tarih-9sinif-ders-kitabi_20261006.pdf")
 TITLE = "Tarih 9. Sınıf Ders Kitabı (MEB, 2026)"
@@ -203,6 +204,7 @@ def _page_data(page_number: int):
                           and min(abs(region["bbox"][0] - item["bbox"][0]),
                                   abs(region["bbox"][2] - item["bbox"][0])) <= 35]
                 region["source_label_id"] = min(nearby, key=lambda item: abs(region["bbox"][1] - item["bbox"][3]))["id"] if nearby else None
+            region["spoken_text"] = history_spoken_text(region["spoken_text"])
         return {"page": page_number, "width": round(page.rect.width, 2),
                 "height": round(page.rect.height, 2), "regions": regions}
 

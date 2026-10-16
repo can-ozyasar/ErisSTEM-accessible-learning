@@ -182,6 +182,7 @@ def prepare_notebook_package(
     title: str,
     *,
     enable_internet: bool,
+    source_replacements: tuple[tuple[str, str], ...] = (),
 ) -> Path:
     """Create a private Kaggle script package, refusing to overwrite a package."""
     kernel, dataset = validate_handle(kernel), validate_handle(dataset)
@@ -189,13 +190,18 @@ def prepare_notebook_package(
     if notebook_title_slug(title) != slug:
         raise ValueError("Notebook başlığının Kaggle slug'ı --kernel slug'ı ile aynı olmalı")
     source = runner_path(runner)
-    if dataset not in source.read_text(encoding="utf-8"):
+    rendered = source.read_text(encoding="utf-8")
+    for old, new in source_replacements:
+        if not old or rendered.count(old) != 1:
+            raise ValueError("Notebook kaynak dönüşümü benzersiz değil")
+        rendered = rendered.replace(old, new, 1)
+    if dataset not in rendered:
         raise ValueError("Runner içindeki private Dataset yolu --dataset ile eşleşmiyor")
     package = kernel_package_directory(kernel)
     if package.exists():
         raise FileExistsError("Notebook paketi zaten var; önce içeriği inceleyip bilinçli olarak kaldırın")
     package.mkdir(parents=True)
-    shutil.copy2(source, package / "run.py")
+    (package / "run.py").write_text(rendered, encoding="utf-8")
     metadata = {
         "id": kernel,
         "title": title,

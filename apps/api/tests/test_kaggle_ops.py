@@ -82,6 +82,27 @@ def test_prepare_notebook_rejects_runner_with_different_dataset(tmp_path: Path, 
         )
 
 
+def test_prepare_notebook_can_package_a_pinned_single_file_variant(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    runners = tmp_path / "experiments" / "kaggle"
+    runners.mkdir(parents=True)
+    runner = runners / "runner.py"
+    runner.write_text("INPUT = 'owner/old-dataset'\n", encoding="utf-8")
+    monkeypatch.setattr(module, "private_root", lambda: private)
+    monkeypatch.setattr(module, "repo_root", lambda: tmp_path)
+
+    package = module.prepare_notebook_package(
+        "owner/history-voice-v1", "owner/history-input-v1", runner,
+        "History Voice V1", enable_internet=True,
+        source_replacements=(("owner/old-dataset", "owner/history-input-v1"),),
+    )
+
+    assert (package / "run.py").read_text(encoding="utf-8") == "INPUT = 'owner/history-input-v1'\n"
+    assert module.load_kernel_metadata(package, "owner/history-voice-v1", "owner/history-input-v1")["is_private"] == "true"
+
+
 def test_notebook_title_must_resolve_to_the_declared_kernel_slug():
     module = kaggle_ops_module()
 
@@ -174,6 +195,7 @@ def test_download_summaries_ignores_kaggle_technical_log_but_keeps_it_out_of_man
         {"filename": "region_records.json", "downloaded": False},
         {"filename": "native_agreement_report.json", "downloaded": False},
         {"filename": "formula_evaluation_report.json", "downloaded": False},
+        {"filename": "layout_probe_summary.json", "downloaded": False},
     ]
     manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
     assert [item["path"] for item in manifest["files"]] == ["run_metadata.json"]

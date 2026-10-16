@@ -13,7 +13,7 @@ def lab(monkeypatch):
 
 
 def test_wrong_kaggle_owner_never_starts_remote_job(lab, monkeypatch):
-    monkeypatch.setattr(lab, "preflight", lambda: {"package": "/private/package"})
+    monkeypatch.setattr(lab, "preflight", lambda _profile: {"package": "/private/package"})
     monkeypatch.setattr(lab.kaggle_ops, "verify", lambda: {"authenticated_user": "someone_else"})
     monkeypatch.setattr(lab.kaggle_ops, "push_notebook", lambda *_args: pytest.fail("remote job started"))
     with pytest.raises(ValueError, match="farklı"):
@@ -21,7 +21,7 @@ def test_wrong_kaggle_owner_never_starts_remote_job(lab, monkeypatch):
 
 
 def test_fetch_waits_for_completed_notebook(lab, monkeypatch):
-    monkeypatch.setattr(lab, "preflight", lambda: {"package": "/private/package"})
+    monkeypatch.setattr(lab, "preflight", lambda _profile: {"package": "/private/package"})
     monkeypatch.setattr(lab.kaggle_ops, "notebook_status", lambda *_args: "KernelWorkerStatus.RUNNING")
     monkeypatch.setattr(lab.kaggle_ops, "download_summaries", lambda *_args: pytest.fail("partial download"))
     with pytest.raises(RuntimeError, match="tamamlanmadı"):

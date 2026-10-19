@@ -1,6 +1,6 @@
 /** Deterministic, deliberately narrow Turkish command grammar. No answer is submitted. */
 export type VoiceIntent =
-  | { kind: "open_history" | "open_bank" | "open_writing" | "back" | "next_page" | "previous_page" | "next_question" | "previous_question" | "next_unit" | "previous_unit" | "read_selected" | "show_choices" | "stop_audio" | "focus_writing" | "read_written" | "help" }
+  | { kind: "open_history" | "open_bank" | "open_writing" | "start_study" | "back" | "next_page" | "previous_page" | "next_question" | "previous_question" | "next_unit" | "previous_unit" | "read_selected" | "show_choices" | "stop_audio" | "focus_writing" | "read_written" | "help" }
   | { kind: "go_page" | "select_region"; number: number }
   | { kind: "read_choice"; label: "A" | "B" | "C" | "D" | "E" };
 
@@ -33,6 +33,9 @@ export function parseVoiceCommand(transcript: string): VoiceIntent | null {
   if (/^(yardım|komutlar|ne diyebilirim)$/.test(text)) return { kind: "help" };
   if (/^(dur|sesi durdur|okumayı durdur|seslendirmeyi durdur)$/.test(text)) return { kind: "stop_audio" };
   if (/^(ana sayfa|ana sayfaya dön|kütüphane|kütüphaneye dön|geri dön)$/.test(text)) return { kind: "back" };
+  // This intentionally opens a choice, not a lesson. "Çalışmak istiyorum" is a
+  // learning goal, not enough information to assume reading or assessment.
+  if (/^(tarih(?: dersi)? çalış(?:mak istiyorum|alım)|(?:ders|konu)? ?çalışmak istiyorum|çalışalım)$/.test(text)) return { kind: "start_study" };
   if (/^(tarih kitabı|tarih kitabını aç|kitabı aç|konu anlatımını aç)$/.test(text)) return { kind: "open_history" };
   if (/^(soru bankası|soru bankasını aç|sorulara geç|soru çöz)$/.test(text)) return { kind: "open_bank" };
   if (/^(braille ile yaz|yazma alanı|yazma alanını aç)$/.test(text)) return { kind: "open_writing" };

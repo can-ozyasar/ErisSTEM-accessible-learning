@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { VoiceCommandPanel } from "./VoiceCommandPanel";
 
 type DocumentSummary = { id: string; title: string; block_count: number };
@@ -11,6 +12,8 @@ export function StudentLibrary({ documents, search, onSearch, status, onNavigate
   onDocument: (id: string) => void;
 }) {
   const matches = documents.filter(item => item.title.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")));
+  const [studyChoiceOpen, setStudyChoiceOpen] = useState(false);
+  const startStudy = () => setStudyChoiceOpen(true);
   return <>
     <a className="skip" href="#student-main">Ana içeriğe geç</a>
     <header className="site-header"><div className="site-header-inner"><p className="brand">Eriş<span>STEM</span></p><p className="site-header-context">Erişilebilir öğrenme alanı</p></div></header>
@@ -18,21 +21,28 @@ export function StudentLibrary({ documents, search, onSearch, status, onNavigate
       <section className="library-hero" aria-labelledby="library-title">
         <p className="eyebrow">ÖĞRENME KÜTÜPHANESİ</p>
         <h1 id="library-title" tabIndex={-1}>Kendi hızında, güvenle öğren.</h1>
-        <p>Kaynakları dinle, sayfadaki bir bölüme odaklan veya soruları adım adım çalış. Her içerik açıkça kaynağına bağlıdır.</p>
+        <p>Tarihi dinleyerek öğren veya sorularla pekiştir.</p>
         <a className="hero-voice-link" href="#home-voice">Sesli komutlarla ilerle ↓</a>
       </section>
-      <div id="home-voice"><VoiceCommandPanel title="Sesli yol seç" examples={["tarih kitabını aç", "soru bankasını aç", "yazma alanını aç"]}
-        available={["open_history", "open_bank", "open_writing"]} onCommand={command => {
+      {studyChoiceOpen && <section className="study-guide" aria-labelledby="study-guide-title" aria-live="polite">
+        <p className="eyebrow">SANA UYGUN BAŞLANGIÇ</p><h2 id="study-guide-title">Tarihi nasıl çalışmak istersin?</h2>
+        <p>Önce konuyu dinlemek mi, yoksa sorularla tekrar etmek mi?</p>
+        <div className="study-guide-actions"><button type="button" onClick={() => onNavigate("history")}>Konuyu dinle</button><button type="button" className="quiet-button" onClick={() => onNavigate("question-bank")}>Sorularla pekiştir</button></div>
+        <button type="button" className="guide-dismiss" onClick={() => setStudyChoiceOpen(false)}>Şimdilik kapat</button>
+      </section>}
+      <div id="home-voice"><VoiceCommandPanel title="Sesli yol seç" examples={["tarih çalışmak istiyorum", "tarih kitabını aç", "soru bankasını aç"]}
+        available={["start_study", "open_history", "open_bank", "open_writing"]} onCommand={command => {
           if (command.kind === "open_history") onNavigate("history");
           if (command.kind === "open_bank") onNavigate("question-bank");
           if (command.kind === "open_writing") onNavigate("writing");
+          if (command.kind === "start_study") startStudy();
         }} /></div>
       <section aria-labelledby="learning-paths-title" className="library-section">
-        <div className="section-heading"><div><p className="eyebrow">BAŞLANGIÇ NOKTAN</p><h2 id="learning-paths-title">Bugün ne yapmak istersin?</h2></div><p>Bir yol seç; diğerlerine istediğin zaman dönebilirsin.</p></div>
+        <div className="section-heading"><div><p className="eyebrow">ÇALIŞMA YOLU</p><h2 id="learning-paths-title">Nereden başlayalım?</h2></div></div>
         <nav className="path-grid" aria-label="Öğrenme yolları">
-          <button type="button" className="path-card path-card-primary" aria-label="9. sınıf tarih kitabını aç" onClick={() => onNavigate("history")}><span className="path-icon" aria-hidden="true">01</span><span className="path-text"><span className="path-tag">KONU ANLATIMI</span><strong>9. sınıf tarih kitabı</strong><span>MEB kaynağındaki sayfaları ve bölümleri tek tek keşfet, seçtiğini dinle.</span></span><span className="path-action" aria-hidden="true">Kitabı aç →</span></button>
-          <button type="button" className="path-card" aria-label="Tarih soru bankasını aç" onClick={() => onNavigate("question-bank")}><span className="path-icon" aria-hidden="true">02</span><span className="path-text"><span className="path-tag">SORU ÇALIŞMASI</span><strong>Tarih soru bankası</strong><span>Onaylı soruları soru kökü, görsel ve şıklar olarak ayrı ayrı incele.</span></span><span className="path-action" aria-hidden="true">Sorulara geç →</span></button>
-          <button type="button" className="path-card" aria-label="Braille ile yazma alanını aç" onClick={() => onNavigate("writing")}><span className="path-icon" aria-hidden="true">03</span><span className="path-text"><span className="path-tag">KİŞİSEL ALAN</span><strong>Braille ile yaz</strong><span>Cihazındaki Braille girişini kullanarak düşüncelerini taslakla.</span></span><span className="path-action" aria-hidden="true">Yazmaya başla →</span></button>
+          <button type="button" className="path-card path-card-primary" aria-label="9. sınıf tarih kitabını aç" onClick={() => onNavigate("history")}><span className="path-icon" aria-hidden="true">01</span><span className="path-text"><span className="path-tag">KONU ANLATIMI</span><strong>9. sınıf tarih kitabı</strong><span>Bir bölümü seç ve dinle.</span></span><span className="path-action" aria-hidden="true">Kitabı aç →</span></button>
+          <button type="button" className="path-card" aria-label="Tarih soru bankasını aç" onClick={() => onNavigate("question-bank")}><span className="path-icon" aria-hidden="true">02</span><span className="path-text"><span className="path-tag">SORU ÇALIŞMASI</span><strong>Tarih soru bankası</strong><span>Soruyu, görseli ve şıkları ayrı dinle.</span></span><span className="path-action" aria-hidden="true">Sorulara geç →</span></button>
+          <button type="button" className="path-card" aria-label="Braille ile yazma alanını aç" onClick={() => onNavigate("writing")}><span className="path-icon" aria-hidden="true">03</span><span className="path-text"><span className="path-tag">KİŞİSEL ALAN</span><strong>Braille ile yaz</strong><span>Kısa notunu taslakla.</span></span><span className="path-action" aria-hidden="true">Yazmaya başla →</span></button>
         </nav>
       </section>
       <section className="library-section library-documents" aria-labelledby="documents-title"><div className="section-heading"><div><p className="eyebrow">DİĞER KAYNAKLAR</p><h2 id="documents-title">Yayımlanmış belgeler</h2></div></div>

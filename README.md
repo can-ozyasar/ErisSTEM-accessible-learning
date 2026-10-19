@@ -17,6 +17,20 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 
 ## Çalıştırma
 
+En kolay yol, proje kökünde:
+
+```bash
+./baslat.sh
+```
+
+İlk çalıştırmada imajların indirilmesi ve derlenmesi birkaç dakika sürebilir.
+Ardından tarayıcıdan `http://localhost:5173` adresini açın. Servisleri
+durdurmak için `./baslat.sh durdur`, durumlarını görmek için
+`./baslat.sh durum`, canlı günlükleri izlemek için `./baslat.sh loglar`
+kullanın.
+
+Script kullanmadan eşdeğer komut:
+
 ```bash
 docker compose up --build
 ```

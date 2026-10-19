@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from "react";
 
 const API = import.meta.env.VITE_API_URL ?? "/api";
 const STORAGE_KEY = "eristem-explore-speech";
+/** Emitted only for content units which have their own source-bound narration. */
+export const EXPLORE_READ_EVENT = "eristem:explore-read";
 const TARGETS = "button, a, input, select, textarea, summary, [role='button'], [role='link'], [role='radio'], [role='checkbox'], [tabindex='0'], h1, h2, h3, h4, p, li, img, figcaption, label, legend, td, th";
 
 function clean(value: string | null | undefined): string {
@@ -24,7 +26,11 @@ function nameOf(element: HTMLElement): string {
 }
 
 function descriptionOf(element: HTMLElement): string {
-  const name = nameOf(element);
+  // A long lesson paragraph must not be pushed through the short UI-TTS endpoint.
+  // Source-aware readers mark it with a concise orientation label and play their
+  // reviewed, complete narration after activation.
+  const summary = clean(element.dataset.exploreSummary);
+  const name = summary || nameOf(element);
   if (!name) return "";
   const tag = element.tagName.toLowerCase();
   const role = element.getAttribute("role");
@@ -46,7 +52,10 @@ function descriptionOf(element: HTMLElement): string {
   const state = element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)
     ? element.checked ? ", seçili" : ", seçili değil" : element.getAttribute("aria-current") === "true" ? ", seçili" : "";
   const disabled = element.matches(":disabled, [aria-disabled='true']") ? ", kullanılamıyor" : "";
-  const text = `${name}, ${kind || role}${state}${disabled}`;
+  const sourceUnit = Boolean(element.dataset.exploreReadId);
+  const type = sourceUnit ? "" : kind || role;
+  const readHint = sourceUnit ? ". Tamamını dinlemek için etkinleştirin" : "";
+  const text = `${name}${type ? `, ${type}` : ""}${state}${disabled}${readHint}`;
   return text.length > 580 ? `${text.slice(0, 575).trimEnd()}…` : text;
 }
 
@@ -138,8 +147,20 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
     };
     const click = (event: MouseEvent) => {
       if ((event.target as HTMLElement)?.closest(".explore-control")) { stop(); return; }
-      if (!unlocked || !enabledRef.current || Date.now() - touchedAt.current > 800) return;
+      if (!unlocked || !enabledRef.current) return;
       const target = targetOf(event.target);
+      const readId = target?.dataset.exploreReadId;
+      // A marked lesson unit is different from an ordinary UI button: its first
+      // activation reads the complete, source-bound unit rather than truncating
+      // its text to the interface-speech request limit.
+      if (target && readId) {
+        event.preventDefault(); event.stopPropagation();
+        stop();
+        window.dispatchEvent(new CustomEvent(EXPLORE_READ_EVENT, { detail: { id: readId } }));
+        setStatus("Seçili bölümün tamamı seslendiriliyor.");
+        return;
+      }
+      if (Date.now() - touchedAt.current > 800) return;
       if (!target?.matches("button, a, summary, [role='button'], [role='link']")) return;
       const previous = lastTap.current;
       if (previous?.target === target && Date.now() - previous.time < 4000) { lastTap.current = null; return; }

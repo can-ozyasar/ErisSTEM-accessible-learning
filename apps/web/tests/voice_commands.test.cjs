@@ -18,6 +18,8 @@ test("Turkish page numbers and exact navigation intents", () => {
   assert.deepEqual({ ...parseVoiceCommand("sonraki soruya geç") }, { kind: "next_question" });
   assert.deepEqual({ ...parseVoiceCommand("bölüm üç") }, { kind: "select_region", number: 3 });
   assert.deepEqual({ ...parseVoiceCommand("Şık A'yı oku") }, { kind: "read_choice", label: "A" });
+  assert.deepEqual({ ...parseVoiceCommand("tarih çalışmak istiyorum") }, { kind: "start_study" });
+  assert.deepEqual({ ...parseVoiceCommand("çalışalım") }, { kind: "start_study" });
 });
 
 test("ambiguous or dangerous speech does not cause an action", () => {

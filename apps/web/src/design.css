@@ -68,6 +68,13 @@ fieldset { border-color: var(--line); border-radius: 12px; }
 .library-hero h1 { max-width: 16ch; font-size: clamp(2.5rem, 5.4vw, 4.6rem); }
 .library-hero > p:last-child { max-width: 60ch; color: var(--muted); font-size: clamp(1.05rem, 1.7vw, 1.25rem); }
 .hero-voice-link { display: inline-flex; margin-top: .25rem; font-weight: 750; }
+.study-guide { margin: 1.5rem 0; padding: clamp(1.15rem, 3vw, 1.75rem); border: 1px solid #9ccdbf; border-radius: var(--radius); background: linear-gradient(135deg, #e5f5ee, #fff); box-shadow: var(--shadow); }
+.study-guide h2 { margin: .15rem 0 .45rem; }
+.study-guide > p:not(.eyebrow) { margin: 0; color: var(--muted); }
+.study-guide-actions { display: flex; flex-wrap: wrap; gap: .65rem; margin-top: 1.1rem; }
+.study-guide-actions button { flex: 1 1 14rem; }
+button.guide-dismiss { min-height: 36px; margin-top: .7rem; padding: .35rem 0; border: 0; background: transparent; color: var(--accent-dark); text-decoration: underline; box-shadow: none; }
+button.guide-dismiss:hover:not(:disabled) { background: transparent; box-shadow: none; }
 .library-section { margin: 3rem 0; }
 .section-heading { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 1.25rem; }
 .section-heading h2 { margin: 0; }
@@ -212,6 +219,14 @@ button.quiet-button:hover:not(:disabled) { background: var(--accent-soft); color
 .bank-page-approval button { margin-top: .7rem; }
 .review-layout { grid-template-columns: 190px minmax(0, 1fr) 370px; }
 .review-layout .selected-page, .review-layout .selected-block { background: var(--accent-soft); border-color: var(--accent); }
+.reviewer-publish { max-width: 1120px; }
+.reviewer-publish > header { margin: 0 0 1.25rem; border-radius: var(--radius); }
+.publish-section { margin-top: 2rem; }
+.publish-list { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.publish-list li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.15rem; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: 0 5px 16px rgb(18 47 59 / 5%); }
+.publish-list h3, .publish-list p { margin: 0; }
+.publish-list p { color: var(--muted); font-size: .92rem; }
+.publish-list button { flex: 0 0 auto; }
 
 @media (max-width: 1100px) {
   .bank-review-grid, .review-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
@@ -243,9 +258,12 @@ button.quiet-button:hover:not(:disabled) { background: var(--accent-soft); color
   .voice-actions button { width: 100%; }
   .voice-text-command > div { flex-direction: column; }
   .voice-text-command button { width: 100%; }
+  .study-guide-actions button { flex-basis: 100%; }
   .bank-review-grid aside, .review-layout aside { grid-column: 1; }
   .bank-review-grid aside ol { display: flex; }
   .bank-page-approval button { width: 100%; }
+  .publish-list li { align-items: stretch; flex-direction: column; }
+  .publish-list button { width: 100%; }
   .review-stats { gap: .5rem; }
   .review-stats > div { padding: .65rem; }
   .review-stats strong { font-size: 1.35rem; }

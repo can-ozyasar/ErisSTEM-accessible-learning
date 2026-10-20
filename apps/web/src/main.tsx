@@ -12,6 +12,7 @@ import { StudentLibrary } from "./StudentLibrary";
 import { VoiceCommandPanel } from "./VoiceCommandPanel";
 import { WritingSpace } from "./WritingSpace";
 import { ExploreSpeech } from "./ExploreSpeech";
+import { EntryPortal, PortalNav, TeacherHome } from "./EntryPortal";
 
 type Block = { id: string; kind: "heading" | "paragraph" | "formula-display"; text?: string; latex?: string; mathml?: string; status: string; revision: number; source: { page: number; bbox: number[]; source_checksum: string; extraction_step: string }; validation: { confidence: number; reasons: string[] } };
 type Document = { id: string; title: string; license_notice: string; published_revision: number; blocks: Block[] };
@@ -287,8 +288,7 @@ function StudentApp() {
     : route.view === "history" ? <HistoryReader onBack={back} />
     : route.view === "question-bank" ? <QuestionBankStudent api={API} onBack={back} />
     : route.view === "writing" ? <WritingSpace writing={writing} onWriting={setWriting} status={writingStatus} onStatus={setWritingStatus} onBack={back} />
-    : <StudentLibrary documents={documents} search={search} onSearch={setSearch} status={catalogStatus}
-      onNavigate={view => navigate(view)} onDocument={id => navigate("reader", id)} />;
+    : <StudentLibrary onNavigate={view => navigate(view)} />;
   return <><ExploreSpeech routeKey={`${route.view}:${route.documentId}`} />{screen}</>;
 }
 
@@ -441,5 +441,6 @@ function ReviewerPublish() {
 }
 
 const mode = new URLSearchParams(window.location.search).get("mode");
-createRoot(document.getElementById("root")!).render(mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "question-bank-review" ? <QuestionBankReview api={API} /> : mode === "teacher" ? <TeacherReview /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : <StudentApp />);
+const screen = mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "question-bank-review" ? <QuestionBankReview api={API} /> : mode === "teacher-editor" ? <TeacherReview /> : mode === "teacher" ? <TeacherHome /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : mode === "student" ? <StudentApp /> : <EntryPortal />;
+createRoot(document.getElementById("root")!).render(<>{mode && mode !== "student" && <PortalNav mode={mode} />}{screen}</>);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

@@ -55,6 +55,14 @@ def test_local_tts_accepts_piper_wav_when_its_content_type_is_wrong(monkeypatch)
     assert local_tts.synthesize_verified_text("Doğrulanmış metin") == piper_wav
 
 
+def test_history_audio_uses_one_turkish_voice_for_entire_sentence(monkeypatch):
+    received = []
+    monkeypatch.setattr(local_tts, "synthesize_verified_text", lambda text: received.append(text) or b"RIFF0000WAVE")
+    audio = local_tts.synthesize_history_text("MÖ VI. yüzyıl, Metropolitan Art Museum, New York. Antik Yunan.")
+    assert audio == b"RIFF0000WAVE"
+    assert received == ["Milattan önce altıncı yüzyıl, Metropoliten Art Müziyum, New York. Antik Yunan."]
+
+
 def test_student_local_audio_uses_only_reviewed_reading_unit(monkeypatch):
     client = TestClient(main.app)
     monkeypatch.setenv("LOCAL_TTS_URL", "http://tts:5000/synthesize")

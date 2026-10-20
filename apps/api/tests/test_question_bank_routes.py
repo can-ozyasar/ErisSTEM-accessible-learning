@@ -4,10 +4,9 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app import question_bank_routes
 from app.job_store import make_session_factory
 from app.learning_operations import LearningOperationsStore
-from app import question_bank_routes
-
 
 BOOK = Path(__file__).parents[3] / "data/soru_bankasi/vip-9-sinif-tarih-soru-bankasi.pdf"
 pytestmark = pytest.mark.skipif(not BOOK.is_file(), reason="Local copyrighted source not installed")
@@ -48,6 +47,31 @@ def test_teacher_review_controls_student_release(tmp_path, monkeypatch):
     assert listing[0]["context"]["topic"] == "Tarih Öğrenmenin Faydaları, Tarihin Doğası"
     assert listing[0]["context"]["test_name"] == "VIP Testi"
     reading = client.get(f"{base}/student/questions/{approved['id']}", headers=student).json()
+    assert "answer_label" not in reading["question"]
+    assert "answer_source_checked" not in reading["question"]
+    assert reading["audio_segments"]
+    assert all(len(item["spoken_text"]) <= 80 for item in reading["audio_segments"])
+    captured = []
+    monkeypatch.setattr(question_bank_routes, "synthesize_history_text", lambda value: captured.append(value) or b"RIFF0000WAVE")
+    first_segment = reading["audio_segments"][0]
+    segment_audio = client.get(f"{base}/student/questions/{approved['id']}/audio/{first_segment['id']}", headers=student)
+    assert segment_audio.status_code == 200
+    assert captured[0] == first_segment["spoken_text"]
+    fake_index = {"source_checksum": "a" * 64,
+                  "sections": [{"id": "1.1", "title": "Tarih Öğrenmenin Faydaları"}],
+                  "chunks": [{"id": "sample", "section_id": "1.1", "section_title": "Tarih Öğrenmenin Faydaları",
+                              "page": 12, "bbox": [1, 2, 3, 4],
+                              "text": "Tarih öğrenimi insanların ortak hafızasını ve toplumsal bağlarını güçlendirir. "
+                                      + approved["parts"][0]["text"]}]}
+    monkeypatch.setattr(question_bank_routes, "_rag_index", lambda: fake_index)
+    store.save("rag:aaaaaaaaaaaa:sample", "rag", "a" * 16,
+               {"chunk_id": "sample", "source_checksum": "a" * 64, "approved": True}, 0)
+    first_turn = client.post(f"{base}/student/questions/{approved['id']}/tutor", headers=student,
+                             json={"message": "Bu soruyu nasıl çözebilirim?", "turns": 0})
+    assert first_turn.status_code == 200
+    assert first_turn.json()["stage"] == "interpret"
+    assert first_turn.json()["sources"][0]["page"] == 12
+    assert "doğru cevap" not in first_turn.text.lower()
     assert [unit["label"] for unit in reading["units"]][-5:] == ["Şık A", "Şık B", "Şık C", "Şık D", "Şık E"]
     with_answer_key = {**approved, "parts": [
         {**approved["parts"][0], "text": approved["parts"][0]["text"] + " 1-C 2-A 3-D"},

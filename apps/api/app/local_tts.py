@@ -52,3 +52,10 @@ def synthesize_verified_text(text: str) -> bytes:
     if not is_wav or not 44 <= len(body) <= MAX_AUDIO_BYTES:
         raise LocalTtsUnavailable("invalid_local_tts_response")
     return body
+
+
+def synthesize_history_text(text: str) -> bytes:
+    """Prepare history pronunciation and speak the entire turn in one voice."""
+    from .history_speech import history_spoken_text
+
+    return synthesize_verified_text(history_spoken_text(text))

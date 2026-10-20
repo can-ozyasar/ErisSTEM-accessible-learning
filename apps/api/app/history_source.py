@@ -6,8 +6,8 @@ regions deliberately expose their caption separately from their description.
 
 from __future__ import annotations
 
-import re
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 
@@ -15,8 +15,8 @@ import pymupdf
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
-from .local_tts import LocalTtsUnavailable, synthesize_verified_text
 from .history_speech import history_spoken_text
+from .local_tts import LocalTtsUnavailable, synthesize_history_text
 
 BOOK = Path("/private/meb/tarih-9sinif-ders-kitabi_20261006.pdf")
 TITLE = "Tarih 9. Sınıf Ders Kitabı (MEB, 2026)"
@@ -53,9 +53,7 @@ def _join_lines(lines: list[str]) -> str:
         line = line.strip()
         if not line:
             continue
-        if result.endswith("\xad"):
-            result = result[:-1] + line
-        elif result.endswith("-") and line[:1].islower():
+        if result.endswith("\xad") or (result.endswith("-") and line[:1].islower()):
             result = result[:-1] + line
         else:
             result += (" " if result else "") + line
@@ -230,7 +228,7 @@ def region_audio(page_number: int, region_id: str):
     if region is None or not region["spoken_text"] or region["kind"] == "external_link":
         raise HTTPException(404, "Okunabilir kaynak bölümü bulunamadı")
     try:
-        audio = synthesize_verified_text(region["spoken_text"])
+        audio = synthesize_history_text(region["spoken_text"])
     except LocalTtsUnavailable:
         raise HTTPException(503, "Yerel Türkçe ses motoru kullanılamıyor") from None
     return Response(audio, media_type="audio/wav",

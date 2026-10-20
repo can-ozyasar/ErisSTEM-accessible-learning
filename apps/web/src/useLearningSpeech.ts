@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { fetchAudio } from "./audio_cache";
 
 const API = import.meta.env.VITE_API_URL ?? "/api";
 const MAX_CHUNK = 500;
@@ -48,16 +49,13 @@ export function useLearningSpeech(rate: number) {
       const controller = new AbortController();
       request.current = controller;
       try {
-        const response = await fetch(`${API}/v1/student/interface-speech`, {
+        const data = await fetchAudio(`interface:${parts[index]}`, `${API}/v1/student/interface-speech`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Role": "student" },
           body: JSON.stringify({ text: parts[index] }),
-          signal: controller.signal,
         });
-        if (!response.ok) throw new Error("tts");
-        const blob = await response.blob();
         if (current !== generation.current) return;
-        const nextUrl = URL.createObjectURL(blob);
+        const nextUrl = URL.createObjectURL(new Blob([data.slice(0)], { type: "audio/wav" }));
         const nextAudio = new Audio(nextUrl);
         nextAudio.playbackRate = rate;
         url.current = nextUrl;

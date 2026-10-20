@@ -14,6 +14,7 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 - Öğrenme kalite yönetimi: sürüme bağlı uzman kontrolleri, rızalı yetişkin pilotu, görev gözlemleri, kritik hata engeli ve ayrı yayın kararı.
 - Ürün yönü: MEB veya tek okul seviyesiyle sınırlı olmayan, Türkçe görme yetersizliği bağlamında öğrenme görevlerine odaklanan araştırma ve mimari çerçeve [ürün vizyonunda](docs/urun-vizyonu-ve-arastirma-programi.md).
 - Sınav erişim provası: kaynak-bağlı 2026 LGS/YKS/EKPSS düzenlemeleri, altı sentetik soruda süre ve yanıt gezinmesi, sonuçların bitişe kadar gizlenmesi ve veri silme.
+- Tarih soru bankasında [konu bazlı MEB RAG ve rehberli çözüm](docs/tarih-rag-ve-rehberli-cozum.md): çevrimdışı kitap dizini, öğretmen kaynak onayı, soruyla eşleşen kanıt, cevabı erken söylemeyen destekçi ve yerel ses. Kaggle ince ayar runner'ı değerlendirme için hazırdır; eğitilmiş model henüz canlı öğrenci yolunda değildir.
 
 ## Çalıştırma
 
@@ -28,6 +29,14 @@ Ardından tarayıcıdan `http://localhost:5173` adresini açın. Servisleri
 durdurmak için `./baslat.sh durdur`, durumlarını görmek için
 `./baslat.sh durum`, canlı günlükleri izlemek için `./baslat.sh loglar`
 kullanın.
+
+Ana girişte **Öğrenci** ve **Öğretmen** alanları seçilir. Öğrenci alanındaki
+**Soru çöz** akışı `?mode=student&view=question-bank`, öğretmen içerik
+denetimi `?mode=teacher` adresinden de açılır. Soruda temel eylemler dinleme
+ve birlikte çözmedir; ek okuma ve not araçları ayrıntılar içindedir. Ses
+kısa bölümler halinde yerel Piper ile üretilir; aynı oturumda dinlenen ses
+ve açılan sorular tarayıcı belleğinde tutulur. Rol seçimi yalnız yerel demo
+içindir ve gerçek oturum açma yerine geçmez.
 
 Script kullanmadan eşdeğer komut:
 

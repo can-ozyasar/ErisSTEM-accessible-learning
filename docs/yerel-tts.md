@@ -5,6 +5,13 @@ Motor CPU ile çalışır; ses, kaynak metin ve WAV verisi dış bir TTS sağlay
 gönderilmez. Öğrenci tarayıcısı serbest metin gönderemez: API önce yayımlanmış
 okuma planındaki doğrulanmış birimi çözer, yalnız o birimi Piper'a iletir.
 
+Tarih kitabındaki `MÖ` ve Roma rakamıyla yazılmış yüzyıllar yalnız ses
+metninde açılır; PDF metni aynı kalır. `Metropolitan Art Museum` adı
+Türkçe ses modeline uygun `Metropoliten Art Müziyum` biçiminde hazırlanır.
+Cümlenin tamamı **tek Türkçe sesle** sentezlenir; kurum adı için ses değişmez.
+Diğer yabancı özel adlar için otomatik telaffuz tahmini yapılmaz; okunuşları
+ayrıca gözden geçirilmelidir.
+
 Seslendirme sırası şöyledir:
 
 1. Dinleyici çalışması ile onaylanmış, sürüme bağlı kayıt varsa bu WAV kullanılır.

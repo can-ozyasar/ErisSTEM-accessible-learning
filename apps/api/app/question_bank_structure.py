@@ -12,6 +12,10 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, computed_field, model_validator
 
+from .history_speech import SPOKEN_MUSEUM_NAME, history_spoken_text
+
+AUDIO_TOKEN = re.compile(f"{re.escape(SPOKEN_MUSEUM_NAME)}|\\S+")
+
 
 class SourceBox(BaseModel):
     page: int = Field(ge=1)
@@ -66,8 +70,8 @@ class Choice(BaseModel):
     def spoken_text(self) -> str:
         match = re.fullmatch(r"I:\s*(.+);\s*II:\s*(.+);\s*III:\s*(.+)", self.text)
         if match:
-            return f"Birinci sütun: {match.group(1)}. İkinci sütun: {match.group(2)}. Üçüncü sütun: {match.group(3)}."
-        return self.text
+            return history_spoken_text(f"Birinci sütun: {match.group(1)}. İkinci sütun: {match.group(2)}. Üçüncü sütun: {match.group(3)}.")
+        return history_spoken_text(self.text)
 
 
 class QuestionVisual(BaseModel):
@@ -98,6 +102,7 @@ class Question(BaseModel):
     visuals: list[QuestionVisual] = []
     status: Literal["draft", "review_required", "approved"] = "draft"
     answer_label: Literal["A", "B", "C", "D", "E"] | None = None
+    answer_source_checked: bool = False
 
     @model_validator(mode="after")
     def valid_structure(self):
@@ -109,6 +114,8 @@ class Question(BaseModel):
             raise ValueError("Açık uçlu soruda A–E şıkları bulunmamalı")
         if self.answer_label is not None and self.answer_label not in labels:
             raise ValueError("Cevap mevcut şıklardan biri olmalı")
+        if self.status == "approved" and self.answer_label and not self.answer_source_checked:
+            raise ValueError("Cevap şıkkı kaynak anahtardan ayrıca doğrulanmalı")
         blanks = [blank.number for part in self.parts for blank in part.blanks]
         if blanks != list(range(1, len(blanks) + 1)):
             raise ValueError("Sorudaki boşluklar 1'den başlayarak sırayla numaralanmalı")
@@ -129,7 +136,7 @@ def spoken_part(part: QuestionPart) -> str:
     text = part.text
     for blank in part.blanks:
         text = text.replace(blank.marker, f" {blank.number}. boşluk ", 1)
-    return re.sub(r"\s+", " ", text).strip()
+    return history_spoken_text(re.sub(r"\s+", " ", text).strip())
 
 
 def navigation_units(question: Question) -> list[dict[str, str]]:
@@ -158,9 +165,27 @@ def navigation_units(question: Question) -> list[dict[str, str]]:
         spoken_visual_label = {"I": "Birinci görsel", "II": "İkinci görsel", "III": "Üçüncü görsel"}.get(visual.label or "", "Görsel")
         body.append((visual.source.page, visual.source.bbox[1], visual.source.bbox[0],
                      {"id": visual.id, "kind": "visual", "label": visual_label,
-                      "spoken_text": f"{spoken_visual_label}: {description}"}))
+                      "spoken_text": history_spoken_text(f"{spoken_visual_label}: {description}")}))
     units.extend(item[3] for item in sorted(body, key=lambda item: item[:3]))
     for choice in question.choices:
         units.append({"id": f"{question.id}-choice-{choice.label}", "kind": "choice",
                       "label": f"Şık {choice.label}", "spoken_text": f"Şık {choice.label}: {choice.spoken_text}"})
     return units
+
+
+def question_audio_segments(question: Question, limit: int = 80) -> list[dict[str, str]]:
+    """Short source-derived speech turns so local TTS can start before a long question finishes."""
+    spoken = " ".join(unit["spoken_text"] for unit in navigation_units(question))
+    segments = []
+    current = ""
+    for word in AUDIO_TOKEN.findall(spoken):
+        if len(word) > limit:
+            raise ValueError("Seslendirme biriminde bölünemeyen uzun sözcük")
+        if current and len(current) + len(word) + 1 > limit:
+            segments.append({"id": f"segment-{len(segments) + 1}", "spoken_text": current})
+            current = word
+        else:
+            current = f"{current} {word}" if current else word
+    if current:
+        segments.append({"id": f"segment-{len(segments) + 1}", "spoken_text": current})
+    return segments

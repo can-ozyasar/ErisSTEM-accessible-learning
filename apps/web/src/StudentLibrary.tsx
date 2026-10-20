@@ -1,56 +1,49 @@
-import { useState } from "react";
-import { VoiceCommandPanel } from "./VoiceCommandPanel";
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 
-type DocumentSummary = { id: string; title: string; block_count: number };
+const AREAS = [
+  { number: "01", label: "Konu anlatımı", title: "9. sınıf tarih kitabı", description: "Bir bölümü seç ve dinle.", action: "Kitabı aç", view: "history" as const },
+  { number: "02", label: "Soru çalışması", title: "Tarih soru bankası", description: "Soruyu, görseli ve şıkları sırayla incele.", action: "Sorulara geç", view: "question-bank" as const },
+  { number: "03", label: "Kişisel alan", title: "Braille ile yaz", description: "Kısa notunu taslakla.", action: "Yazmaya başla", view: "writing" as const },
+] as const;
 
-export function StudentLibrary({ documents, search, onSearch, status, onNavigate, onDocument }: {
-  documents: DocumentSummary[];
-  search: string;
-  onSearch: (value: string) => void;
-  status: string;
-  onNavigate: (view: "history" | "question-bank" | "writing") => void;
-  onDocument: (id: string) => void;
-}) {
-  const matches = documents.filter(item => item.title.toLocaleLowerCase("tr").includes(search.toLocaleLowerCase("tr")));
-  const [studyChoiceOpen, setStudyChoiceOpen] = useState(false);
-  const startStudy = () => setStudyChoiceOpen(true);
-  return <>
-    <a className="skip" href="#student-main">Ana içeriğe geç</a>
-    <header className="site-header"><div className="site-header-inner"><p className="brand">Eriş<span>STEM</span></p><p className="site-header-context">Erişilebilir öğrenme alanı</p></div></header>
-    <main id="student-main" className="student-shell library-shell">
-      <section className="library-hero" aria-labelledby="library-title">
-        <p className="eyebrow">ÖĞRENME KÜTÜPHANESİ</p>
-        <h1 id="library-title" tabIndex={-1}>Kendi hızında, güvenle öğren.</h1>
-        <p>Tarihi dinleyerek öğren veya sorularla pekiştir.</p>
-        <a className="hero-voice-link" href="#home-voice">Sesli komutlarla ilerle ↓</a>
-      </section>
-      {studyChoiceOpen && <section className="study-guide" aria-labelledby="study-guide-title" aria-live="polite">
-        <p className="eyebrow">SANA UYGUN BAŞLANGIÇ</p><h2 id="study-guide-title">Tarihi nasıl çalışmak istersin?</h2>
-        <p>Önce konuyu dinlemek mi, yoksa sorularla tekrar etmek mi?</p>
-        <div className="study-guide-actions"><button type="button" onClick={() => onNavigate("history")}>Konuyu dinle</button><button type="button" className="quiet-button" onClick={() => onNavigate("question-bank")}>Sorularla pekiştir</button></div>
-        <button type="button" className="guide-dismiss" onClick={() => setStudyChoiceOpen(false)}>Şimdilik kapat</button>
-      </section>}
-      <div id="home-voice"><VoiceCommandPanel title="Sesli yol seç" examples={["tarih çalışmak istiyorum", "tarih kitabını aç", "soru bankasını aç"]}
-        available={["start_study", "open_history", "open_bank", "open_writing"]} onCommand={command => {
-          if (command.kind === "open_history") onNavigate("history");
-          if (command.kind === "open_bank") onNavigate("question-bank");
-          if (command.kind === "open_writing") onNavigate("writing");
-          if (command.kind === "start_study") startStudy();
-        }} /></div>
-      <section aria-labelledby="learning-paths-title" className="library-section">
-        <div className="section-heading"><div><p className="eyebrow">ÇALIŞMA YOLU</p><h2 id="learning-paths-title">Nereden başlayalım?</h2></div></div>
-        <nav className="path-grid" aria-label="Öğrenme yolları">
-          <button type="button" className="path-card path-card-primary" aria-label="9. sınıf tarih kitabını aç" onClick={() => onNavigate("history")}><span className="path-icon" aria-hidden="true">01</span><span className="path-text"><span className="path-tag">KONU ANLATIMI</span><strong>9. sınıf tarih kitabı</strong><span>Bir bölümü seç ve dinle.</span></span><span className="path-action" aria-hidden="true">Kitabı aç →</span></button>
-          <button type="button" className="path-card" aria-label="Tarih soru bankasını aç" onClick={() => onNavigate("question-bank")}><span className="path-icon" aria-hidden="true">02</span><span className="path-text"><span className="path-tag">SORU ÇALIŞMASI</span><strong>Tarih soru bankası</strong><span>Soruyu, görseli ve şıkları ayrı dinle.</span></span><span className="path-action" aria-hidden="true">Sorulara geç →</span></button>
-          <button type="button" className="path-card" aria-label="Braille ile yazma alanını aç" onClick={() => onNavigate("writing")}><span className="path-icon" aria-hidden="true">03</span><span className="path-text"><span className="path-tag">KİŞİSEL ALAN</span><strong>Braille ile yaz</strong><span>Kısa notunu taslakla.</span></span><span className="path-action" aria-hidden="true">Yazmaya başla →</span></button>
-        </nav>
-      </section>
-      <section className="library-section library-documents" aria-labelledby="documents-title"><div className="section-heading"><div><p className="eyebrow">DİĞER KAYNAKLAR</p><h2 id="documents-title">Yayımlanmış belgeler</h2></div></div>
-        <label htmlFor="student-search">Belge ara</label><input id="student-search" type="search" lang="tr" value={search} onChange={event => onSearch(event.target.value)} placeholder="Belge adı yazın" />
-        <p role="status" className="library-status">{status || `${matches.length} yayımlanmış belge bulundu.`}</p>
-        {matches.length ? <ul className="student-document-list">{matches.map(item => <li key={item.id}><button type="button" onClick={() => onDocument(item.id)}><strong>{item.title}</strong><span>{item.block_count} bölüm · Okumayı aç →</span></button></li>)}</ul> : <p className="empty-state">{search ? "Aramanızla eşleşen belge yok." : "Bu bölümde henüz yayımlanmış belge yok. Yukarıdaki tarih kitabı ve soru bankası ayrı alanlardan açılır."}</p>}
-      </section>
-      <details className="student-help"><summary>Ekran okuyucu ve dokunmatik kullanım yardımı</summary><p>Uygulamanın sesli keşfinde fareyle üzerine gelinen veya klavyeyle odaklanan öğe tanıtılır. Dokunmatik ekranda ilk dokunuş düğmeyi tanıtır; aynı düğmeye ikinci dokunuş onu açar. TalkBack ve VoiceOver kendi gezinme hareketlerini kullanır; ikisini birlikte dinlemek istemezseniz keşif sesini kapatabilirsiniz. Her sayfada “Ana içeriğe geç” bağlantısı bulunur. Yazı girişinde cihazınızın Braille klavyesini kullanabilirsiniz; destek cihaza bağlıdır.</p></details>
-    </main>
-  </>;
+export function StudentLibrary({ onNavigate }: { onNavigate: (view: "history" | "question-bank" | "writing") => void }) {
+  const [active, setActive] = useState(0);
+  const startX = useRef<number | null>(null);
+  const swiped = useRef(false);
+  const move = (direction: -1 | 1) => setActive(current => Math.max(0, Math.min(AREAS.length - 1, current + direction)));
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => { startX.current = event.clientX; swiped.current = false; };
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (startX.current === null) return;
+    const distance = event.clientX - startX.current;
+    startX.current = null;
+    if (Math.abs(distance) < 42) return;
+    swiped.current = true;
+    move(distance < 0 ? 1 : -1);
+  };
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
+    if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
+  };
+  return <main id="student-main" className="student-menu" aria-label="Öğrenci alanı">
+    <div className="student-menu-viewport" role="region" aria-roledescription="kaydırmalı öğrenme menüsü" aria-label={`${AREAS[active].title}, ${active + 1} / ${AREAS.length}`} tabIndex={0}
+      onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { startX.current = null; }} onKeyDown={onKeyDown}>
+      <p className="sr-only" aria-live="polite">{AREAS[active].title} seçili. Sağa veya sola kaydırarak alan değiştir. Açmak için iki kez dokun.</p>
+      <div className="student-menu-track" style={{ transform: `translateX(-${active * 100}%)` }}>
+        {AREAS.map((area, index) => <article key={area.view} className={`student-menu-slide student-menu-${area.view}`} aria-hidden={active !== index}>
+          <button type="button" tabIndex={active === index ? 0 : -1}
+            data-explore-summary={`${area.title}. ${area.description}. Açmak için iki kez dokun.`}
+            data-explore-doubletap="true"
+            onClick={() => { if (!swiped.current) onNavigate(area.view); }}>
+            <span className="entry-brand">Eriş<span>STEM</span></span>
+            <span className="entry-number" aria-hidden="true">{area.number}</span>
+            <span className="entry-role">{area.label}</span>
+            <h1>{area.title}</h1>
+            <span className="entry-description">{area.description}</span>
+            <span className="entry-action">{area.action} <span aria-hidden="true">→</span></span>
+            <span className="entry-swipe-hint" aria-hidden="true">← Kaydırarak alan değiştir →</span>
+          </button>
+        </article>)}
+      </div>
+    </div>
+  </main>;
 }

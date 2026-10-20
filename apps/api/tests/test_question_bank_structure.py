@@ -1,8 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from app.question_bank_structure import Question, navigation_units
-
+from app.question_bank_structure import Question, navigation_units, question_audio_segments
 
 BOX = {"page": 12, "bbox": (10, 20, 100, 40), "source_checksum": "a" * 64}
 
@@ -60,3 +59,17 @@ def test_open_response_does_not_require_fake_choices():
     payload["choices"] = []
     question = Question.model_validate(payload)
     assert [unit["label"] for unit in navigation_units(question)] == ["Soru 10", "Soru metni", "Soru kökü"]
+
+
+def test_history_date_is_spoken_without_changing_question_source():
+    payload = question_payload()
+    payload["parts"][0]["text"] = "MÖ VI. yüzyılda yapılan eser hangi döneme aittir?"
+    payload["parts"][0]["blanks"] = []
+    payload["choices"][0]["text"] = "Metropolitan Art Museum"
+    question = Question.model_validate(payload)
+    units = navigation_units(question)
+    assert "Milattan önce altıncı yüzyılda" in units[1]["spoken_text"]
+    assert units[3]["spoken_text"] == "Şık A: Metropoliten Art Müziyum"
+    assert question.parts[0].text.startswith("MÖ VI.")
+    assert any("Metropoliten Art Müziyum" in segment["spoken_text"]
+               for segment in question_audio_segments(question, limit=50))

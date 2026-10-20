@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { fetchAudio } from "./audio_cache";
 
 const API = import.meta.env.VITE_API_URL ?? "/api";
 const STORAGE_KEY = "eristem-explore-speech";
@@ -85,6 +86,7 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
   const lastTap = useRef<{ target: HTMLElement; time: number } | null>(null);
   const touchSelected = useRef<HTMLElement | null>(null);
   const enabledRef = useRef(enabled);
+  const speakRef = useRef<((value: string) => void) | null>(null);
   useEffect(() => { enabledRef.current = enabled; }, [enabled]);
   useEffect(() => () => { void context.current?.close(); }, []);
 
@@ -103,14 +105,12 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
       const token = serial.current;
       const request = new AbortController(); controller.current = request;
       try {
-        const response = await fetch(`${API}/v1/student/interface-speech`, {
+        const data = await fetchAudio(`interface:${value}`, `${API}/v1/student/interface-speech`, {
           method: "POST", headers: { "Content-Type": "application/json", "X-Role": "student" },
-          body: JSON.stringify({ text: value }), signal: request.signal,
+          body: JSON.stringify({ text: value }),
         });
-        if (!response.ok) throw new Error("tts");
-        const data = await response.arrayBuffer();
         if (token !== serial.current || !enabledRef.current) return;
-        const buffer = await context.current.decodeAudioData(data);
+        const buffer = await context.current.decodeAudioData(data.slice(0));
         if (token !== serial.current || !enabledRef.current) return;
         const next = context.current.createBufferSource();
         next.buffer = buffer; next.connect(context.current.destination);
@@ -121,6 +121,7 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
         if (!request.signal.aborted && token === serial.current) setStatus("Ses başlatılamadı. Cihazın sesini kontrol edin veya ekran okuyucunuzu kullanın.");
       }
     };
+    speakRef.current = value => { void say(value); };
     const announce = (target: HTMLElement | null, delay: number) => {
       if (!unlocked || !enabledRef.current || !target || target === current.current) return;
       current.current = target;
@@ -147,8 +148,15 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
     };
     const click = (event: MouseEvent) => {
       if ((event.target as HTMLElement)?.closest(".explore-control")) { stop(); return; }
-      if (!unlocked || !enabledRef.current) return;
       const target = targetOf(event.target);
+      if (!enabledRef.current) return;
+      if (!unlocked && target?.dataset.exploreDoubletap === "true" && Date.now() - touchedAt.current <= 800) {
+        event.preventDefault(); event.stopPropagation();
+        lastTap.current = { target, time: Date.now() };
+        start(`${nameOf(target)} seçildi. Açmak için aynı öğeye tekrar dokunun.`);
+        return;
+      }
+      if (!unlocked) return;
       const readId = target?.dataset.exploreReadId;
       // A marked lesson unit is different from an ordinary UI button: its first
       // activation reads the complete, source-bound unit rather than truncating
@@ -166,7 +174,9 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
       if (previous?.target === target && Date.now() - previous.time < 4000) { lastTap.current = null; return; }
       event.preventDefault(); event.stopPropagation();
       lastTap.current = { target, time: Date.now() };
-      setStatus("Öğe seçildi. Açmak için aynı öğeye tekrar dokunun.");
+      const selection = `${nameOf(target)} seçildi. Açmak için aynı öğeye tekrar dokunun.`;
+      void say(selection);
+      setStatus(selection);
     };
     document.addEventListener("pointerover", over);
     document.addEventListener("focusin", focus);
@@ -184,19 +194,22 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
       document.removeEventListener("pointerout", leave);
       document.removeEventListener("click", click, true);
       touchSelected.current?.classList.remove("explore-selected");
-      touchSelected.current = null; lastTap.current = null;
+      touchSelected.current = null;
+      speakRef.current = null;
       stop(); current.current = null;
     };
   }, [routeKey, unlocked]);
 
-  const start = () => {
+  const start = (initialAnnouncement = "") => {
     try {
       const audio = new AudioContext();
       context.current = audio;
       void audio.resume().then(() => {
         enabledRef.current = true;
         setEnabled(true); setUnlocked(true);
-        setStatus("Sesli keşif açık. Öğelerin üzerine gelin, odaklanın veya dokunun.");
+        const message = initialAnnouncement || "Sesli keşif açık. Öğelerin üzerine gelin, odaklanın veya dokunun.";
+        setStatus(message);
+        speakRef.current?.(message);
         try { localStorage.setItem(STORAGE_KEY, "on"); } catch { /* private mode */ }
       }).catch(() => { void audio.close(); setStatus("Ses başlatılamadı. Tarayıcının ses izinlerini kontrol edin."); });
     } catch { setStatus("Bu tarayıcı yerel ses çıkışını desteklemiyor."); }
@@ -215,7 +228,7 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
     } else setStatus("Ekranı keşfetme sesi açık.");
   };
   return <aside className="explore-control" aria-label="Ekranı keşfetme sesi">
-    <button type="button" aria-pressed={unlocked && enabled} onClick={unlocked ? toggle : start}>{!unlocked ? "🔊 Sesli keşfi başlat" : enabled ? "🔊 Keşif sesi açık" : "🔇 Keşif sesi kapalı"}</button>
-    <span className="explore-status" aria-live="off">{status}</span>
+    <button type="button" aria-label={!unlocked ? "Sesli keşfi başlat" : enabled ? "Keşif sesini kapat" : "Keşif sesini aç"} title={!unlocked ? "Sesli keşfi başlat" : enabled ? "Keşif sesini kapat" : "Keşif sesini aç"} aria-pressed={unlocked && enabled} onClick={unlocked ? toggle : () => start()}>{unlocked && !enabled ? "🔇" : "🔊"}</button>
+    <span className="sr-only" aria-live="polite">{status}</span>
   </aside>;
 }

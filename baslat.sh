@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ErişSTEM yerel geliştirme başlatıcısı.
-# Kullanım: ./baslat.sh [baslat|durdur|durum|loglar]
+# Kullanım: ./baslat.sh [baslat|hazirla-rag|durdur|durum|loglar]
 
 set -euo pipefail
 
@@ -17,6 +17,10 @@ if ! docker compose version >/dev/null 2>&1; then
 fi
 
 case "$ACTION" in
+  hazirla-rag)
+    echo "MEB tarih kitabı için yerel konu dizini hazırlanıyor..."
+    LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose run --rm --build --no-deps worker python -m app.history_rag
+    ;;
   baslat)
     echo "ErişSTEM servisleri derleniyor ve başlatılıyor..."
     LOCAL_UID="$(id -u)" LOCAL_GID="$(id -g)" docker compose up -d --build
@@ -35,7 +39,7 @@ case "$ACTION" in
     docker compose logs --tail=120 -f
     ;;
   *)
-    echo "Kullanım: ./baslat.sh [baslat|durdur|durum|loglar]" >&2
+    echo "Kullanım: ./baslat.sh [baslat|hazirla-rag|durdur|durum|loglar]" >&2
     exit 2
     ;;
 esac

@@ -6,10 +6,12 @@ services:
       OBJECT_STORAGE_BACKEND: local
       DERIVED_ROOT: /private/derived
       LOCAL_TTS_URL: http://tts:5000/synthesize
+      LOCAL_TTS_CACHE_ROOT: /private/tts-cache
     volumes:
       - ./data/derived:/private/derived:ro
       - ./data/meb:/private/meb:ro
       - ./data/soru_bankasi:/private/question-bank:ro
+      - tts_audio_cache:/private/tts-cache
     depends_on:
       db:
         condition: service_healthy
@@ -88,6 +90,7 @@ services:
     networks: [internal]
 volumes:
   postgres_data:
+  tts_audio_cache:
 networks:
   internal:
     internal: true

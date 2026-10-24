@@ -5,6 +5,11 @@ Motor CPU ile çalışır; ses, kaynak metin ve WAV verisi dış bir TTS sağlay
 gönderilmez. Öğrenci tarayıcısı serbest metin gönderemez: API önce yayımlanmış
 okuma planındaki doğrulanmış birimi çözer, yalnız o birimi Piper'a iletir.
 
+Doğrulanmış ders, soru ve tarih bölümlerinin WAV çıktısı özel Docker volume'ünde
+içerik özetiyle saklanır. Aynı metin ikinci kez istendiğinde Piper yeniden
+çalışmaz; WAV doğrudan döner. Arayüz keşif sesleri ve öğrenci tarafından girilen
+metinler bu kalıcı önbelleğe yazılmaz.
+
 Tarih kitabındaki `MÖ` ve Roma rakamıyla yazılmış yüzyıllar yalnız ses
 metninde açılır; PDF metni aynı kalır. `Metropolitan Art Museum` adı
 Türkçe ses modeline uygun `Metropoliten Art Müziyum` biçiminde hazırlanır.

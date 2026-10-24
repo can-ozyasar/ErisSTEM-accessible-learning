@@ -10,11 +10,15 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
+from pathlib import Path
+from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 MAX_SPOKEN_TEXT_CHARS = 8_000
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
+VOICE_CACHE_VERSION = "piper-tr_TR-dfki-medium-v1"
 
 
 class LocalTtsUnavailable(RuntimeError):
@@ -54,8 +58,53 @@ def synthesize_verified_text(text: str) -> bytes:
     return body
 
 
+def _cache_root() -> Path | None:
+    """Return the private volume for reviewed audio only.
+
+    The filename is a salted content digest; source text is never written as a
+    filename or sidecar.  If the volume is unavailable, synthesis still works.
+    """
+    value = os.getenv("LOCAL_TTS_CACHE_ROOT", "").strip()
+    if not value:
+        return None
+    try:
+        root = Path(value).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+        return root
+    except OSError:
+        return None
+
+
+def synthesize_cached_verified_text(text: str) -> bytes:
+    """Synthesize reviewed text once, then reuse its local WAV across sessions."""
+    root = _cache_root()
+    if root is None:
+        return synthesize_verified_text(text)
+    digest = hashlib.sha256(f"{VOICE_CACHE_VERSION}\0{text}".encode("utf-8")).hexdigest()
+    target = root / f"{digest}.wav"
+    try:
+        cached = target.read_bytes()
+        if len(cached) >= 44 and cached[:4] == b"RIFF" and cached[8:12] == b"WAVE":
+            return cached
+        target.unlink(missing_ok=True)
+    except OSError:
+        pass
+    audio = synthesize_verified_text(text)
+    try:
+        with NamedTemporaryFile(dir=root, prefix=".audio-", suffix=".tmp", delete=False) as temp:
+            temp.write(audio)
+            temporary = Path(temp.name)
+        temporary.replace(target)
+    except OSError:
+        try:
+            temporary.unlink(missing_ok=True)
+        except UnboundLocalError:
+            pass
+    return audio
+
+
 def synthesize_history_text(text: str) -> bytes:
     """Prepare history pronunciation and speak the entire turn in one voice."""
     from .history_speech import history_spoken_text
 
-    return synthesize_verified_text(history_spoken_text(text))
+    return synthesize_cached_verified_text(history_spoken_text(text))

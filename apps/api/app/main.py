@@ -28,7 +28,7 @@ from .job_store import (
 )
 from .learning_operations import LearningOperationsStore
 from .learning_routes import learning_router
-from .local_tts import LocalTtsUnavailable, synthesize_verified_text
+from .local_tts import LocalTtsUnavailable, synthesize_cached_verified_text, synthesize_verified_text
 from .pipeline.accessibility_reader import ReadingPlan, build_reading_plan
 from .pipeline.accessible_content import CanonicalAccessibleBlock
 from .pipeline.braille_adapter import (
@@ -636,7 +636,7 @@ def read_local_audio(document_id: str, unit_id: str, _: Role = any_role):
     if unit is None:
         raise HTTPException(status_code=404, detail="Doğrulanmış ses birimi bulunamadı")
     try:
-        audio = synthesize_verified_text(unit.spoken_text)
+        audio = synthesize_cached_verified_text(unit.spoken_text)
     except LocalTtsUnavailable:
         raise HTTPException(status_code=503, detail="Yerel Türkçe ses motoru kullanılamıyor") from None
     return Response(

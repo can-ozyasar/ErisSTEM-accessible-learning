@@ -55,6 +55,16 @@ def test_local_tts_accepts_piper_wav_when_its_content_type_is_wrong(monkeypatch)
     assert local_tts.synthesize_verified_text("Doğrulanmış metin") == piper_wav
 
 
+def test_verified_audio_is_reused_from_private_local_cache(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCAL_TTS_CACHE_ROOT", str(tmp_path))
+    calls = []
+    wav = b"RIFF" + b"0" * 4 + b"WAVE" + b"0" * 32
+    monkeypatch.setattr(local_tts, "synthesize_verified_text", lambda text: calls.append(text) or wav)
+    assert local_tts.synthesize_cached_verified_text("Doğrulanmış metin") == wav
+    assert local_tts.synthesize_cached_verified_text("Doğrulanmış metin") == wav
+    assert calls == ["Doğrulanmış metin"]
+
+
 def test_history_audio_uses_one_turkish_voice_for_entire_sentence(monkeypatch):
     received = []
     monkeypatch.setattr(local_tts, "synthesize_verified_text", lambda text: received.append(text) or b"RIFF0000WAVE")
@@ -72,7 +82,7 @@ def test_student_local_audio_uses_only_reviewed_reading_unit(monkeypatch):
         received.append(text)
         return b"R" * 44
 
-    monkeypatch.setattr(main, "synthesize_verified_text", fake_synthesize)
+    monkeypatch.setattr(main, "synthesize_cached_verified_text", fake_synthesize)
     response = client.get(
         "/v1/student/documents/synthetic-geometry-01/local-audio/heading-1",
         headers={"X-Role": "student"},

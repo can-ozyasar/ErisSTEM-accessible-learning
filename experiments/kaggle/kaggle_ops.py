@@ -26,6 +26,8 @@ SUMMARY_FILENAMES = (
     "native_agreement_report.json",
     "formula_evaluation_report.json",
     "layout_probe_summary.json",
+    "training_data_report.json",
+    "artifact_manifest.json",
 )
 SYMBOL_PREDICTIONS_FILENAME = "symbol_predictions.json"
 FORMULA_PREDICTIONS_FILENAME = "formula_predictions.json"
@@ -442,6 +444,115 @@ def download_tts_audio(kernel: str, run_records_path: Path) -> Path:
     (destination / "download_manifest.json").write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
     )
+    return destination
+
+
+def download_finetune_artifact(kernel: str, manifest_path: Path) -> Path:
+    """Download only the checksumed fine-tuned weight named by a private manifest."""
+    path = private_path(manifest_path)
+    try:
+        manifest = json.loads(path.read_text(encoding="utf-8"))
+        files = manifest["files"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Fine-tune artifact manifesti okunamadı") from exc
+    if manifest.get("schema_version") != "tts-finetune-artifact-v1" or not isinstance(files, list) or len(files) != 1:
+        raise ValueError("Fine-tune artifact manifesti geçersiz")
+    file = files[0]
+    if (
+        not isinstance(file, dict)
+        or set(file) != {"path", "sha256", "bytes"}
+        or file.get("path") != "t3_mtl23ls_v3.safetensors"
+        or not isinstance(file.get("sha256"), str)
+        or not re.fullmatch(r"[0-9a-f]{64}", file["sha256"])
+        or not isinstance(file.get("bytes"), int)
+        or not 100_000_000 <= file["bytes"] <= 4_000_000_000
+    ):
+        raise ValueError("Fine-tune artifact manifesti güvenli değil")
+    kernel = validate_handle(kernel)
+    # Keep a stable private destination so completed range blocks survive a
+    # connection reset or interrupted run.
+    destination = path.parent.parent / "verified-artifact"
+    destination.mkdir(exist_ok=True)
+    filename = str(file["path"])
+    # Kaggle CLI 2.2.x reads each output's entire response into memory even
+    # with stream=True. A 2 GB T3 weight must instead be streamed to disk.
+    from concurrent.futures import ThreadPoolExecutor
+    from kaggle.api.kaggle_api_extended import ApiListKernelSessionOutputRequest, KaggleApi
+    import requests
+
+    api = KaggleApi()
+    api.authenticate()
+    owner, slug = kernel.split("/", maxsplit=1)
+    matches = []
+    token = None
+    with api.build_kaggle_client() as client:
+        while True:
+            request = ApiListKernelSessionOutputRequest()
+            request.user_name = owner
+            request.kernel_slug = slug
+            request.page_size = 100
+            if token:
+                request.page_token = token
+            response = client.kernels.kernels_api_client.list_kernel_session_output(request)
+            expected_remote_path = f"{path.parent.name}/{filename}"
+            matches.extend(item for item in response.files or [] if item.file_name == expected_remote_path)
+            token = response.next_page_token
+            if not token:
+                break
+    if len(matches) != 1:
+        raise RuntimeError("Kaggle çıktısında tek bir fine-tune ağırlığı bulunamadı")
+    target = destination / filename
+    temporary = destination / (filename + ".part")
+    block_size = 1024 * 1024
+    parts = destination / (filename + f".parts-{block_size}")
+    parts.mkdir(exist_ok=True)
+    total_size = file["bytes"]
+    blocks = [(start, min(start + block_size, total_size) - 1) for start in range(0, total_size, block_size)]
+
+    def download_block(index: int, start: int, end: int) -> Path:
+        block = parts / f"{index:04d}.part"
+        expected_size = end - start + 1
+        if block.is_file() and block.stat().st_size == expected_size:
+            return block
+        block.unlink(missing_ok=True)
+        for attempt in range(5):
+            try:
+                with requests.get(matches[0].url, headers={"Range": f"bytes={start}-{end}"}, stream=True, timeout=(30, 180)) as download:
+                    download.raise_for_status()
+                    if download.status_code != 206 or download.headers.get("Content-Range") != f"bytes {start}-{end}/{total_size}":
+                        raise RuntimeError("Kaggle aralık yanıtı beklenen dosyayla eşleşmiyor")
+                    with block.open("wb") as output:
+                        for chunk in download.iter_content(chunk_size=64 * 1024):
+                            if chunk:
+                                output.write(chunk)
+                if block.stat().st_size != expected_size:
+                    raise RuntimeError("Kaggle parçası eksik indirildi")
+                return block
+            except (OSError, requests.RequestException, RuntimeError):
+                block.unlink(missing_ok=True)
+                if attempt == 4:
+                    raise
+        raise RuntimeError("Kaggle parçası indirilemedi")
+
+    with ThreadPoolExecutor(max_workers=48) as pool:
+        downloaded = list(pool.map(lambda item: download_block(*item), ((index, *bounds) for index, bounds in enumerate(blocks))))
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with temporary.open("wb") as output:
+            for block in downloaded:
+                with block.open("rb") as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        output.write(chunk)
+                        digest.update(chunk)
+                        size += len(chunk)
+        if size != total_size or digest.hexdigest() != file["sha256"]:
+            raise RuntimeError("Fine-tune ağırlığı checksum ile doğrulanamadı")
+        temporary.replace(target)
+        shutil.rmtree(parts)
+    finally:
+        temporary.unlink(missing_ok=True)
+    (destination / "download_manifest.json").write_text(json.dumps({"kernel": kernel, "source_manifest_relative_path": str(path.relative_to(private_root())), "files": [{"path": filename, "sha256": digest.hexdigest(), "bytes": size}]}, ensure_ascii=False, indent=2), encoding="utf-8")
     return destination
 
 

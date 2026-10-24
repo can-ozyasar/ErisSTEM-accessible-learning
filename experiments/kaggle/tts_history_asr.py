@@ -14,17 +14,21 @@ import tts_history_listening as listening
 ROOT = kaggle_ops.repo_root()
 PRIVATE = kaggle_ops.private_root()
 SOURCE = PRIVATE / "eristem_history_tts_eval_v1/tts-history-eval-v1.json"
-INPUT_DIR = PRIVATE / "eristem_history_tts_asr_v1"
-DATASET = "muhammedcanozyasar/eristem-history-tts-asr-v1"
-KERNEL = "muhammedcanozyasar/eristem-history-tts-whisper-v1"
-CANDIDATE = "history-piper-vs-chatterbox-v1"
+INPUT_DIR = PRIVATE / "eristem_history_tts_asr_v2"
+DATASET = "muhammedcanozyasar/eristem-history-tts-asr-v2"
+KERNEL = "muhammedcanozyasar/eristem-history-tts-whisper-v2"
+CANDIDATE = "history-piper-vs-chatterbox-v2"
+# This is the private download directory created for the 20 October 2026 V3
+# run.  It prevents a prior stochastic V3 synthesis from contaminating the
+# baseline comparison.
+CHATTERBOX_OUTPUT_RUN = "20261020T091906Z"
 
 
 def prepare() -> dict:
     source = json.loads(SOURCE.read_text(encoding="utf-8"))
     source_hash = kaggle_ops.sha256(SOURCE)
     piper = listening.load_report(listening.PIPER / "run_records.json", source_hash)
-    cb_dir, cb = listening.chatterbox_audio(source_hash)
+    cb_dir, cb = listening.chatterbox_audio(source_hash, CHATTERBOX_OUTPUT_RUN)
     cb_files = {item["id"]: item for item in cb["manifest"]["files"]}
     piper_records = {item["id"]: item for item in piper["records"]}
     cb_records = {item["id"]: item for item in cb["report"]["records"]}
@@ -63,12 +67,12 @@ def package() -> Path:
         return destination
     return kaggle_ops.prepare_notebook_package(
         KERNEL, DATASET, ROOT / "experiments/kaggle/tts_chatterbox_v3_whisper_asr_runner.py",
-        "Eristem History Tts Whisper V1", enable_internet=True,
+        "Eristem History Tts Whisper V2", enable_internet=True,
         source_replacements=(
             ("/kaggle/input/datasets/muhammedcanozyasar/eristem-meb9-tts-chatterbox-v3-audio-v1",
-             "/kaggle/input/datasets/muhammedcanozyasar/eristem-history-tts-asr-v1"),
+             "/kaggle/input/datasets/muhammedcanozyasar/eristem-history-tts-asr-v2"),
             ("/kaggle/working/eristem-private-tts-chatterbox-v3-asr-whisper-large-v3-v1",
-             "/kaggle/working/eristem-history-tts-whisper-v1"),
+             "/kaggle/working/eristem-history-tts-whisper-v2"),
         ),
     )
 
@@ -112,7 +116,7 @@ def fetch_and_score() -> dict:
                         "character_accuracy": round(speech_character_accuracy(reference["expected_spoken_text"], observed), 3),
                         "critical_tokens_missed": missed,
                         "observed_spoken_text": observed})
-    score_path = PRIVATE / "tts_history_asr_scores_v1.json"
+    score_path = PRIVATE / "tts_history_asr_scores_v2.json"
     if score_path.exists():
         raise FileExistsError("Tarih ASR puanı zaten var; eski değerlendirme korunuyor")
     score_path.write_text(json.dumps({"schema_version": "tts-history-asr-screen-v1",

@@ -22,9 +22,14 @@ export function QuestionBankQuestion({ question, units, segments, api, onPreviou
   const [audioStatus, setAudioStatus] = useState("");
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
+  const heading = useRef<HTMLHeadingElement | null>(null);
   const player = useRef<HTMLAudioElement | null>(null);
   const url = useRef<string | null>(null);
   const serial = useRef(0);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => heading.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
   const cacheKey = (unitId: string) => `question:${question.id}:${unitId}:${[...units, ...segments].map(unit => unit.spoken_text).join("|")}`;
   const audioUrl = (unitId: string) => `${api}/v1/question-bank/student/questions/${encodeURIComponent(question.id)}/audio/${encodeURIComponent(unitId)}`;
   const stop = () => { serial.current += 1; player.current?.pause(); player.current = null; if (url.current) URL.revokeObjectURL(url.current); url.current = null; setIsPlaying(false); setAudioStatus(""); };
@@ -89,15 +94,16 @@ export function QuestionBankQuestion({ question, units, segments, api, onPreviou
   });
   if (question.status !== "approved") return <p role="status">Bu soru henüz kaynak denetiminden geçmedi.</p>;
   return <section className="question-bank-question focused-question" aria-labelledby={`${question.id}-heading`}>
-    <div className="focused-question-top"><div><p className="eyebrow">ŞİMDİKİ SORU</p><h2 id={`${question.id}-heading`}>Soru {question.number}</h2></div><div className="focused-question-nav"><button type="button" className="quiet-button" onClick={onPrevious} disabled={!onPrevious}>← Önceki</button><button type="button" className="quiet-button" onClick={onNext} disabled={!onNext}>Sonraki →</button></div></div>
+    <div className="focused-question-top"><div><p className="eyebrow">ŞİMDİKİ SORU</p><h2 id={`${question.id}-heading`} ref={heading} tabIndex={-1}>Soru {question.number}</h2></div><button type="button" className="quiet-button question-listen" onClick={() => { if (isPlaying) stop(); else void playQuestion(); }}>{isPlaying ? "■ Okumayı durdur" : "▶ Soruyu dinle"}</button></div>
     <div className="question-content">{question.parts.map((part, index) => <p key={part.id} className={part.kind === "prompt" ? "question-prompt" : ""}>{question.parts.length > 1 && <span className="sr-only">{part.kind === "prompt" ? "Soru kökü: " : index === 0 ? "Soru metni: " : "Soru bölümü: "}</span>}{part.text}</p>)}
       {question.visuals.map(visual => <p className="question-visual" key={visual.id}><strong>Görsel:</strong> {visual.description_reviewed ? visual.description : "Doğrulanmış betimleme henüz yok."}</p>)}
     </div>
-    {question.question_type === "multiple_choice" ? <fieldset className="focused-choices"><legend>Yanıt olarak hangi şıkkı düşünüyorsun?</legend>{question.choices.map(choice => <label key={choice.label} className="focused-choice"><input type="radio" name={`${question.id}-answer`} value={choice.label} checked={answer === choice.label} onChange={() => setAnswer(choice.label)} /><span className="choice-letter">{choice.label}</span><span>{choice.text}</span></label>)}</fieldset>
+    {question.question_type === "multiple_choice" ? <fieldset className="focused-choices"><legend>Yanıt olarak hangi şıkkı düşünüyorsun?</legend>{question.choices.map(choice => <label key={choice.label} className="focused-choice"><input type="radio" name={`${question.id}-answer`} value={choice.label} checked={answer === choice.label} onChange={() => setAnswer(choice.label)} /><span className="choice-letter">{choice.label}</span><span>{choice.text}</span>{answer === choice.label && <span className="choice-selected" aria-hidden="true">Seçildi</span>}</label>)}</fieldset>
       : <label className="focused-written-answer">Yanıt taslağın<textarea value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Yanıtını burada düşünebilirsin." /></label>}
-    <div className="focused-actions"><button type="button" onClick={() => void playQuestion()}>▶ Soruyu dinle</button><button type="button" className="quiet-button" onClick={() => setHelpOpen(value => !value)} aria-expanded={helpOpen}>{helpOpen ? "Konuşmayı gizle" : "Birlikte çöz"}</button>{isPlaying && <button type="button" className="quiet-button" onClick={stop}>Sesi durdur</button>}</div>
     <p role="status" className="focused-audio-status">{audioStatus}</p>
+    <div className="focused-actions"><button type="button" onClick={() => setHelpOpen(value => !value)} aria-expanded={helpOpen}>{helpOpen ? "Konuşmayı gizle" : "Takıldım, birlikte çözelim"}</button></div>
     <div hidden={!helpOpen}><QuestionTutor api={api} questionId={question.id} selectedChoice={answer} /></div>
+    <nav className="focused-question-nav" aria-label="Sorular arasında ilerle"><button type="button" className="quiet-button" onClick={onPrevious} disabled={!onPrevious}>← Önceki soru</button><button type="button" onClick={onNext} disabled={!onNext}>Sonraki soru →</button></nav>
     <details className="question-more"><summary>Ayrıntılı okuma ve notlar</summary>
       <p>Bir bölümü ayrı dinlemek veya gerekçeni yazmak istersen burayı kullan.</p>
       <ul className="question-detail-units">{units.map(unit => <li key={unit.id}><span>{unit.label}</span><button type="button" className="quiet-button" data-explore-read-id={unit.id} data-explore-summary={`${unit.label} bölümünü dinle`} aria-current={selectedUnit === unit.id ? "true" : undefined} onClick={() => { setSelectedUnit(unit.id); void play(unit.id); }}>Dinle</button></li>)}</ul>

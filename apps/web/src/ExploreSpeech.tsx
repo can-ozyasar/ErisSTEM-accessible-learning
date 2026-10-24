@@ -1,10 +1,11 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchAudio } from "./audio_cache";
 
 const API = import.meta.env.VITE_API_URL ?? "/api";
 const STORAGE_KEY = "eristem-explore-speech";
 /** Emitted only for content units which have their own source-bound narration. */
 export const EXPLORE_READ_EVENT = "eristem:explore-read";
+export const EXPLORE_ANNOUNCE_EVENT = "eristem:explore-announce";
 const TARGETS = "button, a, input, select, textarea, summary, [role='button'], [role='link'], [role='radio'], [role='checkbox'], [tabindex='0'], h1, h2, h3, h4, p, li, img, figcaption, label, legend, td, th";
 
 function clean(value: string | null | undefined): string {
@@ -82,13 +83,26 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
   const context = useRef<AudioContext | null>(null);
   const source = useRef<AudioBufferSourceNode | null>(null);
   const controller = useRef<AbortController | null>(null);
-  const touchedAt = useRef(0);
-  const lastTap = useRef<{ target: HTMLElement; time: number } | null>(null);
   const touchSelected = useRef<HTMLElement | null>(null);
   const enabledRef = useRef(enabled);
   const speakRef = useRef<((value: string) => void) | null>(null);
   useEffect(() => { enabledRef.current = enabled; }, [enabled]);
   useEffect(() => () => { void context.current?.close(); }, []);
+
+  const start = useCallback((initialAnnouncement = "") => {
+    try {
+      const audio = new AudioContext();
+      context.current = audio;
+      void audio.resume().then(() => {
+        enabledRef.current = true;
+        setEnabled(true); setUnlocked(true);
+        const message = initialAnnouncement || "Sesli keşif açık. Tab ile öğelere geç, Enter ile aç. Kaydırmalı menülerde sağ ve sol ok tuşlarını kullanabilirsin.";
+        setStatus(message);
+        speakRef.current?.(message);
+        try { localStorage.setItem(STORAGE_KEY, "on"); } catch { /* private mode */ }
+      }).catch(() => { void audio.close(); setStatus("Ses başlatılamadı. Tarayıcının ses izinlerini kontrol edin."); });
+    } catch { setStatus("Bu tarayıcı yerel ses çıkışını desteklemiyor."); }
+  }, []);
 
   useEffect(() => {
     const stop = () => {
@@ -131,10 +145,16 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
     };
     const over = (event: PointerEvent) => { if (event.pointerType === "mouse" || event.pointerType === "pen") announce(targetOf(event.target), 230); };
     const focus = (event: FocusEvent) => announce(targetOf(event.target), 30);
+    const announceMessage = (event: Event) => {
+      const value = (event as CustomEvent<{ text?: string }>).detail?.text;
+      if (value && unlocked && enabledRef.current) {
+        current.current = null;
+        void say(value);
+      }
+    };
     const touch = (event: TouchEvent) => {
       const point = event.touches[0];
       if (!point) return;
-      touchedAt.current = Date.now();
       const target = targetOf(document.elementFromPoint(point.clientX, point.clientY));
       if (touchSelected.current !== target) {
         touchSelected.current?.classList.remove("explore-selected");
@@ -149,14 +169,7 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
     const click = (event: MouseEvent) => {
       if ((event.target as HTMLElement)?.closest(".explore-control")) { stop(); return; }
       const target = targetOf(event.target);
-      if (!enabledRef.current) return;
-      if (!unlocked && target?.dataset.exploreDoubletap === "true" && Date.now() - touchedAt.current <= 800) {
-        event.preventDefault(); event.stopPropagation();
-        lastTap.current = { target, time: Date.now() };
-        start(`${nameOf(target)} seçildi. Açmak için aynı öğeye tekrar dokunun.`);
-        return;
-      }
-      if (!unlocked) return;
+      if (!unlocked || !enabledRef.current) return;
       const readId = target?.dataset.exploreReadId;
       // A marked lesson unit is different from an ordinary UI button: its first
       // activation reads the complete, source-bound unit rather than truncating
@@ -168,27 +181,20 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
         setStatus("Seçili bölümün tamamı seslendiriliyor.");
         return;
       }
-      if (Date.now() - touchedAt.current > 800) return;
-      if (!target?.matches("button, a, summary, [role='button'], [role='link']")) return;
-      const previous = lastTap.current;
-      if (previous?.target === target && Date.now() - previous.time < 4000) { lastTap.current = null; return; }
-      event.preventDefault(); event.stopPropagation();
-      lastTap.current = { target, time: Date.now() };
-      const selection = `${nameOf(target)} seçildi. Açmak için aynı öğeye tekrar dokunun.`;
-      void say(selection);
-      setStatus(selection);
     };
     document.addEventListener("pointerover", over);
     document.addEventListener("focusin", focus);
+    window.addEventListener(EXPLORE_ANNOUNCE_EVENT, announceMessage);
     document.addEventListener("touchstart", touch, { passive: true });
     document.addEventListener("touchmove", touch, { passive: true });
     document.addEventListener("pointerout", leave);
     document.addEventListener("click", click, true);
-    const heading = document.querySelector<HTMLElement>("main h1");
+    const heading = document.querySelector<HTMLElement>("main h1, main [role='heading'][aria-level='1']");
     if (unlocked && enabledRef.current && heading) timer.current = window.setTimeout(() => void say(`${nameOf(heading)}, ekran açıldı`), 450);
     return () => {
       document.removeEventListener("pointerover", over);
       document.removeEventListener("focusin", focus);
+      window.removeEventListener(EXPLORE_ANNOUNCE_EVENT, announceMessage);
       document.removeEventListener("touchstart", touch);
       document.removeEventListener("touchmove", touch);
       document.removeEventListener("pointerout", leave);
@@ -198,22 +204,7 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
       speakRef.current = null;
       stop(); current.current = null;
     };
-  }, [routeKey, unlocked]);
-
-  const start = (initialAnnouncement = "") => {
-    try {
-      const audio = new AudioContext();
-      context.current = audio;
-      void audio.resume().then(() => {
-        enabledRef.current = true;
-        setEnabled(true); setUnlocked(true);
-        const message = initialAnnouncement || "Sesli keşif açık. Öğelerin üzerine gelin, odaklanın veya dokunun.";
-        setStatus(message);
-        speakRef.current?.(message);
-        try { localStorage.setItem(STORAGE_KEY, "on"); } catch { /* private mode */ }
-      }).catch(() => { void audio.close(); setStatus("Ses başlatılamadı. Tarayıcının ses izinlerini kontrol edin."); });
-    } catch { setStatus("Bu tarayıcı yerel ses çıkışını desteklemiyor."); }
-  };
+  }, [routeKey, unlocked, start]);
 
   const toggle = () => {
     const next = !enabled;
@@ -228,7 +219,7 @@ export function ExploreSpeech({ routeKey }: { routeKey: string }) {
     } else setStatus("Ekranı keşfetme sesi açık.");
   };
   return <aside className="explore-control" aria-label="Ekranı keşfetme sesi">
-    <button type="button" aria-label={!unlocked ? "Sesli keşfi başlat" : enabled ? "Keşif sesini kapat" : "Keşif sesini aç"} title={!unlocked ? "Sesli keşfi başlat" : enabled ? "Keşif sesini kapat" : "Keşif sesini aç"} aria-pressed={unlocked && enabled} onClick={unlocked ? toggle : () => start()}>{unlocked && !enabled ? "🔇" : "🔊"}</button>
-    <span className="sr-only" aria-live="polite">{status}</span>
+    <button type="button" aria-label={!unlocked ? "Sesli keşfi başlat" : enabled ? "Keşif sesini kapat" : "Keşif sesini aç"} aria-pressed={unlocked && enabled} onClick={unlocked ? toggle : () => start()}><span aria-hidden="true">{unlocked && !enabled ? "🔇" : "🔊"}</span><span>{!unlocked ? "Sesi başlat" : enabled ? "Ses açık" : "Ses kapalı"}</span></button>
+    <span className="sr-only" role="status">{status}</span>
   </aside>;
 }

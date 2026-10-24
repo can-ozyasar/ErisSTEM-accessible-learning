@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { useLearningSpeech } from "./useLearningSpeech";
-import { fetchAudio } from "./audio_cache";
 
 type Source = { page: number; section: string; excerpt: string };
 type Reply = { reply: string; stage: string; sources: Source[] };
@@ -18,11 +17,9 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
   const [listening, setListening] = useState(false);
-  const audio = useRef<HTMLAudioElement | null>(null);
-  const audioUrl = useRef<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
-  const { speak, stop } = useLearningSpeech(1);
-  useEffect(() => () => { recognition.current?.abort(); audio.current?.pause(); if (audioUrl.current) URL.revokeObjectURL(audioUrl.current); stop(); }, [stop]);
+  const { speak, status: speechStatus } = useLearningSpeech(1);
+  useEffect(() => () => { recognition.current?.abort(); }, []);
   const dictate = async () => {
     if (listening) { recognition.current?.abort(); return; }
     const browser = window as Window & { SpeechRecognition?: RecognitionCtor; webkitSpeechRecognition?: RecognitionCtor };
@@ -59,17 +56,6 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
     } catch (error) { setNotice(error instanceof Error ? error.message : "Yanıt alınamadı."); }
     finally { setPending(false); }
   };
-  const read = async (entry: Entry, turnNumber: number) => {
-    audio.current?.pause(); stop(); if (audioUrl.current) URL.revokeObjectURL(audioUrl.current);
-    try {
-      const data = await fetchAudio(`tutor:${questionId}:${entry.response.reply}`, `${api}/v1/question-bank/student/questions/${questionId}/tutor/audio`, {
-        method: "POST", headers: { "X-Role": "student", "Content-Type": "application/json" },
-        body: JSON.stringify({ message: entry.message, turns: turnNumber, selected_choice: entry.selectedChoice }),
-      });
-      const url = URL.createObjectURL(new Blob([data.slice(0)], { type: "audio/wav" })); audioUrl.current = url;
-      audio.current = new Audio(url); await audio.current.play();
-    } catch { speak(entry.response.reply); }
-  };
   return <section className="question-phase" aria-labelledby="tutor-title">
     <p className="phase-number">İSTEĞE BAĞLI / BİRLİKTE ÇÖZ</p><h3 id="tutor-title">Soru üzerine konuşalım</h3>
     <p>Yardım istediğinde soruyu birlikte inceleriz. Kaynak bilgisini kullanırız; doğru şıkkı hemen söylemeyiz.</p>
@@ -77,7 +63,7 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
       <ol className="tutor-dialogue" aria-live="polite">{entries.map((entry, index) => <li key={index}>
         <p><strong>Sen:</strong> {entry.message}</p><p><strong>Destekçi:</strong> {entry.response.reply}</p>
         {entry.response.sources.length > 0 && <details><summary>MEB kitap kanıtı</summary><ul>{entry.response.sources.map(source => <li key={`${source.page}-${source.excerpt}`}><strong>{source.section}, PDF s. {source.page}:</strong> {source.excerpt}</li>)}</ul></details>}
-        <button type="button" className="quiet-button" onClick={() => void read(entry, index)}>Yanıtı dinle</button>
+        <button type="button" className="quiet-button" onClick={() => speak(entry.response.reply)}>Yanıtı dinle</button>
       </li>)}</ol>
       {entries.length < 12 && <form onSubmit={event => { event.preventDefault(); if (message.trim()) void ask(message.trim()); }}>
         <label>Ne düşünüyorsun?<textarea value={message} maxLength={500} onChange={event => setMessage(event.target.value)} placeholder="Örneğin: Soru hangi olayı soruyor? A şıkkındaki tarih doğru mu?" /></label>
@@ -85,7 +71,7 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
         <button type="submit" disabled={pending || !message.trim()}>Gönder</button>
         {entries.length === 0 && <button type="button" className="quiet-button" disabled={pending} onClick={() => void ask("Bu soruyu beraber nasıl çözebiliriz?")}>İlk ipucunu iste</button>}
       </form>}
-      <p role="status">{notice || (entries.length >= 12 ? "Bu sorudaki konuşma sınırına ulaştın. Şimdi kendi yanıtını ve gerekçeni yazabilirsin." : "")}</p>
+      <p role="status">{notice || speechStatus || (entries.length >= 12 ? "Bu sorudaki konuşma sınırına ulaştın. Şimdi kendi yanıtını ve gerekçeni yazabilirsin." : "")}</p>
     </>
   </section>;
 }

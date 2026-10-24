@@ -40,12 +40,15 @@ export function QuestionBankStudent({ api, onBack }: { api: string; onBack: () =
   useEffect(() => {
     const item = visibleList[index];
     if (!item) return;
+    const controller = new AbortController();
     const cached = questionCache.get(item.id);
     if (cached) {
-      setQuestion(cached.question); setUnits(cached.units); setAudioSegments(cached.audio_segments); setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`);
-      return;
+      queueMicrotask(() => {
+        if (controller.signal.aborted) return;
+        setQuestion(cached.question); setUnits(cached.units); setAudioSegments(cached.audio_segments); setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`);
+      });
+      return () => controller.abort();
     }
-    const controller = new AbortController();
     void fetch(`${api}/v1/question-bank/student/questions/${item.id}`, { headers, signal: controller.signal })
       .then(response => { if (!response.ok) throw Error(); return response.json() as Promise<QuestionPayload>; })
       .then(value => { if (!controller.signal.aborted) { rememberQuestion(item.id, value); setQuestion(value.question); setUnits(value.units); setAudioSegments(value.audio_segments); setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`); } })

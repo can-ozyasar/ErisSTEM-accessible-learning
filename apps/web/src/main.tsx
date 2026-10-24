@@ -12,13 +12,13 @@ import { StudentLibrary } from "./StudentLibrary";
 import { VoiceCommandPanel } from "./VoiceCommandPanel";
 import { WritingSpace } from "./WritingSpace";
 import { ExploreSpeech } from "./ExploreSpeech";
+import { AccessibilitySettings } from "./AccessibilitySettings";
 import { EntryPortal, PortalNav, TeacherHome } from "./EntryPortal";
 
 type Block = { id: string; kind: "heading" | "paragraph" | "formula-display"; text?: string; latex?: string; mathml?: string; status: string; revision: number; source: { page: number; bbox: number[]; source_checksum: string; extraction_step: string }; validation: { confidence: number; reasons: string[] } };
 type Document = { id: string; title: string; license_notice: string; published_revision: number; blocks: Block[] };
 type ReadingUnit = { id: string; kind: string; navigation_label: string; spoken_text: string; braille_available: boolean; reading_order: number };
 type ReadingPlanResponse = { plan: { units: ReadingUnit[] }; unavailable_block_ids: string[] };
-type StudentDocumentSummary = { id: string; title: string; published_revision: number; block_count: number };
 type StudentTable = { id: string; cells: TableCell[] };
 // Üretimde istekler aynı-origin nginx proxy'si üzerinden gider; uzak/IDE önizlemelerinde
 // tarayıcının kendi localhost'una yanlışlıkla bağlanılmaz.
@@ -237,26 +237,15 @@ function currentStudentRoute(): { view: StudentView; documentId: string } {
 
 function StudentApp() {
   const [route, setRoute] = useState(currentStudentRoute);
-  const [documents, setDocuments] = useState<StudentDocumentSummary[]>([]);
-  const [catalogStatus, setCatalogStatus] = useState("Yayımlanmış belgeler yükleniyor.");
-  const [search, setSearch] = useState("");
   const [writing, setWriting] = useState("");
   const [writingStatus, setWritingStatus] = useState("Bu yazı yalnız bu oturumda tutulur; sunucuya gönderilmez.");
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch(`${API}/v1/student/documents`, { headers: { "X-Role": "student" }, signal: controller.signal })
-      .then(response => { if (!response.ok) throw new Error("catalog"); return response.json() as Promise<StudentDocumentSummary[]>; })
-      .then(items => { if (!controller.signal.aborted) { setDocuments(items); setCatalogStatus(items.length ? "" : "Henüz yayımlanmış belge bulunmuyor."); } })
-      .catch(() => { if (!controller.signal.aborted) setCatalogStatus("Belge listesi yüklenemedi."); });
-    return () => controller.abort();
-  }, []);
   useEffect(() => {
     const onHistory = () => setRoute(currentStudentRoute());
     window.addEventListener("popstate", onHistory);
     return () => window.removeEventListener("popstate", onHistory);
   }, []);
   useEffect(() => {
-    const frame = window.requestAnimationFrame(() => window.document.querySelector<HTMLElement>("main h1")?.focus());
+    const frame = window.requestAnimationFrame(() => window.document.querySelector<HTMLElement>("main h1, main [role='heading'][aria-level='1']")?.focus());
     return () => window.cancelAnimationFrame(frame);
   }, [route]);
   const navigate = (view: StudentView, documentId = "") => {
@@ -441,6 +430,7 @@ function ReviewerPublish() {
 }
 
 const mode = new URLSearchParams(window.location.search).get("mode");
+const isTeacherRoute = ["teacher", "learning-review", "pilot", "learning-release", "question-bank-review", "teacher-editor", "table-review", "benchmark", "reviewer"].includes(mode ?? "");
 const screen = mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "question-bank-review" ? <QuestionBankReview api={API} /> : mode === "teacher-editor" ? <TeacherReview /> : mode === "teacher" ? <TeacherHome /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : mode === "student" ? <StudentApp /> : <EntryPortal />;
-createRoot(document.getElementById("root")!).render(<>{mode && mode !== "student" && <PortalNav mode={mode} />}{screen}</>);
+createRoot(document.getElementById("root")!).render(<><AccessibilitySettings />{isTeacherRoute && <><ExploreSpeech routeKey={`teacher:${mode}`} /><PortalNav mode={mode ?? ""} /></>}{screen}</>);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

@@ -14,8 +14,10 @@ ROOT = kaggle_ops.repo_root()
 PRIVATE = kaggle_ops.private_root()
 INPUT = PRIVATE / "eristem_history_tts_eval_v1/tts-history-eval-v1.json"
 PIPER = PRIVATE / "tts_history_piper_v1"
-OUTPUT = PRIVATE / "tts_history_listening_v1"
+OUTPUT = PRIVATE / "tts_history_listening_v2"
 KERNEL = "eristem-history-tts-chatterbox-v3-v2"
+# Pair the listening study with the exact V3 WAVs used by the ASR v2 run.
+CHATTERBOX_OUTPUT_RUN = "20261020T091906Z"
 
 
 def load_report(path: Path, input_hash: str) -> dict:
@@ -27,7 +29,7 @@ def load_report(path: Path, input_hash: str) -> dict:
     return report
 
 
-def chatterbox_audio(input_hash: str) -> tuple[Path, dict]:
+def chatterbox_audio(input_hash: str, output_run: str | None = None) -> tuple[Path, dict]:
     root = PRIVATE / "kaggle-notebook-outputs/muhammedcanozyasar" / KERNEL
     matches = []
     for manifest_path in root.glob("*/download_manifest.json"):
@@ -40,9 +42,18 @@ def chatterbox_audio(input_hash: str) -> tuple[Path, dict]:
         except (OSError, ValueError):
             continue
         matches.append((manifest_path.parent, payload, report))
-    if len(matches) != 1:
-        raise ValueError("Bu tarih girdisi için tam bir özel Chatterbox WAV paketi bulunamadı")
-    directory, payload, report = matches[0]
+    if output_run is not None:
+        matches = [item for item in matches if item[0].name == output_run]
+    # Re-running ``fetch`` can create more than one local download directory
+    # for the same remote WAV set.  Accept those exact duplicates, but never
+    # silently choose between different synthesis outputs.
+    signatures = {
+        tuple(sorted((item["id"], item["sha256"]) for item in payload["files"]))
+        for _, payload, _ in matches
+    }
+    if len(signatures) != 1:
+        raise ValueError("Bu tarih girdisi için birden çok farklı Chatterbox WAV paketi bulundu; koşum kimliği seçin")
+    directory, payload, report = max(matches, key=lambda item: item[0].name)
     return directory, {"manifest": payload, "report": report}
 
 
@@ -50,7 +61,7 @@ def main() -> None:
     input_hash = kaggle_ops.sha256(INPUT)
     source = json.loads(INPUT.read_text(encoding="utf-8"))
     piper = load_report(PIPER / "run_records.json", input_hash)
-    chatterbox_dir, chatterbox = chatterbox_audio(input_hash)
+    chatterbox_dir, chatterbox = chatterbox_audio(input_hash, CHATTERBOX_OUTPUT_RUN)
     if OUTPUT.exists():
         raise FileExistsError("Dinleme paketi zaten var; önceki yanıtlar korunuyor")
     expected_ids = [item["id"] for item in source["items"]]

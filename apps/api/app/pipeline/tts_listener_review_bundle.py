@@ -24,7 +24,7 @@ _SHA = re.compile(r"^[0-9a-f]{64}$")
 def _read(path: Path) -> dict:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("invalid_private_review_input")
+        raise TypeError("invalid_private_review_input")
     return payload
 
 
@@ -45,7 +45,7 @@ def build_review_bundle(packet_path: Path, asr_input_path: Path, output_dir: Pat
     seen: set[str] = set()
     for item in items:
         if not isinstance(item, dict):
-            raise ValueError("invalid_private_review_item")
+            raise TypeError("invalid_private_review_item")
         item_id, digest, reference = item.get("id"), item.get("audio_sha256"), item.get("reference_spoken_text")
         if not isinstance(item_id, str) or not _ID.fullmatch(item_id) or item_id in seen:
             raise ValueError("invalid_or_duplicate_review_item_id")

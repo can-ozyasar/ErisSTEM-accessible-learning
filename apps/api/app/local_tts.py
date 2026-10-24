@@ -8,9 +8,9 @@ Both paths send text only over Docker's internal network.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import hashlib
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
@@ -80,7 +80,7 @@ def synthesize_cached_verified_text(text: str) -> bytes:
     root = _cache_root()
     if root is None:
         return synthesize_verified_text(text)
-    digest = hashlib.sha256(f"{VOICE_CACHE_VERSION}\0{text}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{VOICE_CACHE_VERSION}\0{text}".encode()).hexdigest()
     target = root / f"{digest}.wav"
     try:
         cached = target.read_bytes()

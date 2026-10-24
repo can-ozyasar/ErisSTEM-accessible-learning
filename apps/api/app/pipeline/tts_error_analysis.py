@@ -12,8 +12,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from .tts_text_metrics import speech_character_accuracy, speech_tokens
 from .tts_quality import TtsCandidateManifest, TtsGoldManifest
+from .tts_text_metrics import speech_character_accuracy, speech_tokens
 
 ACCURACY_BANDS = ((0.85, "below_85"), (0.95, "85_to_95"), (1.0, "95_to_100"))
 

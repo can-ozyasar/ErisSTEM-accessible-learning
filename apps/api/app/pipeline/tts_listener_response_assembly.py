@@ -13,7 +13,7 @@ from .tts_listener_study import ListenerReviewer, TtsListenerStudy, TtsSynthesis
 def _read(path: Path) -> dict:
     payload = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(payload, dict):
-        raise ValueError("invalid_listener_response_input")
+        raise TypeError("invalid_listener_response_input")
     return payload
 
 

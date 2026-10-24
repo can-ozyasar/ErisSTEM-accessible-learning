@@ -1,5 +1,5 @@
-from pathlib import Path
 import re
+from pathlib import Path
 
 import pymupdf
 import pytest
@@ -7,7 +7,6 @@ import pytest
 from app.question_bank_extract import Line, _answer_key_lines, extract_book, extract_page
 from app.question_bank_structure import Question, navigation_units
 from app.question_bank_visual_proposals import SOURCE_CHECKSUM
-
 
 BOOK = Path(__file__).parents[3] / "data/soru_bankasi/vip-9-sinif-tarih-soru-bankasi.pdf"
 pytestmark = pytest.mark.skipif(not BOOK.is_file(), reason="Local copyrighted source not installed")

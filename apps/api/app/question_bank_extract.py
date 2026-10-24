@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pymupdf
+from pydantic import ValidationError
 
 from .question_bank_structure import Question
 from .question_bank_visual_proposals import proposal as visual_proposal
@@ -20,9 +21,9 @@ QUESTION_START = re.compile(r"^([1-9][0-9]?)\.\s*(.*)$")
 CHOICE_START = re.compile(r"^([A-E])\)\s*(.*)$")
 STATEMENT_START = re.compile(r"^(I|II|III|IV|V)\.\s*(.*)$")
 BLANK_MARKER = re.compile(r"-{4,}|_{3,}|\.{5,}")
-TEST_HEADING = re.compile(r"^(Kavrama|Geliştirme|Vip|VİP|Tarama)\s+Testi\s*-\s*(\d{1,2})$", re.I)
-NUMBERED_TEST = re.compile(r"^Test\s*-\s*(\d{1,2})$", re.I)
-ANSWER_KEY_CELL = re.compile(r"^\d{1,2}\s*[-–.]\s*[A-E]$", re.I)
+TEST_HEADING = re.compile(r"^(Kavrama|Geliştirme|Vip|VİP|Tarama)\s+Testi\s*-\s*(\d{1,2})$", re.IGNORECASE)
+NUMBERED_TEST = re.compile(r"^Test\s*-\s*(\d{1,2})$", re.IGNORECASE)
+ANSWER_KEY_CELL = re.compile(r"^\d{1,2}\s*[-–.]\s*[A-E]$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -233,11 +234,11 @@ def _parse_question(lines, images, page_number, column, checksum):
             pending.append(line)
         elif pending_kind == "statement" and pending and abs(line.bbox[1] - pending[-1].bbox[1]) < 4:
             pending.append(line)
-        elif line.bold and pending and not pending[-1].bold and not STATEMENT_START.match(value):
-            flush()
-            pending_kind = "prompt"
-            pending.append(line)
-        elif pending_kind == "statement" and pending and line.bbox[1] - pending[-1].bbox[3] > 7:
+        elif (
+            line.bold and pending and not pending[-1].bold and not STATEMENT_START.match(value)
+        ) or (
+            pending_kind == "statement" and pending and line.bbox[1] - pending[-1].bbox[3] > 7
+        ):
             flush()
             pending_kind = "prompt"
             pending.append(line)
@@ -331,7 +332,7 @@ def _parse_question(lines, images, page_number, column, checksum):
                "status": "review_required" if issues else "draft"}
     try:
         Question.model_validate(payload)
-    except Exception:
+    except ValidationError:
         if "structure_invalid" not in issues:
             issues.append("structure_invalid")
     return {"question": payload, "issues": issues}

@@ -96,7 +96,7 @@ def _require_release_evidence(manifest: TtsAudioAssetManifest, root: Path, unit:
         except (OSError, json.JSONDecodeError) as error:
             raise ValueError("invalid_tts_release_evidence") from error
         if not isinstance(report, dict):
-            raise ValueError("invalid_tts_release_evidence")
+            raise TypeError("invalid_tts_release_evidence")
         reports.append(report)
     quality, listener = reports
     kind = "text" if unit.kind in {"heading", "paragraph"} else unit.kind

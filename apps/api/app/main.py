@@ -15,9 +15,8 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from .auth import Role, require_roles
-from .history_source import router as history_router
-from .question_bank_routes import question_bank_router
 from .exam_practice import ExamStore
+from .history_source import router as history_router
 from .job_store import (
     BenchmarkAnnotation,
     DocumentStore,
@@ -28,7 +27,11 @@ from .job_store import (
 )
 from .learning_operations import LearningOperationsStore
 from .learning_routes import learning_router
-from .local_tts import LocalTtsUnavailable, synthesize_cached_verified_text, synthesize_verified_text
+from .local_tts import (
+    LocalTtsUnavailable,
+    synthesize_cached_verified_text,
+    synthesize_verified_text,
+)
 from .pipeline.accessibility_reader import ReadingPlan, build_reading_plan
 from .pipeline.accessible_content import CanonicalAccessibleBlock
 from .pipeline.braille_adapter import (
@@ -67,6 +70,7 @@ from .pipeline.turkish_math_speech import (
     turkish_math_speech_plan,
 )
 from .pipeline.type_specific_accessibility import FormulaAccessibility
+from .question_bank_routes import question_bank_router
 from .table_review import (
     PublishedTable,
     TableReviewApproval,

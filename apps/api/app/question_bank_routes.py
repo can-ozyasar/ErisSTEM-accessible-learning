@@ -268,14 +268,22 @@ def question_bank_router(store: LearningOperationsStore):
         index = _rag_index()
         approved = _approved_rag_ids(store, index["source_checksum"])
         query = " ".join([*(part.text for part in question.parts), *(choice.text for choice in question.choices)])
-        ranked = rank_chunks(index["chunks"], query, limit=8)
+        ranked = rank_chunks(index["chunks"], query, limit=24)
+        query_terms = {term.casefold() for term in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]{5,}", query)}
+        entity_matches = [item for item in index["chunks"]
+                          if any(term in item["text"].casefold() for term in query_terms)]
+        chosen = list(ranked[:8])
+        for item in entity_matches:
+            if item["id"] not in {current["id"] for current in chosen}:
+                chosen.append({**item, "score": 0.0})
+        chosen.sort(key=lambda item: (-item["score"], item["page"], item["id"]))
         return {"question_id": question_id,
                 "notice": "Bunlar PDF içinden otomatik önerilerdir. Kaynak onayı olmadan öğrenci koçunda veya Kaggle verisinde kullanılamaz.",
                 "candidates": [{"id": item["id"], "text": item["text"][:520], "page": item["page"],
                                 "section": item["section_title"], "score": item["score"],
                                 "approved": item["id"] in approved,
                                 "review_warnings": candidate_review_warnings(item["text"])}
-                               for item in ranked]}
+                               for item in chosen[:12]]}
 
     @router.get("/teacher/tutor/questions/{question_id}/review")
     def tutor_review_candidate(question_id: str, _: Role = teacher):

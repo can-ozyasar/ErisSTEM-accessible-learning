@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useLearningSpeech } from "./useLearningSpeech";
 
-type Source = { page: number; section: string; excerpt: string };
-type Reply = { reply: string; stage: string; sources: Source[] };
+type Source = { id: string; page: number; section: string; excerpt: string };
+type Reply = { session_id: string; stage: string; student_prompt: string; short_spoken_text: string; source_ids: string[]; abstain_reason: string | null; can_reveal_explanation: boolean; sources: Source[] };
 type Entry = { message: string; response: Reply; selectedChoice: string | null };
 type Recognition = { lang: string; continuous: boolean; interimResults: boolean; processLocally?: boolean;
   onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
@@ -17,6 +17,7 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
   const [pending, setPending] = useState(false);
   const [notice, setNotice] = useState("");
   const [listening, setListening] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
   const { speak, status: speechStatus } = useLearningSpeech(1);
   useEffect(() => () => { recognition.current?.abort(); }, []);
@@ -42,17 +43,17 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
       recognition.current = session; session.start(); setListening(true); setNotice("Mikrofon açık. Söylediğin metni göndermeden önce kontrol et.");
     } catch { setListening(false); setNotice("Mikrofon başlatılamadı. Metni yazabilirsin."); }
   };
-  const ask = async (value: string) => {
+  const ask = async (value: string, submitAnswer = false) => {
     if (pending || entries.length >= 12) return;
     setPending(true); setNotice("Birlikte düşünme yanıtı hazırlanıyor.");
-    const turn = { message: value, turns: entries.length, selected_choice: selectedChoice || null };
+    const turn = { message: value, session_id: sessionId, selected_choice: selectedChoice || null, submit_answer: submitAnswer };
     try {
       const response = await fetch(`${api}/v1/question-bank/student/questions/${questionId}/tutor`, {
         method: "POST", headers: { "X-Role": "student", "Content-Type": "application/json" }, body: JSON.stringify(turn),
       });
       if (!response.ok) throw Error("Yardım hizmeti kullanılamıyor.");
       const result = await response.json() as Reply;
-      setEntries(previous => [...previous, { message: value, response: result, selectedChoice: turn.selected_choice }]); setMessage(""); setNotice("");
+      setSessionId(result.session_id); setEntries(previous => [...previous, { message: value, response: result, selectedChoice: turn.selected_choice }]); setMessage(""); setNotice("");
     } catch (error) { setNotice(error instanceof Error ? error.message : "Yanıt alınamadı."); }
     finally { setPending(false); }
   };
@@ -61,14 +62,15 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
     <p>Yardım istediğinde soruyu birlikte inceleriz. Kaynak bilgisini kullanırız; doğru şıkkı hemen söylemeyiz.</p>
     <>
       <ol className="tutor-dialogue" aria-live="polite">{entries.map((entry, index) => <li key={index}>
-        <p><strong>Sen:</strong> {entry.message}</p><p><strong>Destekçi:</strong> {entry.response.reply}</p>
+        <p><strong>Sen:</strong> {entry.message}</p><p><strong>Destekçi:</strong> {entry.response.student_prompt}</p>
         {entry.response.sources.length > 0 && <details><summary>MEB kitap kanıtı</summary><ul>{entry.response.sources.map(source => <li key={`${source.page}-${source.excerpt}`}><strong>{source.section}, PDF s. {source.page}:</strong> {source.excerpt}</li>)}</ul></details>}
-        <button type="button" className="quiet-button" onClick={() => speak(entry.response.reply)}>Yanıtı dinle</button>
+        <button type="button" className="quiet-button" onClick={() => speak(entry.response.short_spoken_text)}>Yanıtı dinle</button>
       </li>)}</ol>
       {entries.length < 12 && <form onSubmit={event => { event.preventDefault(); if (message.trim()) void ask(message.trim()); }}>
         <label>Ne düşünüyorsun?<textarea value={message} maxLength={500} onChange={event => setMessage(event.target.value)} placeholder="Örneğin: Soru hangi olayı soruyor? A şıkkındaki tarih doğru mu?" /></label>
         <button type="button" className="quiet-button" onClick={() => void dictate()}>{listening ? "Dinlemeyi durdur" : "Cihazda konuşarak yaz"}</button>
         <button type="submit" disabled={pending || !message.trim()}>Gönder</button>
+        {entries.length >= 3 && selectedChoice && <button type="button" disabled={pending} onClick={() => void ask(message.trim() || "Yanıtımı kaynakla kontrol edelim.", true)}>Yanıtımı kontrol et</button>}
         {entries.length === 0 && <button type="button" className="quiet-button" disabled={pending} onClick={() => void ask("Bu soruyu beraber nasıl çözebiliriz?")}>İlk ipucunu iste</button>}
       </form>}
       <p role="status">{notice || speechStatus || (entries.length >= 12 ? "Bu sorudaki konuşma sınırına ulaştın. Şimdi kendi yanıtını ve gerekçeni yazabilirsin." : "")}</p>

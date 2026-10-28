@@ -1,0 +1,45 @@
+from app import tutor_coach
+from app.tutor_coach import CoachContext, coach, next_stage
+
+
+def context(source_ids=None):
+    return CoachContext(
+        question_id="q-1",
+        question_text="Bir olayın nedenini soran tarih sorusu.",
+        choice_text="Bir yorum ifadesi",
+        section_title="Tarihin Doğası",
+        source_ids=source_ids if source_ids is not None else ["meb-1"],
+        evidence="Tarih, geçmişteki insan faaliyetlerini yer ve zaman göstererek inceler.",
+    )
+
+
+def test_stage_machine_only_reveals_after_submission():
+    assert next_stage(None, False) == "soru_analizi"
+    assert next_stage("soru_analizi", False) == "kanit_bulma"
+    assert next_stage("kanit_bulma", False) == "sik_elemesi"
+    assert next_stage("sik_elemesi", False) == "ogrenci_yaniti"
+    assert next_stage("sik_elemesi", True) == "gerekceli_aciklama"
+
+
+def test_answer_key_never_reaches_prompt_or_early_reply(monkeypatch):
+    captured = []
+
+    def fake_hint(stage, supplied_context, message):
+        prompt = tutor_coach._prompt(stage, supplied_context, message)
+        captured.append(prompt)
+        return "A şıkkı doğrudur.", {"llm": 1, "first_token": 1}
+
+    monkeypatch.setattr(tutor_coach, "_llm_hint", fake_hint)
+    reply = coach(context(), None, "yardım et", False, "A", "C")
+    assert reply.stage == "soru_analizi"
+    assert not reply.can_reveal_explanation
+    assert "C" not in captured[0]
+    # Unsafe model text is discarded in favour of the deterministic hint.
+    assert "A şıkkı" not in reply.student_prompt
+
+
+def test_no_approved_source_abstains():
+    reply = coach(context([]), None, "yardım et", False, None, "B")
+    assert reply.abstain_reason == "approved_source_unavailable"
+    assert reply.source_ids == []
+    assert not reply.can_reveal_explanation

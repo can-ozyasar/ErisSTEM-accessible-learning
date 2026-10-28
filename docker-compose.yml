@@ -9,6 +9,9 @@ services:
       LOCAL_TTS_CACHE_ROOT: /private/tts-cache
       LOCAL_TTS_DEMO_ROOT: /private/tts-v5-demo
       LOCAL_TTS_DEMO_EXTRA_ROOT: /private/tts-v5-extra/installed
+      # Set only with the gpu profile. Without this endpoint the API uses its
+      # answer-key-isolated deterministic coaching fallback.
+      LOCAL_TUTOR_LLM_URL: ${LOCAL_TUTOR_LLM_URL:-}
     volumes:
       - ./data/derived:/private/derived:ro
       - ./data/meb:/private/meb:ro
@@ -40,6 +43,15 @@ services:
       timeout: 4s
       retries: 10
       start_period: 15s
+    networks: [internal]
+  tutor-llm:
+    profiles: ["gpu"]
+    build: ./apps/tutor_llm
+    environment:
+      TUTOR_MODEL_MANIFEST: /models/manifest.json
+    volumes:
+      - ./data/private/tutor-models/qwen3-14b-v1:/models:ro
+    gpus: all
     networks: [internal]
   worker:
     build: ./apps/api

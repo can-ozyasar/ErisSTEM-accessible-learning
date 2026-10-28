@@ -102,7 +102,7 @@ export function QuestionBankQuestion({ question, units, segments, api, onPreviou
       : <label className="focused-written-answer">Yanıt taslağın<textarea value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Yanıtını burada düşünebilirsin." /></label>}
     <p role="status" className="focused-audio-status">{audioStatus}</p>
     <div className="focused-actions"><button type="button" onClick={() => setHelpOpen(value => !value)} aria-expanded={helpOpen}>{helpOpen ? "Konuşmayı gizle" : "Takıldım, birlikte çözelim"}</button></div>
-    <div hidden={!helpOpen}><QuestionTutor api={api} questionId={question.id} selectedChoice={answer} /></div>
+    <div hidden={!helpOpen}><QuestionTutor key={question.id} api={api} questionId={question.id} selectedChoice={answer} /></div>
     <nav className="focused-question-nav" aria-label="Sorular arasında ilerle"><button type="button" className="quiet-button" onClick={onPrevious} disabled={!onPrevious}>← Önceki soru</button><button type="button" onClick={onNext} disabled={!onNext}>Sonraki soru →</button></nav>
     <details className="question-more"><summary>Ayrıntılı okuma ve notlar</summary>
       <p>Bir bölümü ayrı dinlemek veya gerekçeni yazmak istersen burayı kullan.</p>

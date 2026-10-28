@@ -67,9 +67,11 @@ def test_teacher_review_controls_student_release(tmp_path, monkeypatch):
     store.save("rag:aaaaaaaaaaaa:sample", "rag", "a" * 16,
                {"chunk_id": "sample", "source_checksum": "a" * 64, "approved": True}, 0)
     first_turn = client.post(f"{base}/student/questions/{approved['id']}/tutor", headers=student,
-                             json={"message": "Bu soruyu nasıl çözebilirim?", "turns": 0})
+                             json={"message": "Bu soruyu nasıl çözebilirim?"})
     assert first_turn.status_code == 200
-    assert first_turn.json()["stage"] == "interpret"
+    assert first_turn.json()["stage"] == "soru_analizi"
+    assert first_turn.json()["source_ids"] == ["sample"]
+    assert not first_turn.json()["can_reveal_explanation"]
     assert first_turn.json()["sources"][0]["page"] == 12
     assert "doğru cevap" not in first_turn.text.lower()
     assert [unit["label"] for unit in reading["units"]][-5:] == ["Şık A", "Şık B", "Şık C", "Şık D", "Şık E"]

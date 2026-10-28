@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import os
 import re
+import time
 from functools import lru_cache
 from pathlib import Path
+from uuid import uuid4
 
 import pymupdf
 from fastapi import APIRouter, Depends, HTTPException
@@ -22,6 +24,8 @@ from .learning_operations import LearningOperationsStore, LearningRecord
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
 from .question_bank_extract import extract_book
 from .question_bank_structure import Question, navigation_units, question_audio_segments
+from .tutor_coach import CoachContext, coach
+from .tutor_dataset import REVIEW_STAGES, TutorReviewInput, review_id, validate_review_payload
 
 SOURCE = Path("/private/question-bank/vip-9-sinif-tarih-soru-bankasi.pdf")
 
@@ -94,8 +98,9 @@ class RagApproval(BaseModel):
 
 class TutorTurn(BaseModel):
     message: str = Field(min_length=1, max_length=500)
-    turns: int = Field(ge=0, le=12)
+    session_id: str | None = Field(default=None, max_length=80)
     selected_choice: str | None = Field(default=None, pattern=r"^[A-E]$")
+    submit_answer: bool = False
 
 
 def _rag_index():
@@ -187,6 +192,59 @@ def question_bank_router(store: LearningOperationsStore):
                 "approved_count": approved, "quarantined_count": quarantined,
                 "source_checksum": book["source_checksum"],
                 "notice": "Vip Yayınları telifli PDF: yalnız yerel öğretmen incelemesi."}
+
+    @router.get("/teacher/tutor/summary")
+    def tutor_summary(_: Role = teacher):
+        book = _book()
+        module_id = book["source_checksum"][:16]
+        questions = [item for item in store.list("qb", module_id)
+                     if item["question"].get("status") == "approved" and not _layout_contaminated(item["question"])]
+        reviewed = [item for item in store.list("tutor_review", module_id) if item.get("approved")]
+        groups = {item["question_id"] for item in reviewed}
+        complete = {question_id for question_id in groups
+                    if {item["stage"] for item in reviewed if item["question_id"] == question_id} == set(REVIEW_STAGES)}
+        return {"approved_questions": len(questions), "approved_examples": len(reviewed),
+                "complete_question_groups": len(complete), "required_questions": 60,
+                "required_examples": 180,
+                "ready_for_qlora_export": len(complete) >= 60,
+                "notice": "QLoRA dışa aktarımı yalnız davranış örneklerini içerir; MEB metni, soru bankası ve cevap anahtarı içermez."}
+
+    @router.get("/teacher/tutor/questions/{question_id}/review")
+    def tutor_review_candidate(question_id: str, _: Role = teacher):
+        book = _book()
+        question = _student_question(book, store, question_id)
+        index = _rag_index()
+        context = book["page_contexts"][question.source.page]
+        topic = context.get("topic")
+        if not matching_sections(index, topic):
+            raise HTTPException(422, "Bu soru MEB başlığıyla güvenle eşleşmiyor")
+        query = " ".join(part.text for part in question.parts)
+        sources = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic, query)
+        if not sources:
+            raise HTTPException(422, "Bu soru için öğretmence onaylı MEB kanıtı bulunmuyor")
+        return {"question_id": question_id, "source_ids": [item["id"] for item in sources],
+                "stages": [{"stage": stage, "record": store.get(review_id(question_id, stage))}
+                           for stage in REVIEW_STAGES],
+                "notice": "Rehber yanıt cevap veya şık söylemeden, kaynakla bağ kuran sade Türkçe ipucu olmalı."}
+
+    @router.put("/teacher/tutor/reviews/{question_id}/{stage}")
+    def save_tutor_review(question_id: str, stage: str, item: TutorReviewInput, _: Role = teacher):
+        if item.question_id != question_id or item.stage != stage:
+            raise HTTPException(409, "URL ile inceleme kaydı eşleşmiyor")
+        book = _book()
+        question = _student_question(book, store, question_id)
+        index = _rag_index()
+        topic = book["page_contexts"][question.source.page].get("topic")
+        allowed = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic,
+                           " ".join(part.text for part in question.parts))
+        try:
+            validate_review_payload(item, {source["id"] for source in allowed})
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        payload = item.model_dump(exclude={"expected_revision"})
+        payload["source_checksum"] = index["source_checksum"]
+        return store.save(review_id(question_id, stage), "tutor_review", book["source_checksum"][:16],
+                          payload, item.expected_revision)
 
     @router.get("/teacher/pages/{page_number}")
     def teacher_page(page_number: int, _: Role = teacher):
@@ -308,41 +366,49 @@ def question_bank_router(store: LearningOperationsStore):
                 "units": navigation_units(question), "audio_segments": question_audio_segments(question)}
 
     def tutor_data(question_id: str, turn: TutorTurn):
+        started = time.monotonic()
         book = _book()
         question = _student_question(book, store, question_id)
+        if turn.submit_answer and question.question_type == "multiple_choice" and not turn.selected_choice:
+            raise HTTPException(422, "Yanıtını kontrol etmek için bir şık seçmelisin")
         context = book["page_contexts"][question.source.page]
         index = _rag_index()
         topic = context.get("topic")
         section_ids = matching_sections(index, topic)
         if not section_ids:
-            return {"reply": "Bu testin konusu MEB kitabındaki başlıkla güvenle eşleşmedi. Soruda hangi kavramı aramamız gerektiğini birlikte belirleyelim: soru kökü senden ne istiyor?",
-                    "sources": [], "stage": "topic_unmatched"}
+            text = "Bu testin konusu MEB kitabındaki başlıkla güvenle eşleşmedi. Soru kökünün senden ne istediğini birlikte belirleyelim."
+            return {"session_id": turn.session_id or uuid4().hex, "stage": "soru_analizi", "student_prompt": text,
+                    "short_spoken_text": text, "source_ids": [], "abstain_reason": "topic_unmatched",
+                    "can_reveal_explanation": False, "sources": [], "timings_ms": {"total": int((time.monotonic() - started) * 1000)}}
         selected = next((choice for choice in question.choices if choice.label == turn.selected_choice), None)
         query = " ".join([turn.message, *(part.text for part in question.parts),
                           selected.text if selected else ""])
+        retrieval_started = time.monotonic()
         sources = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic, query)
-        if not sources:
-            return {"reply": "Bu konu için öğretmen onaylı bir MEB bilgi parçası henüz bulunmuyor. Soru kökünü kendi sözlerinle anlatır mısın?",
-                    "sources": [], "stage": "source_unavailable"}
-        evidence = sources[0]
-        if turn.turns == 0:
-            reply = "Önce soru kökünü birlikte okuyalım: senden hangi bilgiyi ya da karşılaştırmayı istiyor? Bir cümleyle anlatır mısın?"
-            stage = "interpret"
-        elif turn.turns == 1:
-            reply = f"MEB kitabında {evidence['section_title']} bölümüne bakalım. Bu bilgiyle seçeneklerden hangisini elemek ya da desteklemek istersin? Gerekçeni söyle."
-            stage = "connect"
-        elif turn.selected_choice:
-            year = re.search(r"\b(?:MÖ\s*)?\d{3,4}\b", selected.text) if selected else None
-            if year:
-                reply = f"{turn.selected_choice} seçeneğindeki {year.group()} tarihi hangi olayla ilgili? MEB kitabının {evidence['section_title']} bölümündeki bilgiyle karşılaştırıp açıklar mısın?"
-            else:
-                reply = f"{turn.selected_choice} seçeneğini neden düşündün? Kitabın {evidence['section_title']} bölümündeki bilgiyle karşılaştırınca hangi ifade belirleyici oluyor?"
-            stage = "justify"
-        else:
-            reply = "Şıkları tek tek düşünelim. İlk elemek istediğin şık hangisi ve hangi ifadeye dayanıyorsun?"
-            stage = "eliminate"
-        return {"reply": reply, "stage": stage,
-                "sources": [{"page": item["page"], "section": item["section_title"],
+        retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
+        session_id = turn.session_id or uuid4().hex
+        prior = store.get(f"tutor:{session_id}") if turn.session_id else None
+        if prior and (prior.get("question_id") != question_id or prior.get("source_checksum") != index["source_checksum"]):
+            raise HTTPException(409, "Koçluk oturumu bu soru veya kaynak sürümüyle eşleşmiyor")
+        if prior and prior.get("turn_count", 0) >= 12:
+            raise HTTPException(409, "Bu soru için konuşma sınırına ulaştın")
+        previous_stage = prior.get("stage") if prior else None
+        evidence = sources[0] if sources else None
+        coach_context = CoachContext(question_id=question_id,
+                                     question_text=" ".join(part.text for part in question.parts),
+                                     choice_text=selected.text if selected else None,
+                                     section_title=evidence["section_title"] if evidence else "MEB kitabı",
+                                     source_ids=[item["id"] for item in sources],
+                                     evidence=evidence["text"][:900] if evidence else "")
+        reply = coach(coach_context, previous_stage, turn.message, turn.submit_answer,
+                      turn.selected_choice, question.answer_label if question.answer_source_checked else None)
+        reply.timings_ms.update({"retrieval": retrieval_ms, "request_total": int((time.monotonic() - started) * 1000)})
+        store.save(f"tutor:{session_id}", "tutor", index["source_checksum"][:16],
+                   {"question_id": question_id, "source_checksum": index["source_checksum"],
+                    "stage": reply.stage, "turn_count": (prior or {}).get("turn_count", 0) + 1},
+                   (prior or {}).get("revision", 0))
+        return {"session_id": session_id, **reply.model_dump(),
+                "sources": [{"id": item["id"], "page": item["page"], "section": item["section_title"],
                              "section_id": item["section_id"], "bbox": item["bbox"],
                              "excerpt": item["text"][:420]} for item in sources]}
 
@@ -352,7 +418,7 @@ def question_bank_router(store: LearningOperationsStore):
 
     @router.post("/student/questions/{question_id}/tutor/audio")
     def tutor_audio(question_id: str, turn: TutorTurn, _: Role = student):
-        spoken = tutor_data(question_id, turn)["reply"]
+        spoken = tutor_data(question_id, turn)["short_spoken_text"]
         try:
             wav = synthesize_history_text(spoken)
         except LocalTtsUnavailable:

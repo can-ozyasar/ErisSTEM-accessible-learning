@@ -383,3 +383,266 @@ Kaggle notebook'unda başlatıldı. Tam koşu yaklaşık 3 saat 15 dakika kabul
 edilmiş konuşma, 1.500 adım, altı saniyeden kısa olmayan referans havuzu,
 ısıtma ve cosine öğrenme oranı zamanlamasını kullanır. Ağırlık yalnız Kaggle
 çıktısında tutulur; yerel indirme yapılmaz.
+
+V4 tam koşusu tamamlandı. Kaggle raporlarına yalnız bellek üzerinden erişildi:
+1.602 kayıt ve 11.703,85 saniye seçildi; 1.492 eğitim kaydının tamamı 1.500
+adımda görüldü. 1.010 eğitim kaydı altı saniyelik referans havuzuna girdi.
+İlk ve seçilen doğrulama kayıpları `5,974521` ve `5,006765` oldu; son
+değerlendirmede 110 held-out kayıt kullanıldı. Kısa sentez denetimi 3,2 saniye
+üretti. Modelin bildirilen SHA-256 değeri
+`274bfe98e45280aab2687f456bb94a86d0adfa3c220b9f0137a7c32f22648493`.
+Bu değer Kaggle raporundan okunmuştur; yerelde dosya hash doğrulaması
+yapılmamıştır. `eristem-tts-v3-finetune-eval-v4` private notebook'u ağırlığı
+Kaggle çıktısı olarak bağlayarak aynı 14 tarih metninde temel V3 ve V4 seslerini
+üretmek üzere başlatıldı. İnsan dinlemesi ve ASR karşılaştırması bekleniyor.
+
+V4 eş koşullu üretim değerlendirmesi tamamlandı: 28/28 ses üretildi. Temel V3
+sesleri 4,40--8,84 saniye (ortalama 6,631), V4 sesleri 3,92--8,32 saniye
+(ortalama 6,240) sürdü. Süreler eski 39,92 saniyelik bitiş hatasına işaret
+etmiyor; tek başına anlaşılabilirliği veya ses doğallığını doğrulamıyor.
+Whisper large-v3 taraması `eristem-tts-v3-finetune-asr-v4` üzerinde başlatıldı.
+Bu özetler Kaggle raporlarından bellekte okundu; model ve sesler indirilmedi.
+
+Whisper large-v3 28/28 sesi çözdü. Aynı 14 tarih metninde ortalama karakter
+doğruluğu temel modelde `0,9347`, V4'te `0,9400` idi (`+0,53` yüzde puan).
+ASR çıktısında kritik terim kaçırılan örnek sayısı sırasıyla `9/14` ve `8/14`,
+kaçırılan toplam terim sayısı her iki modelde `11` oldu. Ortalama üretim süresi
+`6,57` ve `6,13` saniye, gerçek zaman katsayısı `0,995` ve `0,990` ölçüldü.
+Bu, 14 metinlik küçük bir otomatik ön taramadır; ASR hataları ve test kümesinin
+deneyler boyunca tekrar kullanılması sonuçların genellenmesini sınırlar. V4'ün
+doğallığı, konuşmacı benzerliği ve öğrencilerce tercihi kör dinleme olmadan
+değerlendirilmiş sayılmaz.
+
+### Pilot ile V4 karşılaştırmasının denetimi ve kör dinleme
+
+Pilot ve V4 otomatik değerlendirmeleri aynı 14 kapalı metin özeti, aynı model
+revizyonu, kod revizyonu, referans ses özeti, tohum ve T4 türünü kullanmıştır.
+Bununla birlikte bağımsız koşularda temel modele ait 14 WAV dosyasının hash'i
+eşleşmedi. Sabit tohum dosya düzeyinde tekrarlanabilirliği garanti etmemiştir;
+farkın nedeni henüz ölçülmemiştir. Pilot `0,9422`, V4 `0,9400` karakter
+doğruluğu arasındaki 0,22 yüzde puanlık fark, küçük örneklem ve üretim
+değişkenliği karşısında modelin kesin kötüleştiğini göstermemektedir. Pilot ve
+V4 yalnız adım sayısında değil, referans havuzu ve veri kapsamı bakımından da
+farklıdır; nedensel bir eğitim süresi sonucu çıkarılamaz.
+
+Değerlendirme kodunun WAV yazımından önce ölçtüğü genlik tepe değeri 56/56
+çıktıda 1'in üzerindeydi. Varsayılan PCM16 kaydı genlik kırpmasına yol açabilir;
+kırpılan örnek oranı ve işitsel etkisi bu özetten bilinmemektedir. İnsan A/B
+testi için her iki model aynı sabit `0,60` kazançla yeniden sentezlenir,
+tepe değer 0,999 altında doğrulanır ve 14 çiftte A/B sırası dengelenir.
+Kör Kaggle notebook'u `eristem-tts-blind-pilot-v4` oluşturuldu. Kullanıcı
+tercihleri gelene kadar insan değerlendirme sonucu raporlanmaz.
+
+Bu ilk kör test iki eğitilmiş adayı (200 adımlık pilot ve 1.500 adımlık V4)
+karşılaştırır; hazır temel modeli içermez. Proje sahibi bunu fark edince ayrı
+`eristem-tts-blind-base-v4` notebook'u başlatıldı: aynı izinli referans sesi,
+aynı metinleri, aynı sabit kazancı ve dengeli A/B sırasını kullanarak hazır V3
+ile V4'ü karşılaştırır. Referans ses her iki modele verildiği için iki sesin
+aynı kişiye benzemesi beklenir; ölçülen fark model ağırlıklarının etkisidir.
+
+Bağımsız private Kaggle ağırlık denetimi tamamlandı. Hazır ve V4 dosyalarının
+SHA-256 özetleri farklı; kontrol edilen 8 tensörün tamamında sayısal değişim
+tespit edildi. Bu bulgu iki ağırlığın farklı olduğunu doğrular, hangi A/B
+sesinin daha iyi olduğu hakkında karar vermez. 25 Ekim'de 13 dinleyici tercihi
+alındı; test kimliği ve 14. yanıt teyit edilene kadar kör eşleme açılmadı.
+
+Ses--transkript eşleşmesi için `eristem-tts-alignment-audit-pilot` private
+Kaggle koşusu başlatıldı. İlk 200 teknik filtreyi geçen kayıtta Whisper
+large-v3 ile karakter hata oranı ön taraması yapılır. Ham ses ve transkript
+çıktı olarak kaydedilmez; yüksek uyuşmazlık otomatik etiket düzeltmesi veya
+kesin ret sebebi sayılmaz, elle inceleme için işaretlenir.
+
+14. dinleyici yanıtı B olarak iletildi. Yanıtlar `eristem-tts-blind-base-v4`
+testine aitse özel cevap anahtarına göre V4 7, hazır V3 6 tercih ve 1 eşitlik
+vardır. Kullanıcı test adını açıkça doğrulamadığından eşlemenin test kimliği
+koşulludur. Kullanıcı daha sonra doğru testin Blind Base V4 olduğunu doğruladı.
+Bu tek dinleyici ve 14 çift ile üstünlük veya genelleme iddiası
+kurulamaz; örneklerin geliştirmede kullanılmış olması ayrıca sınırlamadır.
+
+Tekrarlanan ses veya normalize metinleri geçişli olarak aynı grupta tutan
+deterministik veri bölme ve ayrı eğitim referansı seçme yardımcı kodu hazırlandı;
+üç birim testi ve Ruff kontrolü geçti. Henüz eğitim hattına bağlanmadı.
+
+Ses--transkript pilotu tamamlandı: ilk 203 kayıttan müzikli ilk kayıt ve
+teknik filtrede reddedilen iki kayıt çıkarıldı; 200 kayıt yazıya döküldü.
+Whisper ile normalize edilmiş ortalama karakter hata oranı 0,00114, medyan
+0; 200 kaydın tamamı 0,05 veya altında. Bu, ilk 200 kayıttaki otomatik
+eşleşme göstergesidir; tüm veri kümesinin kalitesini veya ses doğallığını
+kanıtlamaz. ASR hataları ve sıralı örnekleme yanlılığı mümkündür.
+
+Kullanıcı, 14 kör yanıtın Base V4 testine ait olduğunu ayrıca doğruladı.
+Yeni V5 eğitim adayı için aynı ses ve normalize metin tekrarlarını geçişli
+gruplarla bir arada tutan veri bölmesi ve farklı gruptan eğitim referansı
+seçimi V4 eğitim hattına eklendi. `eristem-tts-v5-grouped-smoke` özel Kaggle
+koşusu sekiz adımlık teknik doğrulama olarak başlatıldı; bu koşu bir kalite
+eğitimi veya kalite kanıtı değildir. Yerel grup ayırma testlerinin üçü geçti.
+`eristem-tts-gpu-latency-base-v4` özel Kaggle koşusu model yükleme, ilk
+üretim ve sonraki üretim sürelerini CUDA senkronizasyonuyla ölçmek üzere
+başlatıldı. Tam üretim süresi gerçek akıştaki ilk ses gecikmesi değildir.
+
+25 Ekim: Her iki özel Kaggle koşusu COMPLETE oldu. V5 kısa denemede 606,73
+saniye, 84 kayıt seçildi; 81 eğitim, 3 doğrulama kaydı kullanıldı, 8 adımda
+8 eğitim kaydı görüldü ve 4,16 saniyelik teknik konuşma çıktısı üretildi.
+İzleme kaybı 5,904598'den 5,767865'e indi; üç doğrulama kaydı ve sekiz adım
+kalite artışını kanıtlamaz. Kaydedilen T3 dosyası 2.143.989.752 bayt, SHA-256
+`b8d664d63118f476c4696047bc228f02b4e99d69336146e5aad2aea7b8f5e602`;
+yalnız teknik test ağırlığıdır.
+
+Tesla T4 hız ölçümünde 14 çift üretildi; ilk örnek hariç 13 örneğin medyan
+RTF değeri temel V3 için 0,9923, V4 için 1,0016; medyan üretim süreleri
+sırasıyla 6,4885 ve 6,3249 saniyedir. Referans hazırlama üretim süresine
+dahildir; oynatma, model yükleme ve gerçek streaming ilk ses gecikmesi dahil
+değildir. Model yükleme sırasıyla 16,4297 ve 14,1909 saniye; ilk üretim
+10,1611 ve 6,2682 saniyedir. V3 önce, V4 aynı süreçte sonra çalıştığından
+bu ilk ölçümler eşit soğuk başlangıç karşılaştırması değildir. Sonuçlar T4
+ve bu metinlerle sınırlıdır, genel hız üstünlüğü göstermez.
+
+25 Ekim: `eristem-tts-v5-grouped-quality` özel Kaggle GPU koşusu başlatıldı.
+Planlanan kapsam, yaklaşık 11.700 saniye teknik filtrelenmiş konuşma ve 1.500
+T3 güncellemesidir; gerçekleşen kapsam ve seçilen checkpoint ancak koşu bitince
+rapordan doğrulanabilir. Önceki sekiz adımlık pilot kalite modeli değildir.
+Tam koşu başarılı olursa geçici korpus ve ikinci geçici ağırlık kopyası
+silinir; ağırlık ve içeriksiz rapor özel notebook çıktısında kalır.
+Temel V3 karşılaştırma koşusu `tts_v3_finetune_eval_runner_v5.py` olarak
+hazırlandı: kalite koşusunun manifest ve SHA-256 değerini doğrular, iki modele
+eşit 0,60 kazanç uygular ve clipping sınırını kontrol eder. Değerlendirme
+henüz başlatılmadı. Önceden kullanılan 14 metin geliştirme verisidir, nihai
+bağımsız test olarak sunulamaz.
+
+V5 kalite koşusu tamamlandı: 1.602 uygun kayıt, 11.703,85 saniye (yaklaşık
+3 saat 15 dakika); 1.478 eğitim kaydının tamamı görüldü, 124 kayıt doğrulamada
+kullanıldı. 1.500 güncelleme tamamlandı; 16 kayıttan oluşan izleme kümesinde
+başlangıç kaybı 6,027237, seçilen 1.500. adım kaybı 4,929451; 124 kaydın
+nihai ortalama kaybı 5,038001. Kaybın düşmesi dinleme kalitesini kanıtlamaz.
+3,32 saniyelik teknik üretim yapıldı, dinleme henüz yapılmadı. Özel Kaggle
+çıktısında 2.143.989.752 bayt T3 ağırlığı, SHA-256
+`8ec3a3312b9586a8650c38d2c8e8e8b6214851f13afbaa935ed4c9d598af8503`.
+`eristem-tts-v5-base-eval` özel karşılaştırma koşusu başlatıldı; veri gelişim
+amaçlı önceki 14 tarih örneğidir, henüz ASR veya kör dinleme sonucu değildir.
+
+V3–V5 karşılaştırma sentezi tamamlandı: 28/28 ses üretildi, sıfır üretim
+hatası; eşit 0,60 kazanç sonrası tüm tepe değerler sınır altında. Aynı ses
+dosyalarından `eristem-tts-blind-base-v5` özel kör dinleme notebook'u 14 çift
+olarak hazırlandı; yedi çiftte temel model A, yedisinde B. Hangi çiftin hangi
+eşlemeye sahip olduğu dinleyici yanıtları alınana dek gizli kalmalıdır.
+`eristem-tts-v5-base-asr` Whisper taraması başlatıldı; sonucu henüz yok.
+
+Kullanıcı 14 kör çift için tercihlerini iletti: 1B, 2A, 3A, 4A, 5 eşit,
+6B, 7B, 8A, 9B, 10B, 11B, 12A, 13B, 14A. Özel anahtarla eşlemede V5 10,
+hazır V3 3 tercih ve 1 eşitlik çıktı. Bu, bir dinleyicinin daha önce geliştirme
+için kullanılan 14 metindeki tercihidir; genel kullanıcı üstünlüğü veya
+doğruluk oranı değildir. Whisper 28/28 sesi yazıya döktü; sayısal puanlama
+`eristem-tts-v5-base-score` koşusunda başlatıldı.
+
+Whisper puanlaması tamamlandı: ortalama karakter doğruluğu temel V3 %93,47,
+V5 %93,98 (fark +0,51 yüzde puan); her ikisinde 14 örneğin 9'unda en az bir
+kritik terim kaçırıldı ve toplam 11 kritik terim kaçırıldı. Bunlar Whisper
+transkriptine dayalı işaretlerdir, işitsel doğruluk hatası olarak kesinlenmez.
+Aynı 14 geliştirme metninde tek tohum ve tek dinleyiciyle bulunan bu sonuçlar
+bağımsız genelleme veya büyük doğruluk artışı kanıtı değildir.
+
+Yeni dinleme turu için kitabın PDF 90–91. sayfalarından sekiz kısa parça
+seçildi; metinler yerel PDF metin katmanında doğrulandı, önceki 14 test
+metniyle tam çakışmadıkları kontrol edildi ve mevcut Türkçe okuma kuralları
+uygulandı. Bu, önceki dinleme kümesinden ayrı bir testtir; TTS ses veri
+kümesinin tüm metinleriyle çakışmazlığı henüz doğrulanmış değildir. Özel
+`eristem-tts-v5-new-history-blind` notebook'unda temel V3 ve V5 aynı sekiz
+girdi ve referansla, dengeli kör A/B düzeninde değerlendirilecek. Whisper
+tarama koşusu hazırlandı; üretim tamamlanmadan başlatılmayacak.
+
+Yeni tarih testinin özel notebook'u tamamlandı: V3 ve V5 toplam 16/16 ses
+üretti, 8 anonim çift ve özel cevap anahtarı oluştu. Metinlerin ekrana
+basılan özgün hâli ile mevcut uygulamanın TTS için dönüştürdüğü metin ayrı
+saklandı; ikisi de özel Kaggle koşusunda kaldı. Bu yeni örneklerle yapılan
+Whisper taraması `eristem-tts-v5-new-history-asr` olarak başlatıldı; henüz
+tamamlanmadı. Kullanıcı tercihleri gelmeden kör anahtar açılmamalı.
+
+Kullanıcı yeni testte sayı içeren seslerin çok bozuk olduğunu bildirdi.
+Whisper çıktılarında hem hazır V3 hem V5 için 546, 753, 509 ve 27 içeren
+örneklerde sayıların tanınmadığı gözlendi. İnceleme, mevcut tarih metin
+işlemesinin MÖ ve Roma yüzyıllarını açarken Arap rakamlı MÖ/MS yıllarını
+modele rakamla bıraktığını gösterdi. `history_speech.py` içinde açık MÖ/MS
+yıl bağlamında 0–9999 arası sayılar ve desteklenen bulunma/ayrılma ekleri
+Türkçe sözcüklere çevrildi; belirsiz gösterimler dönüştürülmez. Yedi yerel
+tarih-seslendirme testi ve Ruff kontrolü geçti. Ses kalitesi henüz insan
+dinlemesiyle doğrulanmadı. Aynı sekiz parça yeni işlemeyle
+`eristem-tts-v5-numbers-fixed-blind` özel Kaggle koşusunda yeniden üretiliyor;
+eski ve yeni üretim koşuları karşılaştırmalı incelenebilir.
+
+Düzeltilmiş tarih metinleriyle özel Kaggle üretimi tamamlandı: 16/16 ses,
+0 üretim hatası, 8 kör çift. Seçilen V5 ağırlığının SHA-256 değeri eğitim
+çıktısıyla eşleşti; bu henüz sayı telaffuzunun doğru olduğunu kanıtlamaz.
+İnsan dinlemesi ve `eristem-tts-numbers-fixed-asr` Whisper taraması bekleniyor.
+
+Düzeltilmiş testte kullanıcı tercihleri 1B, 2B, 3A, 4A, 5A, 6B, 7B,
+8B; kör eşlemeye göre hazır V3 5, V5 3 tercih aldı. Bu sekiz çiftlik tek
+dinleyici sonucu genel üstünlük kanıtlamaz; metin ön işlemesi değiştiği için
+önceki testle doğrudan tek değişkenli model karşılaştırması değildir. Whisper
+16/16 sesi yazıya döktü ve sayı içeren 3, 4, 5. örneklerde her iki model için
+546, 753, 509 ve 27 sayılarını doğru tanıdı. Önceki üretimlerde bunları
+tanımamıştı. ASR okumanın doğru olduğunu kesin kanıtlamaz; kullanıcıdan
+sayılara ilişkin doğrudan dinleme teyidi bekleniyor.
+
+Kullanıcı düzeltilmiş sayıların okunuşunun anlaşılır olduğunu doğruladı.
+Ardından açık yıl bağlamını kapsamak için dört basamaklı, bulunma veya ayrılma
+eki almış yıllar ve `yılında` gibi yıl birimiyle verilen sayılar da yazıya
+çevrildi. Tarih, kaynak ve soru yapısı testlerinde 15 test geçti. Yeni
+genişletilmiş kurallar için henüz ayrı sesli dinleme yapılmadı.
+
+Kullanıcının V5 adayıyla devam etme kararına uygun yerel WAV servis taslağı
+eklendi. V5 T3 özeti doğrulanır, referans ve model yerel dosyalardan okunur,
+API önbelleği ses sürümüne göre ayrılabilir. Model, referans ve bağımlılıklar
+yerelde kurulmadığından gerçek V5 üretimi ve uçtan uca çalışma denenmedi.
+Servis yardımcıları, API önbelleği ve tarih metni testlerinde 19 test geçti;
+kurulum ve sınırlar `docs/v5-yerel-ses-kurulumu.md` içindedir.
+
+Model indirilmeden ses ve erişilebilirlik geliştirmeleri: aynı API sürecindeki
+eşzamanlı aynı ses istekleri önbellek anahtarına göre birleştirilir; ilk istek
+başarılıysa diğerleri kaydedilen WAV'ı kullanır. Bu, süreçler arası kilit
+değildir. Tarih okuyucusunda sayfa veya bölüm değişince önceki ses ve URL'si
+temizlenir; durdurma düğmesi ve ses komutu aynı oynatıcıyı durdurur. İlgili
+20 API testi, 15 web testi, web derleme ve lint kontrolleri geçti. Tarayıcı ve
+gerçek ekran okuyucu ile kullanım ayrıca doğrulanmalıdır.
+
+V5 önceden üretilmiş sunum sesleri için kitap PDF 40–49. sayfalarındaki 191
+okuma bölgesi ve öğrenciye sunulabilir 9 onaylı sorunun 174 okuma birimi
+kaynak ve metin özetiyle özel manifestte hazırlandı. Bir başka onaylı soru
+düzen karışıklığı denetiminden geçmedi. 365 birimin 78'inde rakam bulunduğu
+için bunlar sayı okunuşu inceleninceye kadar üretimden ayrıldı. Manifest
+özel Kaggle veri kümesine yüklendi; dört benzersiz metinlik
+`eristem-tts-v5-demo-smoke` denemesi çalışıyor. Tam üretim paketi hazır,
+deneme başarıyla tamamlanana kadar başlatılmadı. Yerel demo ses eşleştirmesi
+kaynak PDF, metin, bölüm kimliği, V5 ağırlık ve WAV özetini doğrular; dosya
+henüz indirilmedi ve bu altyapı otomatik olarak etkinleştirilmedi. Altı ilgili
+test ve Ruff geçti. Teknik kontrol telaffuz veya insan dinlemesi yerine geçmez.
+
+İlk dört metinlik deneme üretimden sonra geçici kontrol noktası dizinindeki
+`.locks` klasörünü dosya gibi silmeye çalıştığı için hata verdi. Geçici model
+bağlantıları ve ses referansı Kaggle çıktı alanı dışına taşındı; düzeltmeyle
+deneme ikinci sürüm olarak yeniden başlatıldı. Tam üretim yine deneme sonucu
+doğrulanmadan başlatılmadı. Rakam içeren 78 birimde soru numaraları, yıllar,
+aralıklar ve kaynak sayfaları gibi farklı bağlamlar var; otomatik olarak tek
+bir okuma kuralı uygulanmadı. Rakam içermeyen 255 benzersiz metin üretime aday.
+
+İkinci kısa deneme tamamlandı: dört kaydın tamamı teknik kontrollerden geçti,
+girdi ve model özetleri beklenen değerlerle eşleşti. Bu sonuç dinleme ve
+telaffuz doğrulaması değildir. Ardından `eristem-tts-v5-demo-full` özel Kaggle
+çalışması 255 rakamsız benzersiz metin için başlatıldı; sonuçlar henüz yerel
+olarak indirilmedi veya uygulamaya yüklenmedi.
+
+Toplu üretim tamamlandı; 255 WAV'ın tümü üretildi ve yaklaşık 83,6 MB ses
+dosyası yerel olarak indirildi. Girdi, V5 model ve her WAV'ın SHA-256 özeti
+doğrulandı; 287 kaynak birimi bu dosyalara bağlandı. API'de bir kitap bölgesi
+ve bir onaylı soru ses isteği sınandı; ikisi de 200 döndürdü ve cevapların
+özetleri kurulu V5 dosyalarıyla eşleşti. Sayısal metin içeren 78 birim
+üretilmedi, mevcut TTS'e geri döner. İnsan dinlemesi ve telaffuz kontrolü
+bu üretim için henüz yapılmadı; sonuçlar sunum için ön değerlendirme niteliğinde.
+
+İkinci V5 önceden üretim paketi, ana giriş ve öğrenci menüsündeki sabit sesli
+yönlendirmeleri ve kitap PDF'sinin 50–59. sayfalarındaki rakamsız bölgeleri
+içerir. 165 özgün WAV (yaklaşık 46,8 MB) teknik olarak doğrulandı ve 179
+kaynak birimine bağlandı. API'nin başlangıç yönlendirmesi ile 50. sayfadaki
+bir kaynak bölümü canlı isteklerle sınandı; her iki dönen WAV da kurulu V5
+dosyasının özetiyle eşleşti. Dinamik veya önceden bilinmeyen arayüz metinleri
+ve sayısal bölümler bu pakette değildir; bunlar için insan dinlemesi ve ayrı
+okunuş kuralları gerekir.

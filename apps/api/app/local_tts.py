@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from urllib.error import HTTPError, URLError
@@ -19,6 +20,7 @@ from urllib.request import Request, urlopen
 MAX_SPOKEN_TEXT_CHARS = 8_000
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
 VOICE_CACHE_VERSION = "piper-tr_TR-dfki-medium-v1"
+_CACHE_LOCKS = tuple(threading.Lock() for _ in range(64))
 
 
 class LocalTtsUnavailable(RuntimeError):
@@ -45,9 +47,12 @@ def synthesize_verified_text(text: str) -> bytes:
         method="POST",
     )
     try:
-        with urlopen(request, timeout=30) as response:  # nosec B310: endpoint is Docker-internal config
+        timeout = float(os.getenv("LOCAL_TTS_TIMEOUT_SECONDS", "30"))
+        if not 1 <= timeout <= 600:
+            raise ValueError("invalid_timeout")
+        with urlopen(request, timeout=timeout) as response:  # nosec B310: configured internal service
             body = response.read(MAX_AUDIO_BYTES + 1)
-    except (HTTPError, URLError, OSError, TimeoutError) as error:
+    except (HTTPError, URLError, OSError, TimeoutError, ValueError) as error:
         raise LocalTtsUnavailable("local_tts_unavailable") from error
     # Piper 1.8 currently responds with ``text/html`` despite returning a WAV.
     # Trust the bounded RIFF/WAVE structure, not that incorrect header.  A
@@ -80,27 +85,31 @@ def synthesize_cached_verified_text(text: str) -> bytes:
     root = _cache_root()
     if root is None:
         return synthesize_verified_text(text)
-    digest = hashlib.sha256(f"{VOICE_CACHE_VERSION}\0{text}".encode()).hexdigest()
+    voice_version = os.getenv("LOCAL_TTS_VOICE_CACHE_VERSION", "").strip() or VOICE_CACHE_VERSION
+    digest = hashlib.sha256(f"{voice_version}\0{text}".encode()).hexdigest()
     target = root / f"{digest}.wav"
-    try:
-        cached = target.read_bytes()
-        if len(cached) >= 44 and cached[:4] == b"RIFF" and cached[8:12] == b"WAVE":
-            return cached
-        target.unlink(missing_ok=True)
-    except OSError:
-        pass
-    audio = synthesize_verified_text(text)
-    try:
-        with NamedTemporaryFile(dir=root, prefix=".audio-", suffix=".tmp", delete=False) as temp:
-            temp.write(audio)
-            temporary = Path(temp.name)
-        temporary.replace(target)
-    except OSError:
+    # Recheck after acquiring the stripe: simultaneous readers of the same
+    # passage share the first synthesis instead of queuing duplicate GPU work.
+    lock = _CACHE_LOCKS[int(digest[:8], 16) % len(_CACHE_LOCKS)]
+    with lock:
         try:
-            temporary.unlink(missing_ok=True)
-        except UnboundLocalError:
+            cached = target.read_bytes()
+            if len(cached) >= 44 and cached[:4] == b"RIFF" and cached[8:12] == b"WAVE":
+                return cached
+            target.unlink(missing_ok=True)
+        except OSError:
             pass
-    return audio
+        audio = synthesize_verified_text(text)
+        temporary: Path | None = None
+        try:
+            with NamedTemporaryFile(dir=root, prefix=".audio-", suffix=".tmp", delete=False) as temp:
+                temporary = Path(temp.name)
+                temp.write(audio)
+            temporary.replace(target)
+        except OSError:
+            if temporary is not None:
+                temporary.unlink(missing_ok=True)
+        return audio
 
 
 def synthesize_history_text(text: str) -> bytes:

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from .auth import Role, require_roles
+from .demo_audio import resolve_demo_interface
 from .exam_practice import ExamStore
 from .history_source import router as history_router
 from .job_store import (
@@ -482,7 +483,7 @@ def interface_speech(request: InterfaceSpeechRequest, _: Role = any_role):
     if not value or any(ord(char) < 32 for char in value):
         raise HTTPException(422, "Geçersiz arayüz metni")
     try:
-        audio = synthesize_verified_text(value)
+        audio = resolve_demo_interface(value) or synthesize_verified_text(value)
     except LocalTtsUnavailable as error:
         raise HTTPException(503, "Yerel Türkçe ses kullanılamıyor") from error
     return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})

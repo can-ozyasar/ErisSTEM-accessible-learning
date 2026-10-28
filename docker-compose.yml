@@ -7,10 +7,14 @@ services:
       DERIVED_ROOT: /private/derived
       LOCAL_TTS_URL: http://tts:5000/synthesize
       LOCAL_TTS_CACHE_ROOT: /private/tts-cache
+      LOCAL_TTS_DEMO_ROOT: /private/tts-v5-demo
+      LOCAL_TTS_DEMO_EXTRA_ROOT: /private/tts-v5-extra/installed
     volumes:
       - ./data/derived:/private/derived:ro
       - ./data/meb:/private/meb:ro
       - ./data/soru_bankasi:/private/question-bank:ro
+      - ./data/private/tts-v5-demo-installed-v1:/private/tts-v5-demo:ro
+      - ./data/private/tts-v5-extra-storage:/private/tts-v5-extra:ro
       - tts_audio_cache:/private/tts-cache
     depends_on:
       db:

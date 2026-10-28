@@ -117,3 +117,45 @@ nedensel hedef ve adapter geri yükleme denetiminin gerekli olduğunu bildirir.
 Kaynaklar: [StyleSpeech](https://arxiv.org/abs/2408.14713), [LLM tabanlı
 TTS'de veri çeşitliliği ve LoRA](https://arxiv.org/abs/2603.10904),
 [Chatterbox Nano deney raporu](https://github.com/resemble-ai/chatterbox/issues/556).
+
+### 25 Ekim 2026: deneylerin ayrılması
+
+Önce tüm kaynak havuzu private Kaggle CPU koşusu
+`eristem-tts-corpus-audit-v1` ile taranır. Bu koşu yalnız kayıt sayıları,
+süre, teknik kalite filtresi, tam ses/metin tekrarları ve uygun referans
+sayılarını özetler. Ses ve transkript çıktısı üretmez. Teknik filtre tek başına
+insan kulağına göre temizlik, dil, konuşmacı kimliği veya transkript eşleşmesi
+kanıtı değildir; ASR ile eşleşme taraması ve elle örnek dinleme ayrı yapılır.
+
+Bir sonraki eğitimlerin planı:
+
+1. Aynı metnin veya aynı sesin eğitim ve doğrulama bölümleri arasında
+   tekrarlanmamasını sağlayan, kaynak kayıt kimliğiyle sabitlenmiş bir bölme
+   oluştur. Eğitim kayıtlarından koşullama seç; hedef kaydın kendisi veya
+   yinelenen aynı kayıt referans olmasın.
+2. 3 saat ve denetim yeterli veriyi doğrularsa 6 saatlik veri kollarını, aynı
+   temel model ve eğitim reçetesiyle karşılaştır. Tüketilen benzersiz kayıtları,
+   süreyi ve güncelleme sayısını ayrı raporla.
+3. Tam T3 ve LoRA'yı aynı veri, referans politikası, başlangıç ağırlığı ve
+   değerlendirmeyle iki kol olarak dene. LoRA eşlenmiş haliyle yüklenip yeni
+   bir süreçte ses üretmeden başarılı sayılmasın.
+4. Parametre ve ara checkpoint seçimini geliştirme metinleriyle yap; bugüne dek
+   kullanılan 14 metnin tekrar tekrar seçimde kullanıldığını belirt. Nihai
+   performansı önceden görülmemiş, ayrı tarih metinleriyle ölç.
+5. Nihai model kararı için otomatik hata analizi yanında kimlikleri gizlenmiş,
+   eşit kazançlı insan dinlemesi yap. Dinleyici tercihleri gelene kadar insan
+   sonucu yazma.
+
+İlk pilot/V4 kör dinleme hazırlığı tamamlandı: 28/28 anonim ses üretildi; her
+iki aday için sabit `0,60` kazanç uygulandı ve son tepe değer en fazla `0,7119`
+olarak denetlendi. Kullanıcı yanıtı henüz alınmadı.
+
+Hazır V3/V4 kör dinleme hazırlığı da tamamlandı: 28 ses, sabit `0,60` kazanç,
+en yüksek tepe `0,70004`. İnsan yanıtları henüz alınmadı.
+
+Kaynak havuzunun Kaggle teknik denetimi tamamlandı: 8.042 kayıttan melodili
+ilk kayıt ve 157 kalite filtresi reddi dışında 7.884 kayıt (56.053,65 saniye,
+yaklaşık 15 saat 34 dakika) temel filtreyi geçti. Bunların 5.269'u altı saniye
+ve üzeri referans için uygundu. Bu sayılar yalnız sinyal ve metin uzunluğu
+eşiklerini gösterir; transkript eşleşmesi, tüm müziğin ayıklanması, konuşmacı
+kimliği ve insan kulağıyla ses kalitesi henüz doğrulanmış değildir.

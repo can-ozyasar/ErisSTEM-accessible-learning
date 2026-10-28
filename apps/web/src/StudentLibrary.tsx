@@ -2,7 +2,7 @@ import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { EXPLORE_ANNOUNCE_EVENT } from "./ExploreSpeech";
 
 const AREAS = [
-  { number: "01", label: "Konu anlatımı", title: "9. sınıf tarih kitabı", description: "Bir bölümü seç ve dinle.", action: "Kitabı aç", view: "history" as const },
+  { number: "01", label: "Konu anlatımı", title: "Dokuzuncu sınıf tarih kitabı", description: "Bir bölümü seç ve dinle.", action: "Kitabı aç", view: "history" as const },
   { number: "02", label: "Soru çalışması", title: "Tarih soru bankası", description: "Soruyu, görseli ve şıkları sırayla incele.", action: "Sorulara geç", view: "question-bank" as const },
   { number: "03", label: "Kişisel alan", title: "Braille ile yaz", description: "Kısa notunu taslakla.", action: "Yazmaya başla", view: "writing" as const },
 ] as const;
@@ -15,7 +15,7 @@ export function StudentLibrary({ onNavigate }: { onNavigate: (view: "history" | 
     const next = Math.max(0, Math.min(AREAS.length - 1, active + direction));
     if (next === active) return;
     setActive(next);
-    window.dispatchEvent(new CustomEvent(EXPLORE_ANNOUNCE_EVENT, { detail: { text: `${AREAS[next].title}. ${AREAS[next].description} Enter tuşuyla veya dokunarak aç. ${next + 1} / ${AREAS.length}.` } }));
+    window.dispatchEvent(new CustomEvent(EXPLORE_ANNOUNCE_EVENT, { detail: { text: `${AREAS[next].title}. ${AREAS[next].description} Enter tuşuyla veya dokunarak aç. ${["Üç alandan birincisi", "Üç alandan ikincisi", "Üç alandan üçüncüsü"][next]}.` } }));
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => { startX.current = event.clientX; swiped.current = false; };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {

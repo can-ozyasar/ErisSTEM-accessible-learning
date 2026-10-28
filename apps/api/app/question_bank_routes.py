@@ -14,8 +14,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import IntegrityError
 
 from .auth import Role, require_roles
-from .history_rag import load_index, matching_sections, retrieve
+from .demo_audio import resolve_demo_audio
+from .history_rag import candidate_review_warnings, load_index, matching_sections, retrieve
 from .history_source import BOOK as HISTORY_BOOK
+from .history_speech import history_spoken_text
 from .learning_operations import LearningOperationsStore, LearningRecord
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
 from .question_bank_extract import extract_book
@@ -142,6 +144,7 @@ def question_bank_router(store: LearningOperationsStore):
             raise HTTPException(404, "Konu bulunamadı")
         approved = _approved_rag_ids(store, index["source_checksum"])
         return [{**chunk, "approved": chunk["id"] in approved,
+                 "review_warnings": candidate_review_warnings(chunk["text"]),
                  "revision": (store.get(f"rag:{index['source_checksum'][:12]}:{chunk['id']}") or {}).get("revision", 0)}
                 for chunk in index["chunks"] if chunk["section_id"] == section_id]
 
@@ -373,7 +376,8 @@ def question_bank_router(store: LearningOperationsStore):
                 raise HTTPException(404, "Okuma birimi bulunamadı")
             spoken_text = unit["spoken_text"]
         try:
-            wav = synthesize_history_text(spoken_text)
+            spoken_text = history_spoken_text(spoken_text)
+            wav = resolve_demo_audio("question", f"{question_id}:{unit_id}", spoken_text, SOURCE) or synthesize_history_text(spoken_text)
         except LocalTtsUnavailable:
             raise HTTPException(503, "Yerel Türkçe ses motoru kullanılamıyor") from None
         return Response(wav, media_type="audio/wav",

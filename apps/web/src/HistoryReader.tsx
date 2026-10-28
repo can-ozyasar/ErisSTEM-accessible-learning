@@ -38,9 +38,15 @@ export function HistoryReader({ onBack }: { onBack: () => void }) {
       .catch(() => { if (!controller.signal.aborted) setStatus("Sayfa yüklenemedi."); });
     return () => controller.abort();
   }, [pageNumber]);
-  useEffect(() => () => { audio.current?.pause(); if (currentUrl.current) URL.revokeObjectURL(currentUrl.current); }, []);
+  useEffect(() => () => { selection.current++; audio.current?.pause(); if (currentUrl.current) URL.revokeObjectURL(currentUrl.current); }, []);
   const selected = page?.regions.find(region => region.id === selectedId) ?? null;
-  const choose = (region: Region) => { setSelectedId(region.id); setShowEvidence(false); setAnswer(""); selection.current++; audio.current?.pause(); };
+  const clearAudio = () => {
+    selection.current++;
+    audio.current?.pause(); audio.current = null;
+    if (currentUrl.current) URL.revokeObjectURL(currentUrl.current);
+    currentUrl.current = null; setAudioUrl(null);
+  };
+  const choose = (region: Region) => { clearAudio(); setSelectedId(region.id); setShowEvidence(false); setAnswer(""); };
   const speak = async (region: Region | null = selected) => {
     if (!region?.spoken_text) return;
     const serial = ++selection.current;
@@ -55,8 +61,8 @@ export function HistoryReader({ onBack }: { onBack: () => void }) {
       if (serial !== selection.current) { URL.revokeObjectURL(url); return; }
       currentUrl.current = url; setAudioUrl(url);
       const player = new Audio(url); audio.current = player;
-      player.onended = () => setStatus("Bölüm okundu.");
-      await player.play(); setStatus("Seçili bölüm okunuyor.");
+      player.onended = () => { if (serial === selection.current) setStatus("Bölüm okundu."); };
+      await player.play(); if (serial === selection.current) setStatus("Seçili bölüm okunuyor.");
     } catch { if (serial === selection.current) setStatus("Yerel ses kullanılamadı. Metin ekran okuyucuyla erişilebilir."); }
   };
   useEffect(() => {
@@ -72,7 +78,7 @@ export function HistoryReader({ onBack }: { onBack: () => void }) {
   });
   const prompts = page?.regions.filter(region => region.kind === "question_or_instruction") ?? [];
   const evidence = page?.regions.filter(region => region.reading_order < (selected?.reading_order ?? 0) && ["paragraph", "visual"].includes(region.kind)).slice(-5) ?? [];
-  const go = (value: number) => { if (!book || value < 1 || value > book.page_count) return; selection.current++; audio.current?.pause(); setPage(null); setSelectedId(""); setStatus(`Sayfa ${value} yükleniyor.`); setPageNumber(value); };
+  const go = (value: number) => { if (!book || value < 1 || value > book.page_count) return; clearAudio(); setPage(null); setSelectedId(""); setStatus(`Sayfa ${value} yükleniyor.`); setPageNumber(value); };
   const moveRegion = (offset: number) => {
     if (!page?.regions.length) return;
     const current = page.regions.findIndex(region => region.id === selectedId);
@@ -92,10 +98,10 @@ export function HistoryReader({ onBack }: { onBack: () => void }) {
         else if (command.kind === "previous_unit") moveRegion(-1);
         else if (command.kind === "select_region") { const region = page?.regions[command.number - 1]; if (region) { choose(region); void speak(region); } else setStatus("Bu sayfada o numarada bölüm yok."); }
         else if (command.kind === "read_selected") { const region = selected ?? page?.regions[0]; if (region) { if (!selected) choose(region); void speak(region); } else setStatus("Önce bir bölüm seçin."); }
-        else if (command.kind === "stop_audio") { selection.current++; audio.current?.pause(); setStatus("Ses durduruldu."); }
+        else if (command.kind === "stop_audio") { clearAudio(); setStatus("Ses durduruldu."); }
         else if (command.kind === "back") onBack();
       }} /></details>
-    {page && <div className="history-layout"><section aria-label={`Sayfa ${pageNumber} görseli`}><div className="history-page" style={{ aspectRatio: `${page.width}/${page.height}` }}><img src={`${API}/v1/history/pages/${pageNumber}/image`} alt={`Tarih kitabının PDF sayfası ${pageNumber}; seçilebilir alanlar aşağıda metin olarak da sunulur.`} />{page.regions.map(region => <button key={region.id} type="button" className={`history-hotspot ${selectedId === region.id ? "history-hotspot-selected" : ""}`} style={{ left: `${region.bbox[0] / page.width * 100}%`, top: `${region.bbox[1] / page.height * 100}%`, width: `${(region.bbox[2] - region.bbox[0]) / page.width * 100}%`, height: `${(region.bbox[3] - region.bbox[1]) / page.height * 100}%` }} data-explore-read-id={region.id} data-explore-summary={`${labels[region.kind] ?? region.kind}. Sayfadaki kaynak bölümü`} onClick={() => choose(region)} aria-label={`${labels[region.kind] ?? region.kind}: ${region.text || region.spoken_text}`} title={labels[region.kind] ?? region.kind} />)}</div></section><aside className="history-panel"><h2>Sayfadaki bölümler</h2><p>Sayfa üzerindeki alana dokunun veya aşağıdaki listeden seçin.</p><ol>{page.regions.map(region => <li key={region.id}><button type="button" data-explore-read-id={region.id} data-explore-summary={`${labels[region.kind] ?? region.kind}. Sayfadaki kaynak bölümü`} className={selectedId === region.id ? "history-selected" : ""} onClick={() => choose(region)}>{labels[region.kind] ?? region.kind}: {(region.text || region.spoken_text).slice(0, 110)}</button></li>)}</ol>{selected && <section className="history-detail" aria-live="polite"><h3>Seçili bölüm: {labels[selected.kind] ?? selected.kind}</h3><p>{selected.text || selected.spoken_text}</p>{selected.kind === "visual" && <p className="source-note">{selected.description ? selected.description : "Görselin ayrıntılı betimlemesi henüz doğrulanmadı. Alt yazı varsa yalnız o okunur."}</p>}{selected.kind === "external_link" && <a href={selected.text} target="_blank" rel="noreferrer">Bağlantıyı aç</a>}<button type="button" onClick={() => void speak()} disabled={!selected.spoken_text}>Seçili bölümü seslendir</button>{audioUrl && <audio controls src={audioUrl}>Ses oynatıcı desteklenmiyor.</audio>}</section>}</aside></div>}
+    {page && <div className="history-layout"><section aria-label={`Sayfa ${pageNumber} görseli`}><div className="history-page" style={{ aspectRatio: `${page.width}/${page.height}` }}><img src={`${API}/v1/history/pages/${pageNumber}/image`} alt={`Tarih kitabının PDF sayfası ${pageNumber}; seçilebilir alanlar aşağıda metin olarak da sunulur.`} />{page.regions.map(region => <button key={region.id} type="button" className={`history-hotspot ${selectedId === region.id ? "history-hotspot-selected" : ""}`} style={{ left: `${region.bbox[0] / page.width * 100}%`, top: `${region.bbox[1] / page.height * 100}%`, width: `${(region.bbox[2] - region.bbox[0]) / page.width * 100}%`, height: `${(region.bbox[3] - region.bbox[1]) / page.height * 100}%` }} data-explore-read-id={region.id} data-explore-summary={`${labels[region.kind] ?? region.kind}. Sayfadaki kaynak bölümü`} onClick={() => choose(region)} aria-label={`${labels[region.kind] ?? region.kind}: ${region.text || region.spoken_text}`} title={labels[region.kind] ?? region.kind} />)}</div></section><aside className="history-panel"><h2>Sayfadaki bölümler</h2><p>Sayfa üzerindeki alana dokunun veya aşağıdaki listeden seçin.</p><ol>{page.regions.map(region => <li key={region.id}><button type="button" data-explore-read-id={region.id} data-explore-summary={`${labels[region.kind] ?? region.kind}. Sayfadaki kaynak bölümü`} className={selectedId === region.id ? "history-selected" : ""} onClick={() => choose(region)}>{labels[region.kind] ?? region.kind}: {(region.text || region.spoken_text).slice(0, 110)}</button></li>)}</ol>{selected && <section className="history-detail" aria-live="polite"><h3>Seçili bölüm: {labels[selected.kind] ?? selected.kind}</h3><p>{selected.text || selected.spoken_text}</p>{selected.kind === "visual" && <p className="source-note">{selected.description ? selected.description : "Görselin ayrıntılı betimlemesi henüz doğrulanmadı. Alt yazı varsa yalnız o okunur."}</p>}{selected.kind === "external_link" && <a href={selected.text} target="_blank" rel="noreferrer">Bağlantıyı aç</a>}<button type="button" onClick={() => void speak()} disabled={!selected.spoken_text}>Seçili bölümü seslendir</button>{audioUrl && <button type="button" onClick={() => { clearAudio(); setStatus("Ses durduruldu."); }}>Seslendirmeyi durdur</button>}</section>}</aside></div>}
     {page && <section className="history-study"><h2>Sesli soru-cevap çalışması</h2><p>Kitaptaki gerçek sorulardan birini seçin, yanıtınızı düşünün veya yazın; ardından aynı sayfadaki kaynak kanıtlarına dönün. Otomatik puanlama yapılmaz.</p><label>Soru seç <select value={selected?.kind === "question_or_instruction" ? selected.id : ""} onChange={event => { const region = prompts.find(item => item.id === event.target.value); if (region) choose(region); }}><option value="">Bir soru seçin</option>{prompts.map(region => <option key={region.id} value={region.id}>{region.text.slice(0, 125)}</option>)}</select></label>{selected?.kind === "question_or_instruction" && <><button type="button" onClick={() => void speak()}>Soruyu sesli oku</button><label>Yanıtım <textarea value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Yanıtınızı burada taslaklayın; sunucuya gönderilmez." /></label><button type="button" onClick={() => setShowEvidence(!showEvidence)}>{showEvidence ? "Kaynak ipuçlarını gizle" : "Kaynak ipuçlarını göster"}</button>{showEvidence && <ul>{evidence.map(region => <li key={region.id}><button type="button" data-explore-read-id={region.id} data-explore-summary={`${labels[region.kind]}. Kaynak ipucu`} onClick={() => choose(region)}>{labels[region.kind]}: {region.text.slice(0, 160) || region.spoken_text.slice(0, 160)}</button></li>)}</ul>}</>}</section>}
   </main></>;
 }

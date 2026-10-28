@@ -1,3 +1,5 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Event
 from urllib.error import URLError
 
 import pytest
@@ -63,6 +65,40 @@ def test_verified_audio_is_reused_from_private_local_cache(monkeypatch, tmp_path
     assert local_tts.synthesize_cached_verified_text("Doğrulanmış metin") == wav
     assert local_tts.synthesize_cached_verified_text("Doğrulanmış metin") == wav
     assert calls == ["Doğrulanmış metin"]
+
+
+def test_voice_change_does_not_reuse_other_models_cached_audio(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCAL_TTS_CACHE_ROOT", str(tmp_path))
+    calls = []
+    wav = b"RIFF" + b"0" * 4 + b"WAVE" + b"0" * 32
+    monkeypatch.setattr(local_tts, "synthesize_verified_text", lambda text: calls.append(text) or wav)
+    monkeypatch.setenv("LOCAL_TTS_VOICE_CACHE_VERSION", "piper")
+    local_tts.synthesize_cached_verified_text("aynı metin")
+    monkeypatch.setenv("LOCAL_TTS_VOICE_CACHE_VERSION", "v5")
+    local_tts.synthesize_cached_verified_text("aynı metin")
+    local_tts.synthesize_cached_verified_text("aynı metin")
+    assert calls == ["aynı metin", "aynı metin"]
+
+
+def test_concurrent_requests_for_same_speech_share_one_synthesis(monkeypatch, tmp_path):
+    monkeypatch.setenv("LOCAL_TTS_CACHE_ROOT", str(tmp_path))
+    started, release = Event(), Event()
+    calls = []
+    wav = b"RIFF" + b"0" * 4 + b"WAVE" + b"0" * 32
+
+    def synthesize(text):
+        calls.append(text)
+        started.set()
+        assert release.wait(timeout=5)
+        return wav
+
+    monkeypatch.setattr(local_tts, "synthesize_verified_text", synthesize)
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        requests = [executor.submit(local_tts.synthesize_cached_verified_text, "Ortak cümle") for _ in range(8)]
+        assert started.wait(timeout=5)
+        release.set()
+        assert all(request.result(timeout=5) == wav for request in requests)
+    assert calls == ["Ortak cümle"]
 
 
 def test_history_audio_uses_one_turkish_voice_for_entire_sentence(monkeypatch):

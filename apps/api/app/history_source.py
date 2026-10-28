@@ -15,6 +15,7 @@ import pymupdf
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from .demo_audio import resolve_demo_audio
 from .history_speech import history_spoken_text
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
 
@@ -228,7 +229,8 @@ def region_audio(page_number: int, region_id: str):
     if region is None or not region["spoken_text"] or region["kind"] == "external_link":
         raise HTTPException(404, "Okunabilir kaynak bölümü bulunamadı")
     try:
-        audio = synthesize_history_text(region["spoken_text"])
+        spoken = history_spoken_text(region["spoken_text"])
+        audio = resolve_demo_audio("history", region_id, spoken, BOOK) or synthesize_history_text(spoken)
     except LocalTtsUnavailable:
         raise HTTPException(503, "Yerel Türkçe ses motoru kullanılamıyor") from None
     return Response(audio, media_type="audio/wav",

@@ -14,7 +14,7 @@ export function EntryPortal() {
     const next = Math.max(0, Math.min(AREAS.length - 1, active + direction));
     if (next === active) return;
     setActive(next);
-    window.dispatchEvent(new CustomEvent(EXPLORE_ANNOUNCE_EVENT, { detail: { text: `${AREAS[next].title}. ${AREAS[next].description} Enter tuşuyla veya dokunarak aç. ${next + 1} / ${AREAS.length}.` } }));
+    window.dispatchEvent(new CustomEvent(EXPLORE_ANNOUNCE_EVENT, { detail: { text: `${AREAS[next].title}. ${AREAS[next].description} Enter tuşuyla veya dokunarak aç. ${next === 0 ? "İki alandan birincisi" : "İki alandan ikincisi"}.` } }));
   };
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => { startX.current = event.clientX; swiped.current = false; };
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {

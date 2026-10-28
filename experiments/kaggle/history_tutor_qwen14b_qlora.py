@@ -72,12 +72,15 @@ def main():
         peft = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                           target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], task_type="CAUSAL_LM")
         learning_rate = float(os.getenv("TUTOR_QLORA_LR", "1e-4"))
+        seed = int(os.getenv("TUTOR_QLORA_SEED", "42"))
+        torch.manual_seed(seed)
         arguments = SFTConfig(output_dir=str(OUT / "checkpoints"), num_train_epochs=3,
                               per_device_train_batch_size=1, per_device_eval_batch_size=1,
                               gradient_accumulation_steps=8, gradient_checkpointing=True,
                               learning_rate=learning_rate, logging_steps=5, eval_strategy="epoch",
                               save_strategy="epoch", fp16=True, max_length=768,
-                              completion_only_loss=True, report_to="none")
+                              completion_only_loss=True, report_to="none", seed=seed,
+                              data_seed=seed)
         trainer = SFTTrainer(model=model, args=arguments, train_dataset=Dataset.from_list(train),
                              eval_dataset=Dataset.from_list(dev), processing_class=tokenizer, peft_config=peft)
         started = time.monotonic()
@@ -90,7 +93,8 @@ def main():
                        "eval": {key: float(value) for key, value in metrics.items() if isinstance(value, (int, float))},
                        "adapter": str(adapter), "training": {"quantization": "nf4-4bit-fp16", "completion_only_loss": True,
                        "gradient_checkpointing": True, "epochs": 3, "learning_rate": learning_rate,
-                       "lora": {"r": 16, "alpha": 32}}})
+                       "lora": {"r": 16, "alpha": 32}, "seed": seed,
+                       "selection_note": "Choose by reviewed development behaviour, not eval_loss alone."}})
     except Exception as error:
         report.update({"status": "failed", "error_type": type(error).__name__, "error": str(error)[:2000]})
         raise

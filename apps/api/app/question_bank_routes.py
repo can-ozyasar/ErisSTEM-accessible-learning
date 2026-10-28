@@ -17,7 +17,13 @@ from sqlalchemy.exc import IntegrityError
 
 from .auth import Role, require_roles
 from .demo_audio import resolve_demo_audio
-from .history_rag import candidate_review_warnings, load_index, matching_sections, retrieve
+from .history_rag import (
+    candidate_review_warnings,
+    load_index,
+    matching_sections,
+    rank_chunks,
+    retrieve,
+)
 from .history_source import BOOK as HISTORY_BOOK
 from .history_speech import history_spoken_text
 from .learning_operations import LearningOperationsStore, LearningRecord
@@ -253,6 +259,23 @@ def question_bank_router(store: LearningOperationsStore):
                 if not by_topic[topic]:
                     del by_topic[topic]
         return {"target": 120, "available": len(candidates), "candidates": selected}
+
+    @router.get("/teacher/tutor/questions/{question_id}/source-candidates")
+    def tutor_source_candidates(question_id: str, _: Role = teacher):
+        """Propose raw PDF passages for review; never enables them for RAG itself."""
+        book = _book()
+        question = _student_question(book, store, question_id)
+        index = _rag_index()
+        approved = _approved_rag_ids(store, index["source_checksum"])
+        query = " ".join([*(part.text for part in question.parts), *(choice.text for choice in question.choices)])
+        ranked = rank_chunks(index["chunks"], query, limit=8)
+        return {"question_id": question_id,
+                "notice": "Bunlar PDF içinden otomatik önerilerdir. Kaynak onayı olmadan öğrenci koçunda veya Kaggle verisinde kullanılamaz.",
+                "candidates": [{"id": item["id"], "text": item["text"][:520], "page": item["page"],
+                                "section": item["section_title"], "score": item["score"],
+                                "approved": item["id"] in approved,
+                                "review_warnings": candidate_review_warnings(item["text"])}
+                               for item in ranked]}
 
     @router.get("/teacher/tutor/questions/{question_id}/review")
     def tutor_review_candidate(question_id: str, _: Role = teacher):

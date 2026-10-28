@@ -182,28 +182,33 @@ def matching_sections(index: dict, topic: str | None) -> list[str]:
     return list(dict.fromkeys(result))
 
 
-def retrieve(index: dict, approved_ids: set[str], topic: str | None, query: str,
-             limit: int = 3) -> list[dict]:
-    allowed = set(matching_sections(index, topic))
-    corpus = [item for item in index["chunks"] if item["id"] in approved_ids
-              and item["section_id"] in allowed]
-    if not corpus:
+def rank_chunks(chunks: list[dict], query: str, limit: int = 3) -> list[dict]:
+    """BM25 ranking over an explicitly supplied, already-authorized corpus."""
+    if not chunks or limit < 1:
         return []
     query_terms = set(terms(query))
-    documents = [Counter(terms(item["text"])) for item in corpus]
+    documents = [Counter(terms(item["text"])) for item in chunks]
     frequencies = Counter(word for doc in documents for word in doc)
     average = sum(sum(doc.values()) for doc in documents) / len(documents)
     ranked = []
-    for item, doc in zip(corpus, documents):
+    for item, doc in zip(chunks, documents):
         length = sum(doc.values())
         score = 0.0
         for word in query_terms & doc.keys():
-            idf = math.log(1 + (len(corpus) - frequencies[word] + 0.5) / (frequencies[word] + 0.5))
+            idf = math.log(1 + (len(chunks) - frequencies[word] + 0.5) / (frequencies[word] + 0.5))
             score += idf * doc[word] * 2.2 / (doc[word] + 1.2 * (0.25 + 0.75 * length / average))
         if score > 0:
             ranked.append((score, item))
     ranked.sort(key=lambda pair: (-pair[0], pair[1]["page"], pair[1]["id"]))
     return [{**item, "score": round(score, 3)} for score, item in ranked[:limit]]
+
+
+def retrieve(index: dict, approved_ids: set[str], topic: str | None, query: str,
+             limit: int = 3) -> list[dict]:
+    allowed = set(matching_sections(index, topic))
+    corpus = [item for item in index["chunks"] if item["id"] in approved_ids
+              and item["section_id"] in allowed]
+    return rank_chunks(corpus, query, limit)
 
 
 if __name__ == "__main__":

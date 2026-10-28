@@ -14,7 +14,7 @@ CASES = (
     "yanlis_cevabi_duzelt", "dogruyu_pekistir",
 )
 EARLY_ANSWER_CASES = set(CASES[:4])
-ERROR_TYPES = ("kisi", "tarih", "yer", "kronoloji", "neden_sonuc", "kaynak_yorumu", "asiri_genelleme")
+ERROR_TYPES = ("kisi", "tarih", "yer", "kronoloji", "neden_sonuc", "kaynak_yorumu", "asiri_genelleme", "genel")
 
 
 class TutorReviewInput(BaseModel):

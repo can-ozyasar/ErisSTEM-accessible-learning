@@ -468,20 +468,26 @@ def question_bank_router(store: LearningOperationsStore):
         if prior and prior.get("turn_count", 0) >= 12:
             raise HTTPException(409, "Bu soru için konuşma sınırına ulaştın")
         previous_stage = prior.get("stage") if prior else None
+        repeat_attempts = ((prior or {}).get("repeat_attempts", 0) + 1
+                           if turn.selected_choice and (prior or {}).get("last_choice") == turn.selected_choice else 0)
         evidence = sources[0] if sources else None
+        answer_choice_text = next((choice.text for choice in question.choices if choice.label == question.answer_label), None)
         coach_context = CoachContext(question_id=question_id,
                                      question_text=" ".join(part.text for part in question.parts),
                                      choice_text=selected.text if selected else None,
                                      section_title=evidence["section_title"] if evidence else "MEB kitabı",
                                      source_ids=[item["id"] for item in sources],
                                      evidence=evidence["text"][:900] if evidence else "",
-                                     error_type=infer_error_type(" ".join(part.text for part in question.parts), selected.text if selected else None))
+                                     error_type=infer_error_type(" ".join(part.text for part in question.parts), selected.text if selected else None),
+                                     repeat_attempts=repeat_attempts)
         reply = coach(coach_context, previous_stage, turn.message, turn.submit_answer,
-                      turn.selected_choice, question.answer_label if question.answer_source_checked else None)
+                      turn.selected_choice, question.answer_label if question.answer_source_checked else None,
+                      answer_choice_text if question.answer_source_checked else None)
         reply.timings_ms.update({"retrieval": retrieval_ms, "request_total": int((time.monotonic() - started) * 1000)})
         store.save(f"tutor:{session_id}", "tutor", index["source_checksum"][:16],
                    {"question_id": question_id, "source_checksum": index["source_checksum"],
-                    "stage": reply.stage, "turn_count": (prior or {}).get("turn_count", 0) + 1},
+                    "stage": reply.stage, "turn_count": (prior or {}).get("turn_count", 0) + 1,
+                    "last_choice": turn.selected_choice, "repeat_attempts": repeat_attempts},
                    (prior or {}).get("revision", 0))
         return {"session_id": session_id, **reply.model_dump(),
                 "sources": [{"id": item["id"], "page": item["page"], "section": item["section_title"],

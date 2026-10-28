@@ -12,11 +12,15 @@ from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field
 
-STAGES = ("soru_analizi", "hatirlayani_ortaya_cikar", "kanitla_bag_kur", "sik_elemesi", "ogrenci_yaniti", "gerekceli_aciklama")
-# A local model may phrase the disclosure in several ways.  This is a safety
-# backstop; the answer label is still never included in its prompt.
+STAGES = (
+    "soru_analizi", "hatirlayani_ortaya_cikar", "kanitla_bag_kur",
+    "sik_elemesi", "ogrenci_yaniti", "gerekceli_aciklama",
+)
+# This is a backstop. The answer key and the other option texts never enter the
+# local model prompt in the first place.
 ANSWER_LABEL = re.compile(
-    r"(?:doğru\s+(?:cevap|şık)|cevap\s*:|şık\s*[abcde]\b|\b[abcde]\s*(?:şıkkı|şık|seçeneği)\b)",
+    r"(?:doğru\s+(?:cevap|şık)|cevap\s*:|şık\s*[abcde]\b|\b[abcde]\s*(?:şıkkı|şık|seçeneği)\b|"
+    r"ilk\s+seçenek|son\s+seçenek|üstteki\s+seçenek|alttaki\s+seçenek)",
     re.IGNORECASE,
 )
 
@@ -41,6 +45,7 @@ class CoachContext:
     source_ids: list[str]
     evidence: str
     error_type: str
+    repeat_attempts: int = 0
 
 
 def next_stage(previous: str | None, submit_answer: bool) -> str:
@@ -62,18 +67,43 @@ def _sentence(value: str) -> str:
     return (match.group(1) if match else value[:220]).strip()
 
 
+def _short_evidence(value: str, limit: int = 180) -> str:
+    compact = re.sub(r"\s+", " ", value).strip()
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+
+
 def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
-              answer_label: str | None) -> str:
+              answer_label: str | None, answer_choice_text: str | None) -> str:
+    # After two attempts at the same option, give a concise source correction,
+    # then ask the learner to articulate the conflict. The label remains hidden.
+    if context.repeat_attempts >= 2 and stage != "gerekceli_aciklama":
+        return f"Kaynaktaki ‘{_short_evidence(context.evidence, 150)}’ bilgisine yeniden bak. Bu bilgi seçtiğin ifadeyle uyuşuyor mu?"
+
     if stage == "soru_analizi":
-        return "Birlikte bakalım: soru senden hangi bilgiyi bulmanı istiyor? Kökün en önemli sözcüğü hangisi?"
+        prompts = {
+            "tarih": "Soru bir olayın zamanını mı, yoksa tarihle ilgili başka bir bilgiyi mi soruyor? Kökte bunu gösteren sözcük hangisi?",
+            "yer": "Soru olayın nerede geçtiğini mi soruyor? Kökte yerle ilgili ipucu veren sözcük hangisi?",
+            "kronoloji": "Soru olayları hangi sıraya koymanı istiyor? Önce ve sonra sözcüklerini kökte bulabiliyor musun?",
+            "neden_sonuc": "Soru bir neden mi, yoksa ortaya çıkan sonucu mu arıyor? Kökün hangi sözü bunu söylüyor?",
+            "kisi": "Soru bir kişinin yaptığı işi mi soruyor? Kökten hangi görevi araman gerektiğini çıkarırsın?",
+            "kaynak_yorumu": "Soru metnin açıkça söylediğini mi, yoksa metinden çıkarılabilecek yorumu mu soruyor?",
+            "asiri_genelleme": "Soru seçenekteki geniş bir yargıyı mı sınatıyor? ‘Her zaman’ ya da ‘tamamı’ gibi bir söz görüyor musun?",
+            "genel": "Soru senden hangi bilgiyi bulmanı istiyor? Kökün en önemli sözcüğü hangisi?",
+        }
+        return prompts[context.error_type]
     if stage == "hatirlayani_ortaya_cikar":
-        prompts = {"tarih": "Olayın adını hatırlamaya çalış. Bu olayın yanındaki tarih hangi döneme ait olabilir?",
-                   "yer": "Önce olayın geçtiği yeri gözünde canlandır. Deniz kıyısı mı, iç kesim mi?",
-                   "kronoloji": "İki olayı sıraya koymayı dene. Hangisi ötekinden önce yaşanmış olabilir?",
-                   "neden_sonuc": "Önce ne değişmiş olabilir, sonra bunun sonucu ne olmuş olabilir?",
-                   "kisi": "Kişinin yaptığı işi hatırlıyor musun? Bu iş sana kimi hatırlatıyor?",
-                   "kaynak_yorumu": "Metnin kesin söylediği şey ile senin eklediğin yorum aynı mı?",
-                   "asiri_genelleme": "Seçenekte ‘her zaman’ ya da ‘tamamı’ gibi çok geniş bir söz var mı?"}
+        prompts = {
+            "tarih": "Olayın adını hatırlamaya çalış. Bu olayın yanındaki tarih hangi döneme ait olabilir?",
+            "yer": "Önce olayın geçtiği yeri gözünde canlandır. Kaynakta hangi yer adı geçiyor?",
+            "kronoloji": "İki olayı sıraya koymayı dene. Hangisi ötekinden önce yaşanmış olabilir?",
+            "neden_sonuc": "Önce ne değişmiş olabilir, sonra bunun sonucu ne olmuş olabilir?",
+            "kisi": "Kişinin yaptığı işi hatırlıyor musun? Bu iş sana kimi hatırlatıyor?",
+            "kaynak_yorumu": "Metnin kesin söylediği şey ile senin eklediğin yorum aynı mı?",
+            "asiri_genelleme": "Seçenekte ‘her zaman’ ya da ‘tamamı’ gibi çok geniş bir söz var mı?",
+            "genel": "Konuyla ilgili aklında kalan ilk bilgiyi söyle. Bu bilgi soru kökündeki sözcükle nasıl bağlanabilir?",
+        }
         return prompts[context.error_type]
     if stage == "kanitla_bag_kur":
         return "Kaynakta bu soruya yardım eden bir cümle var. O cümledeki hangi sözcük seçeneğini destekliyor ya da zayıflatıyor?"
@@ -83,26 +113,37 @@ def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
         return "Şıkları sırayla ele. Kaynakla uyuşmayan ilk ifadeyi ve nedenini söyleyebilir misin?"
     if stage == "ogrenci_yaniti":
         return "Bir şık seçip kısa gerekçeni yaz. Hazır olduğunda yanıtını birlikte kontrol edelim."
+
+    # The final explanation is server-side only: it may use the verified answer
+    # text after submission, but is never placed in a model prompt.
+    evidence = _short_evidence(context.evidence)
     if not answer_label:
         return "Yanıt anahtarı bu soru için kaynakla ayrıca doğrulanmamış. Kaynaktaki kanıtla gerekçeni birlikte karşılaştıralım."
     if submitted_choice == answer_label:
-        return "Seçimin kaynak anahtarıyla uyuşuyor. Gerekçeni, MEB kitabındaki kanıtla bir cümlede bağlayalım."
-    return "Burada iki bilgi birbirine karışmış olabilir. Kaynaktaki belirleyici ifadeye yeniden bak; şimdi hangi seçeneği zayıflattığını kendi sözünle anlat."
+        return f"Evet, seçimin kaynak anahtarıyla uyuşuyor. Kaynakta ‘{evidence}’ deniyor. Bunu kendi cümlenle nasıl açıklarsın?"
+    if answer_choice_text:
+        return f"Seçtiğin ifadeyle kaynaktaki ‘{evidence}’ bilgisi uyuşmuyor. Bu yüzden “{answer_choice_text}” daha uygun. Aradaki farkı kendi cümlenle anlatır mısın?"
+    return f"Seçtiğin ifadeyle kaynaktaki ‘{evidence}’ bilgisi uyuşmuyor. Kaynağa göre hangi seçeneğin daha uygun olduğunu kendi sözünle anlatır mısın?"
 
 
 def _prompt(stage: str, context: CoachContext, learner_message: str) -> str:
-    """Never include an answer label, other choices, or source coordinates in the model prompt."""
+    """Never include answer label, other options, source coordinates, or answer text."""
     return "\n".join((
         "Sen 9. sınıf tarih soru koçusun.",
-        "Yalnız Türkçe, sade, en fazla iki cümlelik bir ipucu üret.",
-        "Doğru cevabı, doğru şıkkı, cevap anahtarını veya kesin çözümü söyleme.",
-        "Kaynakta olmayan bilgi ekleme. Kaynak yetersizse bunu açıkça söyle.",
+        "Yalnız Türkçe, sade ve tek soru cümlesi üret.",
+        "Doğru cevabı, doğru şıkkı, cevap anahtarını, kesin çözümü veya sayısal cevabı söyleme.",
+        "Kaynakta olmayan bilgi ekleme. Kaynak yetersizse bunu soru biçiminde belirt.",
         f"Aşama: {stage}",
         f"Soru: {context.question_text}",
         f"Öğrencinin seçtiği ifade: {context.choice_text or 'yok'}",
         f"MEB kanıtı: {context.evidence}",
         f"Öğrenci mesajı: {learner_message}",
     ))
+
+
+def _safe_early_question(text: str) -> bool:
+    compact = re.sub(r"\s+", " ", text).strip()
+    return compact.endswith("?") and compact.count("?") == 1 and not ANSWER_LABEL.search(compact)
 
 
 def _llm_hint(stage: str, context: CoachContext, learner_message: str) -> tuple[str | None, dict[str, int]]:
@@ -118,7 +159,7 @@ def _llm_hint(stage: str, context: CoachContext, learner_message: str) -> tuple[
         with urlopen(request, timeout=8) as response:  # nosec B310 -- local operator configured endpoint
             decoded = json.loads(response.read().decode("utf-8"))
         text = decoded.get("text") if isinstance(decoded, dict) else None
-        if not isinstance(text, str) or not text.strip() or ANSWER_LABEL.search(text):
+        if not isinstance(text, str) or not _safe_early_question(text):
             return None, {"llm": int((time.monotonic() - started) * 1000), "first_token": 0}
         elapsed = int((time.monotonic() - started) * 1000)
         first_token = decoded.get("first_token_ms") if isinstance(decoded, dict) else None
@@ -128,7 +169,8 @@ def _llm_hint(stage: str, context: CoachContext, learner_message: str) -> tuple[
 
 
 def coach(context: CoachContext, previous_stage: str | None, learner_message: str,
-          submit_answer: bool, submitted_choice: str | None, answer_label: str | None) -> CoachReply:
+          submit_answer: bool, submitted_choice: str | None, answer_label: str | None,
+          answer_choice_text: str | None = None) -> CoachReply:
     stage = next_stage(previous_stage, submit_answer)
     started = time.monotonic()
     if not context.source_ids:
@@ -136,10 +178,20 @@ def coach(context: CoachContext, previous_stage: str | None, learner_message: st
         return CoachReply(stage=stage, error_type=context.error_type, student_prompt=text, short_spoken_text=_sentence(text),
                           abstain_reason="approved_source_unavailable",
                           timings_ms={"total": int((time.monotonic() - started) * 1000)})
-    model_text, model_timings = _llm_hint(stage, context, learner_message)
-    if model_text and ANSWER_LABEL.search(model_text):
+
+    # Serving starts deterministic. A locally evaluated adapter can be enabled
+    # only explicitly; all non-final adapter output must still be one safe question.
+    use_llm = os.getenv("LOCAL_TUTOR_LLM_SERVE", "").casefold() in {"1", "true", "yes"}
+    model_text, model_timings = (_llm_hint(stage, context, learner_message)
+                                 if use_llm and stage != "gerekceli_aciklama"
+                                 else (None, {"llm": 0, "first_token": 0}))
+    if model_text and not _safe_early_question(model_text):
         model_text = None
-    text = model_text or _fallback(stage, context, submitted_choice, answer_label if stage == "gerekceli_aciklama" else None)
+    text = model_text or _fallback(
+        stage, context, submitted_choice,
+        answer_label if stage == "gerekceli_aciklama" else None,
+        answer_choice_text if stage == "gerekceli_aciklama" else None,
+    )
     return CoachReply(stage=stage, error_type=context.error_type, student_prompt=text, short_spoken_text=_sentence(text),
                       source_ids=context.source_ids, can_reveal_explanation=stage == "gerekceli_aciklama",
                       timings_ms={**model_timings, "total": int((time.monotonic() - started) * 1000)})

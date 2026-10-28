@@ -75,6 +75,31 @@ def _candidate(text: str, bbox: list[float], page_height: float) -> bool:
     return len(re.findall(r"\b(?:Kaynak|Görsel|Tablo)\s+[A-Z0-9]", text)) <= 1
 
 
+# These indicators are review aids, not a classifier or proof of factuality.
+# Leave existing source identities and teacher decisions intact.
+_REVIEW_INSTRUCTION = re.compile(
+    r"(?:\b(?:[IVX]+|\d+)\.\s*Adım\s*:|"
+    r"rol\s+oynama\s+etkinliğ|uygulama\s+adımlarını|"
+    r"(?:soruları|soruyu)\s+cevap\s*layınız|"
+    r"sırala\s*yınız|(?:canlandırmaları|izleyenler\s+grubuna).{0,80}sağlatılır)",
+    re.IGNORECASE,
+)
+_REVIEW_CAPTION = re.compile(
+    r"(?:\bArkeoloji.{0,30}Müzesi\b|\bMuseum\b|"
+    r"\b(?:mezardan\s+çıkarılan|modeli?\s*\(yaklaşık))", re.IGNORECASE
+)
+
+
+def candidate_review_warnings(text: str) -> list[str]:
+    """Flag likely non-lesson material for manual review, without filtering it."""
+    warnings = []
+    if _REVIEW_INSTRUCTION.search(text):
+        warnings.append("etkinlik_yonergesi_olabilir")
+    if _REVIEW_CAPTION.search(text):
+        warnings.append("gorsel_aciklama_olabilir")
+    return warnings
+
+
 def build_index(source: Path = BOOK) -> dict:
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
     chunks = []
@@ -109,12 +134,24 @@ def write_index(source: Path = BOOK, destination: Path = INDEX_PATH) -> dict:
     return index
 
 
+def deduplicate_chunks(chunks: list[dict]) -> list[dict]:
+    """Collapse exact duplicates while rejecting ambiguous identities."""
+    unique: dict[str, dict] = {}
+    for item in chunks:
+        chunk_id = item["id"]
+        if chunk_id in unique and unique[chunk_id] != item:
+            raise ValueError("RAG dizininde çakışan parça kimliği var")
+        unique.setdefault(chunk_id, item)
+    return list(unique.values())
+
+
 def load_index(source: Path = BOOK, destination: Path = INDEX_PATH) -> dict:
     if not destination.is_file() or not source.is_file():
         raise FileNotFoundError("RAG dizini oluşturulmadı")
     index = json.loads(destination.read_text(encoding="utf-8"))
     if index.get("schema") != 1 or index.get("source_checksum") != hashlib.sha256(source.read_bytes()).hexdigest():
         raise ValueError("RAG dizini kaynak PDF sürümüyle eşleşmiyor")
+    index["chunks"] = deduplicate_chunks(index["chunks"])
     return index
 
 

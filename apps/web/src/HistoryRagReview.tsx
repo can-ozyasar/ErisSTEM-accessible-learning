@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 type Section = { id: string; title: string; start: number; end: number };
-type Chunk = { id: string; page: number; bbox: number[]; text: string; approved: boolean; revision: number };
+type Chunk = { id: string; page: number; bbox: number[]; text: string; approved: boolean; revision: number; review_warnings: string[] };
 type Summary = { candidate_count: number; approved_count: number; sections: Section[] };
 const headers = { "X-Role": "teacher" };
 
@@ -68,6 +68,11 @@ export function HistoryRagReview({ api }: { api: string }) {
     </select></label>}
     <ol className="rag-review-list">{chunks.map(chunk => <li key={chunk.id}>
       <p><strong>PDF sayfası {chunk.page}</strong> · {chunk.approved ? "Onaylı" : "İnceleme bekliyor"}</p>
+      {chunk.review_warnings?.length > 0 && <p className="review-warning" role="note">
+        Otomatik uyarı: {chunk.review_warnings.includes("etkinlik_yonergesi_olabilir") ? "Bu metin etkinlik yönergesi olabilir. " : ""}
+        {chunk.review_warnings.includes("gorsel_aciklama_olabilir") ? "Bu metin görsel açıklaması olabilir. " : ""}
+        PDF ile karşılaştırın; uyarı kesin karar değildir. {chunk.approved ? "Daha önce onaylandıysa gerekirse onayı geri alın." : ""}
+      </p>}
       <p>{chunk.text}</p>
       <SourcePreview api={api} chunk={chunk} />
       {!chunk.approved ? <><label><input type="checkbox" checked={checked === chunk.id} onChange={event => setChecked(event.target.checked ? chunk.id : "")} /> Metni ve ders bilgisi niteliğini kaynakta doğruladım.</label><button type="button" disabled={checked !== chunk.id} onClick={() => void setApproval(chunk, true)}>Bu parçayı onayla</button></>

@@ -31,3 +31,23 @@ def test_real_index_uses_toc_and_excludes_assessment_pages():
     assert all(item["page"] <= {"1": 60, "2": 154, "3": 243}[item["section_id"][0]]
                for item in index["chunks"])
     assert any(item["section_id"] == "1.1" and item["page"] == 12 for item in index["chunks"])
+
+
+def test_review_flags_activity_fragments_and_captions_without_changing_approval():
+    from app.history_rag import candidate_review_warnings
+    assert 'etkinlik_yonergesi_olabilir' in candidate_review_warnings(
+        'III. Adım: Oynayanlar grubundan her bir kişiye Çatalhöyük’teki sosyal yaşamdan bir rol seçtirilir')
+    assert 'etkinlik_yonergesi_olabilir' in candidate_review_warnings(
+        've bu rolün neler yaşamış olabileceğini kendi bakış açıları ile canlandırmaları sağlatılır.')
+    assert 'etkinlik_yonergesi_olabilir' in candidate_review_warnings('Kaynakları inceleyerek soruları cevap layınız.')
+    assert 'gorsel_aciklama_olabilir' in candidate_review_warnings('Şanlıurfa Arkeoloji ve Mozaik Müzesi, Şanlıurfa')
+    assert 'gorsel_aciklama_olabilir' in candidate_review_warnings('Banyoles Bölge Arkeoloji Müzesi')
+    assert candidate_review_warnings('Tarım toplumsal yaşamda iş bölümünün gelişmesine katkı sağladı.') == []
+
+
+def test_duplicate_chunks_are_collapsed_and_conflicting_ids_rejected():
+    from app.history_rag import deduplicate_chunks
+    chunk = {'id': 'same', 'text': 'Kaynak metni', 'page': 1}
+    assert deduplicate_chunks([chunk, dict(chunk)]) == [chunk]
+    with pytest.raises(ValueError, match='çakışan'):
+        deduplicate_chunks([chunk, {**chunk, 'text': 'Farklı metin'}])

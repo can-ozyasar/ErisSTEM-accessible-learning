@@ -21,7 +21,7 @@ from .history_rag import (
     candidate_review_warnings,
     load_index,
     matching_sections,
-    rank_chunks,
+    recommend_evidence,
     retrieve,
 )
 from .history_source import BOOK as HISTORY_BOOK
@@ -267,20 +267,15 @@ def question_bank_router(store: LearningOperationsStore):
         question = _student_question(book, store, question_id)
         index = _rag_index()
         approved = _approved_rag_ids(store, index["source_checksum"])
-        query = " ".join([*(part.text for part in question.parts), *(choice.text for choice in question.choices)])
-        ranked = rank_chunks(index["chunks"], query, limit=24)
-        query_terms = {term.casefold() for term in re.findall(r"[A-Za-zÇĞİÖŞÜçğıöşü]{5,}", query)}
-        entity_matches = [item for item in index["chunks"]
-                          if any(term in item["text"].casefold() for term in query_terms)]
-        chosen = list(ranked[:8])
-        for item in entity_matches:
-            if item["id"] not in {current["id"] for current in chosen}:
-                chosen.append({**item, "score": 0.0})
-        chosen.sort(key=lambda item: (-item["score"], item["page"], item["id"]))
+        chosen = recommend_evidence(index, " ".join(part.text for part in question.parts),
+                                    [choice.text for choice in question.choices],
+                                    book["page_contexts"][question.source.page].get("topic"), limit=12)
         return {"question_id": question_id,
                 "notice": "Bunlar PDF içinden otomatik önerilerdir. Kaynak onayı olmadan öğrenci koçunda veya Kaggle verisinde kullanılamaz.",
                 "candidates": [{"id": item["id"], "text": item["text"][:520], "page": item["page"],
                                 "section": item["section_title"], "score": item["score"],
+                                "evidence_score": item.get("evidence_score"), "signals": item.get("signals", {}),
+                                "reasons": item.get("reasons", []), "recommendation": item.get("review_recommendation"),
                                 "approved": item["id"] in approved,
                                 "review_warnings": candidate_review_warnings(item["text"])}
                                for item in chosen[:12]]}

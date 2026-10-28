@@ -215,3 +215,81 @@ if __name__ == "__main__":
     result = write_index()
     print(json.dumps({"sections": len(result["sections"]), "candidates": len(result["chunks"]),
                       "source_checksum": result["source_checksum"]}, ensure_ascii=False))
+
+
+# Evidence proposal is intentionally separate from production retrieval. It ranks
+# unapproved PDF passages for a teacher to inspect; it never changes approval.
+_OCR_FRAGMENT = re.compile(r"\b\w{4,}\s+[a-zçğıöşü]{1,2}\b", re.IGNORECASE)
+_CAPTIONISH = re.compile(r"(?:museum|müzesi|görsel|fotoğraf|yaklaşık m[ös])", re.IGNORECASE)
+
+
+def _overlap(left: set[str], right: set[str]) -> float:
+    return len(left & right) / max(1, len(left))
+
+
+def recommend_evidence(index: dict, question: str, choices: list[str], topic: str | None,
+                       limit: int = 12) -> list[dict]:
+    """Explainable multi-signal candidates for human evidence review.
+
+    Signals are deliberately lexical and inspectable: question BM25, distinctive
+    term coverage, choice coverage, title agreement and PDF text quality. This
+    makes the proposal auditable before a teacher authorizes a passage.
+    """
+    if not question.strip() or limit < 1:
+        return []
+    query = " ".join([question, *choices])
+    ranked = rank_chunks(index["chunks"], query, limit=len(index["chunks"]))
+    if not ranked:
+        return []
+    raw_question = set(terms(question))
+    raw_choices = set(terms(" ".join(choices)))
+    # Rare, longer terms carry more evidence than generic school-history words.
+    docs = [set(terms(chunk["text"])) for chunk in index["chunks"]]
+    df = Counter(term for doc in docs for term in doc)
+    distinctive = {term for term in raw_question | raw_choices if len(term) >= 5 and df[term] <= max(8, len(docs) // 12)}
+    allowed_sections = set(matching_sections(index, topic))
+    maximum = max(item["score"] for item in ranked) or 1.0
+    candidates: list[dict] = []
+    for item in ranked:
+        text_terms = set(terms(item["text"]))
+        bm25 = item["score"] / maximum
+        entity = _overlap(distinctive, text_terms)
+        question_coverage = _overlap(raw_question, text_terms)
+        choice_coverage = _overlap(raw_choices, text_terms)
+        title_terms = set(terms(item["section_title"]))
+        title = _overlap(set(terms(topic or "")), title_terms)
+        warnings = candidate_review_warnings(item["text"])
+        ocr = bool(_OCR_FRAGMENT.search(item["text"]))
+        caption = bool(_CAPTIONISH.search(item["text"]))
+        quality_penalty = (0.12 if ocr else 0.0) + (0.20 if caption else 0.0) + (0.25 if warnings else 0.0)
+        score = 0.42 * bm25 + 0.25 * entity + 0.16 * question_coverage + 0.07 * choice_coverage + 0.10 * title
+        if item["section_id"] in allowed_sections:
+            score += 0.06
+        score -= quality_penalty
+        reasons = []
+        if entity: reasons.append("ayırt edici soru/şık terimi")
+        if question_coverage >= 0.18: reasons.append("soru kökü kapsamı")
+        if choice_coverage >= 0.10: reasons.append("şık kapsamı")
+        if title or item["section_id"] in allowed_sections: reasons.append("konu başlığı uyumu")
+        if ocr: reasons.append("PDF metninde bölünmüş sözcük riski")
+        if caption: reasons.append("görsel açıklaması riski")
+        if warnings: reasons.extend(warnings)
+        candidates.append({**item, "evidence_score": round(max(0.0, score), 4),
+                           "signals": {"bm25": round(bm25, 4), "entity_coverage": round(entity, 4),
+                                       "question_coverage": round(question_coverage, 4),
+                                       "choice_coverage": round(choice_coverage, 4),
+                                       "title_coverage": round(title, 4), "quality_penalty": quality_penalty},
+                           "reasons": reasons,
+                           "review_recommendation": "review" if score >= 0.18 and not caption and not warnings else "do_not_use_yet"})
+    candidates.sort(key=lambda item: (-item["evidence_score"], item["page"], item["id"]))
+    # MMR-style de-duplication: prefer complementary passages, not copies of one paragraph.
+    selected: list[dict] = []
+    for item in candidates:
+        source_terms = set(terms(item["text"]))
+        redundant = max((_overlap(source_terms, set(terms(previous["text"]))) for previous in selected), default=0.0)
+        if redundant > 0.82 and len(selected) < limit:
+            continue
+        selected.append(item)
+        if len(selected) == limit:
+            break
+    return selected

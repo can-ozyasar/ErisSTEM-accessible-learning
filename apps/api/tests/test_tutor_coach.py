@@ -10,13 +10,15 @@ def context(source_ids=None):
         section_title="Tarihin Doğası",
         source_ids=source_ids if source_ids is not None else ["meb-1"],
         evidence="Tarih, geçmişteki insan faaliyetlerini yer ve zaman göstererek inceler.",
+        error_type="neden_sonuc",
     )
 
 
 def test_stage_machine_only_reveals_after_submission():
     assert next_stage(None, False) == "soru_analizi"
-    assert next_stage("soru_analizi", False) == "kanit_bulma"
-    assert next_stage("kanit_bulma", False) == "sik_elemesi"
+    assert next_stage("soru_analizi", False) == "hatirlayani_ortaya_cikar"
+    assert next_stage("hatirlayani_ortaya_cikar", False) == "kanitla_bag_kur"
+    assert next_stage("kanitla_bag_kur", False) == "sik_elemesi"
     assert next_stage("sik_elemesi", False) == "ogrenci_yaniti"
     assert next_stage("sik_elemesi", True) == "gerekceli_aciklama"
 

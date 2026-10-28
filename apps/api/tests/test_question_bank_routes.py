@@ -72,6 +72,24 @@ def test_teacher_review_controls_student_release(tmp_path, monkeypatch):
     assert first_turn.json()["stage"] == "soru_analizi"
     assert first_turn.json()["source_ids"] == ["sample"]
     assert not first_turn.json()["can_reveal_explanation"]
+    draft_response = client.post(f"{base}/teacher/tutor/questions/{approved['id']}/drafts", headers=teacher)
+    assert draft_response.status_code == 200, draft_response.text
+    drafts = draft_response.json()["drafts"]
+    assert len(drafts) == 6
+    first_draft = drafts[0]
+    agent = client.post(f"{base}/teacher/tutor/questions/{approved['id']}/cases/{first_draft['case']}/agent-review",
+                        headers=teacher, json={"guide_response": first_draft["guide_response"]})
+    assert agent.status_code == 200, agent.text
+    review_payload = {"question_id": approved["id"], "case": first_draft["case"],
+                      "error_type": first_draft["error_type"], "source_ids": first_draft["source_ids"],
+                      "evidence_quotes": first_draft["evidence_quotes"], "learner_state": first_draft["learner_state"],
+                      "coaching_goal": first_draft["coaching_goal"], "guide_response": first_draft["guide_response"],
+                      "early_answer_disclosed": False, "grounded_in_source": True, "simple_turkish": True,
+                      "age_appropriate": True, "reviewed_by": "Öğretmen", "approved": True, "expected_revision": 0}
+    reviewed = client.put(f"{base}/teacher/tutor/reviews/{approved['id']}/{first_draft['case']}", headers=teacher,
+                          json=review_payload)
+    assert reviewed.status_code == 200, reviewed.text
+    assert "answer_label" not in reviewed.text
     assert first_turn.json()["sources"][0]["page"] == 12
     assert "doğru cevap" not in first_turn.text.lower()
     assert [unit["label"] for unit in reading["units"]][-5:] == ["Şık A", "Şık B", "Şık C", "Şık D", "Şık E"]

@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from pydantic import BaseModel, Field
 
-STAGES = ("soru_analizi", "kanit_bulma", "sik_elemesi", "ogrenci_yaniti", "gerekceli_aciklama")
+STAGES = ("soru_analizi", "hatirlayani_ortaya_cikar", "kanitla_bag_kur", "sik_elemesi", "ogrenci_yaniti", "gerekceli_aciklama")
 # A local model may phrase the disclosure in several ways.  This is a safety
 # backstop; the answer label is still never included in its prompt.
 ANSWER_LABEL = re.compile(
@@ -23,6 +23,7 @@ ANSWER_LABEL = re.compile(
 
 class CoachReply(BaseModel):
     stage: str
+    error_type: str
     student_prompt: str = Field(min_length=1, max_length=600)
     short_spoken_text: str = Field(min_length=1, max_length=240)
     source_ids: list[str] = Field(default_factory=list, max_length=3)
@@ -39,12 +40,13 @@ class CoachContext:
     section_title: str
     source_ids: list[str]
     evidence: str
+    error_type: str
 
 
 def next_stage(previous: str | None, submit_answer: bool) -> str:
     if previous is None:
         return STAGES[0]
-    if previous == "sik_elemesi" and submit_answer:
+    if previous in {"sik_elemesi", "ogrenci_yaniti"} and submit_answer:
         return "gerekceli_aciklama"
     try:
         return STAGES[min(STAGES.index(previous) + 1, len(STAGES) - 2)]
@@ -63,20 +65,29 @@ def _sentence(value: str) -> str:
 def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
               answer_label: str | None) -> str:
     if stage == "soru_analizi":
-        return "Soru kökünün senden istediği şeyi kendi cümlenle söyler misin? Önce hangi bilgi ya da karşılaştırmanın arandığını bulalım."
-    if stage == "kanit_bulma":
-        return f"MEB kitabındaki {context.section_title} bölümünde bu soruya ışık tutan bir bilgi var. Bu bilginin hangi kavramı açıkladığını söyleyebilir misin?"
+        return "Birlikte bakalım: soru senden hangi bilgiyi bulmanı istiyor? Kökün en önemli sözcüğü hangisi?"
+    if stage == "hatirlayani_ortaya_cikar":
+        prompts = {"tarih": "Olayın adını hatırlamaya çalış. Bu olayın yanındaki tarih hangi döneme ait olabilir?",
+                   "yer": "Önce olayın geçtiği yeri gözünde canlandır. Deniz kıyısı mı, iç kesim mi?",
+                   "kronoloji": "İki olayı sıraya koymayı dene. Hangisi ötekinden önce yaşanmış olabilir?",
+                   "neden_sonuc": "Önce ne değişmiş olabilir, sonra bunun sonucu ne olmuş olabilir?",
+                   "kisi": "Kişinin yaptığı işi hatırlıyor musun? Bu iş sana kimi hatırlatıyor?",
+                   "kaynak_yorumu": "Metnin kesin söylediği şey ile senin eklediğin yorum aynı mı?",
+                   "asiri_genelleme": "Seçenekte ‘her zaman’ ya da ‘tamamı’ gibi çok geniş bir söz var mı?"}
+        return prompts[context.error_type]
+    if stage == "kanitla_bag_kur":
+        return "Kaynakta bu soruya yardım eden bir cümle var. O cümledeki hangi sözcük seçeneğini destekliyor ya da zayıflatıyor?"
     if stage == "sik_elemesi":
         if context.choice_text:
             return "Seçtiğin şıktaki ifadeyi kaynakla karşılaştır. Hangi kelime ya da tarih onu destekliyor veya zayıflatıyor?"
         return "Şıkları sırayla ele. Kaynakla uyuşmayan ilk ifadeyi ve nedenini söyleyebilir misin?"
     if stage == "ogrenci_yaniti":
-        return "Bir şık seçip kısa gerekçeni yaz. Hazır olduğunda yanıtını kontrol etmemi isteyebilirsin."
+        return "Bir şık seçip kısa gerekçeni yaz. Hazır olduğunda yanıtını birlikte kontrol edelim."
     if not answer_label:
         return "Yanıt anahtarı bu soru için kaynakla ayrıca doğrulanmamış. Kaynaktaki kanıtla gerekçeni birlikte karşılaştıralım."
     if submitted_choice == answer_label:
         return "Seçimin kaynak anahtarıyla uyuşuyor. Gerekçeni, MEB kitabındaki kanıtla bir cümlede bağlayalım."
-    return "Seçimin kaynak anahtarıyla uyuşmuyor. Kaynaktaki belirleyici ifadeye yeniden bakıp hangi şıkkı desteklediğini açıklayalım."
+    return "Burada iki bilgi birbirine karışmış olabilir. Kaynaktaki belirleyici ifadeye yeniden bak; şimdi hangi seçeneği zayıflattığını kendi sözünle anlat."
 
 
 def _prompt(stage: str, context: CoachContext, learner_message: str) -> str:
@@ -122,13 +133,13 @@ def coach(context: CoachContext, previous_stage: str | None, learner_message: st
     started = time.monotonic()
     if not context.source_ids:
         text = "Bu soru için öğretmen onaylı MEB kanıtı henüz yok. Soru kökünün senden ne istediğini kendi sözlerinle anlatır mısın?"
-        return CoachReply(stage=stage, student_prompt=text, short_spoken_text=_sentence(text),
+        return CoachReply(stage=stage, error_type=context.error_type, student_prompt=text, short_spoken_text=_sentence(text),
                           abstain_reason="approved_source_unavailable",
                           timings_ms={"total": int((time.monotonic() - started) * 1000)})
     model_text, model_timings = _llm_hint(stage, context, learner_message)
     if model_text and ANSWER_LABEL.search(model_text):
         model_text = None
     text = model_text or _fallback(stage, context, submitted_choice, answer_label if stage == "gerekceli_aciklama" else None)
-    return CoachReply(stage=stage, student_prompt=text, short_spoken_text=_sentence(text),
+    return CoachReply(stage=stage, error_type=context.error_type, student_prompt=text, short_spoken_text=_sentence(text),
                       source_ids=context.source_ids, can_reveal_explanation=stage == "gerekceli_aciklama",
                       timings_ms={**model_timings, "total": int((time.monotonic() - started) * 1000)})

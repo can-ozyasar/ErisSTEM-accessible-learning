@@ -6,8 +6,9 @@ sunucuda şu sırayı izler:
 ```mermaid
 stateDiagram-v2
   [*] --> soru_analizi
-  soru_analizi --> kanit_bulma
-  kanit_bulma --> sik_elemesi
+  soru_analizi --> hatirlayani_ortaya_cikar
+  hatirlayani_ortaya_cikar --> kanitla_bag_kur
+  kanitla_bag_kur --> sik_elemesi
   sik_elemesi --> ogrenci_yaniti
   sik_elemesi --> gerekceli_aciklama: öğrenci yanıtını gönderir
   ogrenci_yaniti --> gerekceli_aciklama
@@ -32,8 +33,10 @@ korur.
 Öğretmen önce `/v1/question-bank/teacher/tutor/questions/{id}/review` ile
 onaylı kaynak kimliklerini görür. Her soru için ilk üç aşamayı inceler; kayıt
 zorunlu olarak kaynak kimlikleri, erken cevap ifşası, kaynak bağlılık, sade
-Türkçe ve inceleyen kişiyi içerir. QLoRA dışa aktarım kapısı 60 tamamlanmış
-soru grubu ve 180 onaylı örnektir.
+Türkçe, yaş düzeyi ve inceleyen kişiyi içerir. Her soru altı öğrenci durumuyla
+hazırlanır: soruyu anlama, hatırladığını ortaya çıkarma, kanıtla bağ kurma,
+şıkkı sınama, yanlış yanıtı düzeltme ve doğru yanıtı pekiştirme. QLoRA dışa
+aktarım kapısı 120 tamamlanmış soru grubu ve 720 onaylı örnektir.
 
 ```bash
 cd apps/api
@@ -44,9 +47,9 @@ cd apps/api
 ```
 
 Kaggle dizininde yalnız `train.jsonl`, `dev.jsonl` ve manifest bulunur. Kapalı
-test ayrı yerel dizinde kalır. Dışa aktarılan satırlar soru metni, MEB alıntısı,
-sayfa/koordinat, cevap anahtarı veya öğrenci verisi taşımaz; yalnız koçluk
-protokolü ve öğretmen onaylı davranış yanıtıdır.
+test ayrı yerel dizinde kalır. Dışa aktarılan satırlar seçilmiş soru metni, en
+fazla iki kısa öğretmen onaylı MEB alıntısı, öğrenci durumu ve koç yanıtını
+taşır. Sayfa/koordinat, ham PDF, cevap anahtarı ve öğrenci verisi taşımaz.
 
 `experiments/kaggle/history_tutor_qwen14b_qlora.py`, Qwen3-14B'nin sabit
 revision'ı için NF4 4-bit, fp16, gradient checkpointing, LoRA ve

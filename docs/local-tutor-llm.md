@@ -13,7 +13,7 @@ istem gönderir. PDF, soru bankası ve öğrenci verisi bu kapsayıcıya bağlan
   "tokenizer_path": "/models/base",
   "adapter_path": "/models/adapter",
   "quantization": "nf4-4bit-fp16",
-  "training_data_summary": {"examples": 126, "source_material_included": false, "answer_keys_included": false}
+  "training_data_summary": {"examples": 504, "short_reviewed_evidence_included": true, "answer_keys_included": false}
 }
 ```
 

@@ -1,8 +1,7 @@
-"""Private Kaggle QLoRA run for coach behaviour, not history facts.
+"""Private Kaggle QLoRA run for source-bound history coaching.
 
-Input directory must contain `train.jsonl` and `dev.jsonl` exported by
-`app.tutor_dataset`. It rejects source PDFs, question-bank text, answer keys,
-and sealed-test files. Retrieval supplies the factual context at runtime.
+Input includes teacher-approved short question and MEB evidence excerpts. It
+rejects PDFs, answer keys, coordinates, student data and sealed-test files.
 """
 from __future__ import annotations
 
@@ -27,11 +26,11 @@ def rows(name: str) -> list[dict]:
     parsed = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if not parsed:
         raise ValueError(f"{name} is empty")
-    forbidden = ("answer_label", "answer_key", "source_text", "pdf", "bbox", "page", "question_text")
+    forbidden = ("answer_label", "answer_key", "source_text", "pdf", "bbox", "page", "answer_source_checked")
     groups = set()
     for item in parsed:
-        if set(item) != {"group_id", "stage", "prompt", "completion"}:
-            raise ValueError("unexpected data field; export only safe protocol data")
+        if set(item) != {"group_id", "case", "error_type", "prompt", "completion"}:
+            raise ValueError("unexpected data field; export only reviewed coach examples")
         if any(word in json.dumps(item, ensure_ascii=False).lower() for word in forbidden):
             raise ValueError("source or answer material found in QLoRA input")
         if item["group_id"] in groups:
@@ -44,7 +43,7 @@ def rows(name: str) -> list[dict]:
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"model": MODEL, "revision": REVISION, "status": "started", "input": str(INPUT),
-              "source_material_included": False, "answer_keys_included": False}
+              "short_reviewed_evidence_included": True, "answer_keys_included": False}
     def save():
         REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
@@ -72,10 +71,11 @@ def main():
         model.config.use_cache = False
         peft = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                           target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], task_type="CAUSAL_LM")
-        arguments = SFTConfig(output_dir=str(OUT / "checkpoints"), num_train_epochs=2,
+        learning_rate = float(os.getenv("TUTOR_QLORA_LR", "1e-4"))
+        arguments = SFTConfig(output_dir=str(OUT / "checkpoints"), num_train_epochs=3,
                               per_device_train_batch_size=1, per_device_eval_batch_size=1,
                               gradient_accumulation_steps=8, gradient_checkpointing=True,
-                              learning_rate=1e-4, logging_steps=5, eval_strategy="epoch",
+                              learning_rate=learning_rate, logging_steps=5, eval_strategy="epoch",
                               save_strategy="epoch", fp16=True, max_length=768,
                               completion_only_loss=True, report_to="none")
         trainer = SFTTrainer(model=model, args=arguments, train_dataset=Dataset.from_list(train),
@@ -89,7 +89,8 @@ def main():
         report.update({"status": "completed", "elapsed_seconds": round(time.monotonic() - started, 2),
                        "eval": {key: float(value) for key, value in metrics.items() if isinstance(value, (int, float))},
                        "adapter": str(adapter), "training": {"quantization": "nf4-4bit-fp16", "completion_only_loss": True,
-                       "gradient_checkpointing": True, "epochs": 2, "lora": {"r": 16, "alpha": 32}}})
+                       "gradient_checkpointing": True, "epochs": 3, "learning_rate": learning_rate,
+                       "lora": {"r": 16, "alpha": 32}}})
     except Exception as error:
         report.update({"status": "failed", "error_type": type(error).__name__, "error": str(error)[:2000]})
         raise

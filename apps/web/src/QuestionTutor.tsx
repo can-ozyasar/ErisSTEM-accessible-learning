@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useLearningSpeech } from "./useLearningSpeech";
 
 type Source = { id: string; page: number; section: string; excerpt: string };
-type Reply = { session_id: string; stage: string; student_prompt: string; short_spoken_text: string; source_ids: string[]; abstain_reason: string | null; can_reveal_explanation: boolean; sources: Source[] };
+type Reply = { session_id: string; stage: string; error_type: string; student_prompt: string; short_spoken_text: string; source_ids: string[]; abstain_reason: string | null; can_reveal_explanation: boolean; sources: Source[] };
 type Entry = { message: string; response: Reply; selectedChoice: string | null };
 type Recognition = { lang: string; continuous: boolean; interimResults: boolean; processLocally?: boolean;
   onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;

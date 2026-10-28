@@ -24,8 +24,9 @@ from .learning_operations import LearningOperationsStore, LearningRecord
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
 from .question_bank_extract import extract_book
 from .question_bank_structure import Question, navigation_units, question_audio_segments
+from .tutor_authoring import create_drafts, infer_error_type, review_draft
 from .tutor_coach import CoachContext, coach
-from .tutor_dataset import REVIEW_STAGES, TutorReviewInput, review_id, validate_review_payload
+from .tutor_dataset import CASES, TutorReviewInput, review_id, validate_review_payload
 
 SOURCE = Path("/private/question-bank/vip-9-sinif-tarih-soru-bankasi.pdf")
 
@@ -202,49 +203,123 @@ def question_bank_router(store: LearningOperationsStore):
         reviewed = [item for item in store.list("tutor_review", module_id) if item.get("approved")]
         groups = {item["question_id"] for item in reviewed}
         complete = {question_id for question_id in groups
-                    if {item["stage"] for item in reviewed if item["question_id"] == question_id} == set(REVIEW_STAGES)}
+                    if {item["case"] for item in reviewed if item["question_id"] == question_id} == set(CASES)}
         return {"approved_questions": len(questions), "approved_examples": len(reviewed),
-                "complete_question_groups": len(complete), "required_questions": 60,
-                "required_examples": 180,
-                "ready_for_qlora_export": len(complete) >= 60,
-                "notice": "QLoRA dışa aktarımı yalnız davranış örneklerini içerir; MEB metni, soru bankası ve cevap anahtarı içermez."}
+                "complete_question_groups": len(complete), "required_questions": 120,
+                "required_examples": 720, "ready_for_qlora_export": len(complete) >= 120,
+                "notice": "Her soru altı koçluk durumuyla incelenir. Kaggle örnekleri kısa, onaylı soru ve MEB kanıtı içerir; cevap anahtarı içermez."}
+
+    def tutor_sources(question):
+        index = _rag_index()
+        topic = _book()["page_contexts"][question.source.page].get("topic")
+        if not matching_sections(index, topic):
+            raise HTTPException(422, "Bu soru MEB başlığıyla güvenle eşleşmiyor")
+        sources = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic,
+                           " ".join(part.text for part in question.parts), limit=2)
+        if not sources:
+            raise HTTPException(422, "Bu soru için öğretmence onaylı MEB kanıtı bulunmuyor")
+        return index, sources
+
+    @router.get("/teacher/tutor/candidates")
+    def tutor_candidates(limit: int = 120, _: Role = teacher):
+        if limit < 1 or limit > 120:
+            raise HTTPException(422, "İnceleme listesi 1 ile 120 soru arasında olmalı")
+        book = _book()
+        module_id = book["source_checksum"][:16]
+        candidates = []
+        for record in store.list("qb", module_id):
+            question_payload = record["question"]
+            if question_payload.get("status") != "approved" or _layout_contaminated(question_payload):
+                continue
+            question = Question.model_validate(question_payload)
+            try:
+                _, sources = tutor_sources(question)
+            except HTTPException:
+                continue
+            topic = book["page_contexts"][question.source.page].get("topic") or "Başlık eşleşmedi"
+            candidates.append({"question_id": question.id, "number": question.number, "topic": topic,
+                               "page": question.source.page, "source_ids": [source["id"] for source in sources],
+                               "drafted_cases": sum(bool(store.get(f"tutor-draft:{question.id}:{case}")) for case in CASES),
+                               "reviewed_cases": sum(bool(store.get(review_id(question.id, case))) for case in CASES)})
+        # Round-robin topic ordering avoids selecting only the most frequent test section.
+        by_topic: dict[str, list[dict]] = {}
+        for item in candidates:
+            by_topic.setdefault(item["topic"], []).append(item)
+        selected = []
+        while by_topic and len(selected) < limit:
+            for topic in sorted(by_topic):
+                if by_topic[topic] and len(selected) < limit:
+                    selected.append(by_topic[topic].pop(0))
+                if not by_topic[topic]:
+                    del by_topic[topic]
+        return {"target": 120, "available": len(candidates), "candidates": selected}
 
     @router.get("/teacher/tutor/questions/{question_id}/review")
     def tutor_review_candidate(question_id: str, _: Role = teacher):
         book = _book()
         question = _student_question(book, store, question_id)
-        index = _rag_index()
-        context = book["page_contexts"][question.source.page]
-        topic = context.get("topic")
-        if not matching_sections(index, topic):
-            raise HTTPException(422, "Bu soru MEB başlığıyla güvenle eşleşmiyor")
-        query = " ".join(part.text for part in question.parts)
-        sources = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic, query)
-        if not sources:
-            raise HTTPException(422, "Bu soru için öğretmence onaylı MEB kanıtı bulunmuyor")
-        return {"question_id": question_id, "source_ids": [item["id"] for item in sources],
-                "stages": [{"stage": stage, "record": store.get(review_id(question_id, stage))}
-                           for stage in REVIEW_STAGES],
-                "notice": "Rehber yanıt cevap veya şık söylemeden, kaynakla bağ kuran sade Türkçe ipucu olmalı."}
+        _, sources = tutor_sources(question)
+        return {"question_id": question_id, "question_text": " ".join(part.text for part in question.parts),
+                "choices": [{"label": choice.label, "text": choice.text} for choice in question.choices],
+                "sources": [{"id": item["id"], "text": item["text"][:520], "page": item["page"],
+                             "section": item["section_title"]} for item in sources],
+                "cases": [{"case": case, "draft": store.get(f"tutor-draft:{question_id}:{case}"),
+                           "review": store.get(review_id(question_id, case))} for case in CASES],
+                "notice": "Rehber yanıt öğrencinin söyleyebileceği doğal Türkçe ile yazılmalı; ilk dört durumda cevap veya şık verilmez."}
 
-    @router.put("/teacher/tutor/reviews/{question_id}/{stage}")
-    def save_tutor_review(question_id: str, stage: str, item: TutorReviewInput, _: Role = teacher):
-        if item.question_id != question_id or item.stage != stage:
+    @router.post("/teacher/tutor/questions/{question_id}/drafts")
+    def create_tutor_drafts(question_id: str, _: Role = teacher):
+        book = _book()
+        question = _student_question(book, store, question_id)
+        index, sources = tutor_sources(question)
+        question_text = " ".join(part.text for part in question.parts)
+        drafts = create_drafts(question_text, sources)
+        saved = []
+        for draft in drafts:
+            record_id = f"tutor-draft:{question_id}:{draft['case']}"
+            current = store.get(record_id)
+            payload = {**draft, "question_id": question_id, "question_text": question_text,
+                       "source_checksum": index["source_checksum"]}
+            saved.append(store.save(record_id, "tutor_draft", book["source_checksum"][:16], payload,
+                                    current["revision"] if current else 0))
+        return {"question_id": question_id, "drafts": saved}
+
+    @router.post("/teacher/tutor/questions/{question_id}/cases/{case}/agent-review")
+    def agent_review_tutor_draft(question_id: str, case: str, candidate: dict | None = None, _: Role = teacher):
+        if case not in CASES:
+            raise HTTPException(404, "Koçluk durumu bulunamadı")
+        draft = store.get(f"tutor-draft:{question_id}:{case}")
+        if not draft:
+            raise HTTPException(404, "Önce öğretmen taslağı oluşturulmalı")
+        if candidate is not None:
+            if set(candidate) != {"guide_response"} or not isinstance(candidate["guide_response"], str):
+                raise HTTPException(422, "Agent incelemesi yalnız koç metni için istek alır")
+            draft = {**draft, "guide_response": candidate["guide_response"].strip()}
+        result = review_draft(draft)
+        record_id = f"tutor-agent-review:{question_id}:{case}"
+        current = store.get(record_id)
+        return store.save(record_id, "tutor_agent_review", draft["source_checksum"][:16],
+                          {"question_id": question_id, "case": case, "draft_revision": draft["revision"], **result},
+                          current["revision"] if current else 0)
+
+    @router.put("/teacher/tutor/reviews/{question_id}/{case}")
+    def save_tutor_review(question_id: str, case: str, item: TutorReviewInput, _: Role = teacher):
+        if item.question_id != question_id or item.case != case:
             raise HTTPException(409, "URL ile inceleme kaydı eşleşmiyor")
         book = _book()
         question = _student_question(book, store, question_id)
-        index = _rag_index()
-        topic = book["page_contexts"][question.source.page].get("topic")
-        allowed = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic,
-                           " ".join(part.text for part in question.parts))
+        index, allowed = tutor_sources(question)
         try:
-            validate_review_payload(item, {source["id"] for source in allowed})
+            validate_review_payload(item, {source["id"]: source["text"] for source in allowed})
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         payload = item.model_dump(exclude={"expected_revision"})
-        payload["source_checksum"] = index["source_checksum"]
-        return store.save(review_id(question_id, stage), "tutor_review", book["source_checksum"][:16],
-                          payload, item.expected_revision)
+        payload.update({"source_checksum": index["source_checksum"], "question_text": " ".join(part.text for part in question.parts)})
+        agent = store.get(f"tutor-agent-review:{question_id}:{case}")
+        if agent:
+            payload["agent_review"] = {key: agent[key] for key in ("passed", "flags", "natural_turkish", "age_appropriate", "early_answer_disclosed")}
+        return store.save(review_id(question_id, case), "tutor_review", book["source_checksum"][:16], payload,
+                          item.expected_revision)
 
     @router.get("/teacher/pages/{page_number}")
     def teacher_page(page_number: int, _: Role = teacher):
@@ -378,7 +453,7 @@ def question_bank_router(store: LearningOperationsStore):
         if not section_ids:
             text = "Bu testin konusu MEB kitabındaki başlıkla güvenle eşleşmedi. Soru kökünün senden ne istediğini birlikte belirleyelim."
             return {"session_id": turn.session_id or uuid4().hex, "stage": "soru_analizi", "student_prompt": text,
-                    "short_spoken_text": text, "source_ids": [], "abstain_reason": "topic_unmatched",
+                    "short_spoken_text": text, "error_type": "kaynak_yorumu", "source_ids": [], "abstain_reason": "topic_unmatched",
                     "can_reveal_explanation": False, "sources": [], "timings_ms": {"total": int((time.monotonic() - started) * 1000)}}
         selected = next((choice for choice in question.choices if choice.label == turn.selected_choice), None)
         query = " ".join([turn.message, *(part.text for part in question.parts),
@@ -399,7 +474,8 @@ def question_bank_router(store: LearningOperationsStore):
                                      choice_text=selected.text if selected else None,
                                      section_title=evidence["section_title"] if evidence else "MEB kitabı",
                                      source_ids=[item["id"] for item in sources],
-                                     evidence=evidence["text"][:900] if evidence else "")
+                                     evidence=evidence["text"][:900] if evidence else "",
+                                     error_type=infer_error_type(" ".join(part.text for part in question.parts), selected.text if selected else None))
         reply = coach(coach_context, previous_stage, turn.message, turn.submit_answer,
                       turn.selected_choice, question.answer_label if question.answer_source_checked else None)
         reply.timings_ms.update({"retrieval": retrieval_ms, "request_total": int((time.monotonic() - started) * 1000)})

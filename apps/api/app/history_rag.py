@@ -228,7 +228,7 @@ def _overlap(left: set[str], right: set[str]) -> float:
 
 
 def recommend_evidence(index: dict, question: str, choices: list[str], topic: str | None,
-                       limit: int = 12) -> list[dict]:
+                       limit: int = 12, verified_choice: str | None = None) -> list[dict]:
     """Explainable multi-signal candidates for human evidence review.
 
     Signals are deliberately lexical and inspectable: question BM25, distinctive
@@ -243,10 +243,13 @@ def recommend_evidence(index: dict, question: str, choices: list[str], topic: st
         return []
     raw_question = set(terms(question))
     raw_choices = set(terms(" ".join(choices)))
-    # Rare, longer terms carry more evidence than generic school-history words.
+    verified_terms = set(terms(verified_choice or ""))
+    # Distractors help find contrast passages, but cannot outweigh a verified
+    # answer's terms in the teacher-only evidence selection path.
+    signal_terms = raw_question | (verified_terms or raw_choices)
     docs = [set(terms(chunk["text"])) for chunk in index["chunks"]]
     df = Counter(term for doc in docs for term in doc)
-    distinctive = {term for term in raw_question | raw_choices if len(term) >= 5 and df[term] <= max(8, len(docs) // 12)}
+    distinctive = {term for term in signal_terms if len(term) >= 5 and df[term] <= max(8, len(docs) // 12)}
     allowed_sections = set(matching_sections(index, topic))
     maximum = max(item["score"] for item in ranked) or 1.0
     candidates: list[dict] = []
@@ -256,20 +259,23 @@ def recommend_evidence(index: dict, question: str, choices: list[str], topic: st
         entity = _overlap(distinctive, text_terms)
         question_coverage = _overlap(raw_question, text_terms)
         choice_coverage = _overlap(raw_choices, text_terms)
+        verified_coverage = _overlap(verified_terms, text_terms) if verified_terms else 0.0
         title_terms = set(terms(item["section_title"]))
         title = _overlap(set(terms(topic or "")), title_terms)
         warnings = candidate_review_warnings(item["text"])
         ocr = bool(_OCR_FRAGMENT.search(item["text"]))
         caption = bool(_CAPTIONISH.search(item["text"]))
         quality_penalty = (0.12 if ocr else 0.0) + (0.20 if caption else 0.0) + (0.25 if warnings else 0.0)
-        score = 0.42 * bm25 + 0.25 * entity + 0.16 * question_coverage + 0.07 * choice_coverage + 0.10 * title
+        score = (0.34 * bm25 + 0.24 * entity + 0.15 * question_coverage +
+                 0.05 * choice_coverage + 0.10 * title + 0.22 * verified_coverage)
         if item["section_id"] in allowed_sections:
             score += 0.06
         score -= quality_penalty
         reasons = []
         if entity: reasons.append("ayırt edici soru/şık terimi")
         if question_coverage >= 0.18: reasons.append("soru kökü kapsamı")
-        if choice_coverage >= 0.10: reasons.append("şık kapsamı")
+        if verified_coverage: reasons.append("doğrulanmış çözüm terimi (yalnız öğretmen seçimi)")
+        elif choice_coverage >= 0.10: reasons.append("şık kapsamı")
         if title or item["section_id"] in allowed_sections: reasons.append("konu başlığı uyumu")
         if ocr: reasons.append("PDF metninde bölünmüş sözcük riski")
         if caption: reasons.append("görsel açıklaması riski")
@@ -278,6 +284,7 @@ def recommend_evidence(index: dict, question: str, choices: list[str], topic: st
                            "signals": {"bm25": round(bm25, 4), "entity_coverage": round(entity, 4),
                                        "question_coverage": round(question_coverage, 4),
                                        "choice_coverage": round(choice_coverage, 4),
+                                       "verified_choice_coverage": round(verified_coverage, 4),
                                        "title_coverage": round(title, 4), "quality_penalty": quality_penalty},
                            "reasons": reasons,
                            "review_recommendation": "review" if score >= 0.18 and not caption and not warnings else "do_not_use_yet"})

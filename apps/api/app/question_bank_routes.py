@@ -267,9 +267,12 @@ def question_bank_router(store: LearningOperationsStore):
         question = _student_question(book, store, question_id)
         index = _rag_index()
         approved = _approved_rag_ids(store, index["source_checksum"])
+        verified_choice = next((choice.text for choice in question.choices if choice.label == question.answer_label),
+                               None) if question.answer_source_checked else None
         chosen = recommend_evidence(index, " ".join(part.text for part in question.parts),
                                     [choice.text for choice in question.choices],
-                                    book["page_contexts"][question.source.page].get("topic"), limit=12)
+                                    book["page_contexts"][question.source.page].get("topic"), limit=12,
+                                    verified_choice=verified_choice)
         return {"question_id": question_id,
                 "notice": "Bunlar PDF içinden otomatik önerilerdir. Kaynak onayı olmadan öğrenci koçunda veya Kaggle verisinde kullanılamaz.",
                 "candidates": [{"id": item["id"], "text": item["text"][:520], "page": item["page"],

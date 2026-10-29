@@ -111,6 +111,40 @@ def candidate_review_warnings(text: str) -> list[str]:
     return warnings
 
 
+_POETIC = re.compile(
+    r"(?:ne kadar duygulu|gönlü dolan|mübârek|hatıralar rüzgârı|seher|şiir|mısra|dizeler)", re.IGNORECASE)
+_EXPLANATORY = re.compile(
+    r"(?:sağladı|etkiledi|gelişti|oluşturdu|ortaya çıktı|yaygınlaştı|kuruldu|değişti|sonucunda|nedeniyle)", re.IGNORECASE)
+
+
+def source_review_recommendation(text: str) -> dict:
+    """Conservative pre-review for a human teacher, never an approval decision."""
+    quality = chunk_quality(text)
+    if _POETIC.search(text) or ("(...)" in text and len(re.findall(r"[,;]", text)) >= 3):
+        return {"decision": "do_not_use", "confidence": "high",
+                "explanation": "Edebî/şiirsel anlatım içeriyor; doğrudan ders kanıtı değildir.",
+                "reasons": ["edebi_alinti_riski"]}
+    if quality["visual_or_caption_risk"]:
+        return {"decision": "do_not_use", "confidence": "high",
+                "explanation": "Görsel veya eser açıklaması olabilir; soru kanıtı olarak tek başına kullanılmaz.",
+                "reasons": ["gorsel_aciklamasi"]}
+    if quality["instruction_risk"]:
+        return {"decision": "do_not_use", "confidence": "high",
+                "explanation": "Etkinlik yönergesi olabilir; ders bilgisini doğrudan kanıtlamaz.",
+                "reasons": ["etkinlik_yonergesi"]}
+    if quality["ocr_fragment_risk"]:
+        return {"decision": "manual_review", "confidence": "low",
+                "explanation": "PDF metninde bölünmüş sözcük riski var; PDF kırpımıyla anlamı doğrulanmadan kullanmayın.",
+                "reasons": ["ocr_bozulmasi"]}
+    if _EXPLANATORY.search(text) and quality["word_count"] >= 6:
+        return {"decision": "review_for_approval", "confidence": "medium",
+                "explanation": "Neden-sonuç veya tarihsel açıklama içeriyor gibi görünüyor; PDF ile aynıysa ders kanıtı olarak uygun olabilir.",
+                "reasons": ["ders_bilgisi_adayi"]}
+    return {"decision": "manual_review", "confidence": "low",
+            "explanation": "Metin ders bilgisi olabilir; ancak tek başına doğrudan kanıt olup olmadığı PDF bağlamında net değil.",
+            "reasons": ["baglam_kontrolu_gerekli"]}
+
+
 def build_index(source: Path = BOOK) -> dict:
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
     chunks = []

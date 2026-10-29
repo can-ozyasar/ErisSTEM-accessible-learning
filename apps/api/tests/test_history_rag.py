@@ -51,3 +51,10 @@ def test_duplicate_chunks_are_collapsed_and_conflicting_ids_rejected():
     assert deduplicate_chunks([chunk, dict(chunk)]) == [chunk]
     with pytest.raises(ValueError, match='çakışan'):
         deduplicate_chunks([chunk, {**chunk, 'text': 'Farklı metin'}])
+
+def test_pre_review_keeps_poetry_and_instructions_out_of_evidence_pool():
+    from app.history_rag import source_review_recommendation
+    poem = "Süleymaniye’de Bayram Sabahı (...) Ne kadar duygulu, engin ve mübârek bu seher! Kadın erkek ve çocuk, gönlü dolanlar, yer yer, Dinliyor hepsi büyük hâtıralar rüzgârını."
+    assert source_review_recommendation(poem)["decision"] == "do_not_use"
+    assert source_review_recommendation("III. Adım: Soruları cevaplayınız.")["decision"] == "do_not_use"
+    assert source_review_recommendation("Tarım üretimi yerleşik yaşamın gelişmesini sağladı.")["decision"] == "review_for_approval"

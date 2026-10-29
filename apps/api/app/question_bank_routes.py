@@ -24,6 +24,7 @@ from .history_rag import (
     matching_sections,
     rank_chunks,
     recommend_evidence,
+    source_review_recommendation,
 )
 from .history_source import BOOK as HISTORY_BOOK
 from .history_speech import history_spoken_text
@@ -180,6 +181,7 @@ def question_bank_router(store: LearningOperationsStore):
         approved = _approved_rag_ids(store, index["source_checksum"])
         return [{**chunk, "approved": chunk["id"] in approved,
                  "quality": chunk.get("quality") or chunk_quality(chunk["text"]),
+                 "pre_review": source_review_recommendation(chunk["text"]),
                  "review_warnings": candidate_review_warnings(chunk["text"]),
                  "revision": (store.get(f"rag:{index['source_checksum'][:12]}:{chunk['id']}") or {}).get("revision", 0)}
                 for chunk in index["chunks"] if chunk["section_id"] == section_id]

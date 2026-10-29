@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 type Section = { id: string; title: string; start: number; end: number };
-type Chunk = { id: string; page: number; bbox: number[]; text: string; approved: boolean; revision: number; review_warnings: string[] };
+type Chunk = { id: string; page: number; bbox: number[]; text: string; approved: boolean; revision: number; review_warnings: string[]; pre_review?: { decision: "do_not_use" | "review_for_approval" | "manual_review"; confidence: string; explanation: string; reasons: string[] } };
 type Summary = { candidate_count: number; approved_count: number; sections: Section[] };
 const headers = { "X-Role": "teacher" };
 
@@ -68,6 +68,7 @@ export function HistoryRagReview({ api }: { api: string }) {
     </select></label>}
     <ol className="rag-review-list">{chunks.map(chunk => <li key={chunk.id}>
       <p><strong>PDF sayfası {chunk.page}</strong> · {chunk.approved ? "Onaylı" : "İnceleme bekliyor"}</p>
+      {chunk.pre_review && <p className={chunk.pre_review.decision === "review_for_approval" ? "review-recommendation" : "review-warning"} role="note"><strong>Önerilen karar: {chunk.pre_review.decision === "do_not_use" ? "Kullanma" : chunk.pre_review.decision === "review_for_approval" ? "PDF ile doğrularsan onayla" : "Bağlamı incele"}</strong><br />{chunk.pre_review.explanation}</p>}
       {chunk.review_warnings?.length > 0 && <p className="review-warning" role="note">
         Otomatik uyarı: {chunk.review_warnings.includes("etkinlik_yonergesi_olabilir") ? "Bu metin etkinlik yönergesi olabilir. " : ""}
         {chunk.review_warnings.includes("gorsel_aciklama_olabilir") ? "Bu metin görsel açıklaması olabilir. " : ""}
@@ -75,7 +76,7 @@ export function HistoryRagReview({ api }: { api: string }) {
       </p>}
       <p>{chunk.text}</p>
       <SourcePreview api={api} chunk={chunk} />
-      {!chunk.approved ? <><label><input type="checkbox" checked={checked === chunk.id} onChange={event => setChecked(event.target.checked ? chunk.id : "")} /> Metni ve ders bilgisi niteliğini kaynakta doğruladım.</label><button type="button" disabled={checked !== chunk.id} onClick={() => void setApproval(chunk, true)}>Bu parçayı onayla</button></>
+      {!chunk.approved ? <>{chunk.pre_review?.decision === "do_not_use" ? <p className="review-warning">Bu parça için sistemin önerisi kullanmamak. Yanlış sınıflandırıldığını PDF kırpımından doğrularsan yine onaylayabilirsin.</p> : null}<label><input type="checkbox" checked={checked === chunk.id} onChange={event => setChecked(event.target.checked ? chunk.id : "")} /> Metni ve ders bilgisi niteliğini kaynakta doğruladım.</label><button type="button" disabled={checked !== chunk.id} onClick={() => void setApproval(chunk, true)}>Bu parçayı onayla</button></>
         : <button type="button" className="quiet-button" onClick={() => void setApproval(chunk, false)}>Onayı geri al</button>}
     </li>)}</ol>
   </section>;

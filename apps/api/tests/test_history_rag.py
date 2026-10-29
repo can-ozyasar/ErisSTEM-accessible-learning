@@ -22,6 +22,7 @@ def test_topic_gate_and_approved_retrieval():
 
 
 BOOK = Path(__file__).parents[3] / "data/meb/tarih-9sinif-ders-kitabi_20261006.pdf"
+BOOK_12 = Path(__file__).parents[3] / "data/meb/inkilap-12-aday-eba.pdf"
 
 
 @pytest.mark.skipif(not BOOK.is_file(), reason="Local MEB source not installed")
@@ -32,6 +33,17 @@ def test_real_index_uses_toc_and_excludes_assessment_pages():
                for item in index["chunks"])
     assert any(item["section_id"] == "1.1" for item in index["chunks"])
     assert index["exclusions"].get("edebi_alinti_yapisi", 0) >= 1
+
+
+@pytest.mark.skipif(not BOOK_12.is_file(), reason="Local MEB 12th-grade source not installed")
+def test_current_12th_grade_toc_recovers_wrapped_and_split_rows():
+    """Current MEB 12 PDF has both split page-number blocks and wrapped titles."""
+    index = build_index(BOOK_12)
+    sections = {item["id"]: item for item in index["sections"]}
+    assert len(sections) == 32
+    assert sections["2.6"]["start"] == 94
+    assert sections["8.2"]["start"] == 262
+    assert sections["8.2"]["end"] == 270
 
 
 def test_review_flags_activity_fragments_and_captions_without_changing_approval():

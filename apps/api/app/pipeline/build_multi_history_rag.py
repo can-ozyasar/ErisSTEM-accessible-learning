@@ -10,6 +10,14 @@ from ..history_rag import build_index
 
 
 def build(sources: dict[int, Path]) -> dict:
+    """Build a candidate-only corpus from checksum-bound MEB textbooks.
+
+    Grades are intentionally data-driven instead of hard-coded to the initial
+    10--11 pilot.  This lets the review workflow add the 12th-grade İnkilap
+    textbook without creating a second, incompatible corpus format.
+    """
+    if not sources:
+        raise ValueError("En az bir MEB ders kitabı gerekli")
     books = []
     for grade, path in sorted(sources.items()):
         index = build_index(path)
@@ -27,9 +35,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--grade10", type=Path, required=True)
     parser.add_argument("--grade11", type=Path, required=True)
+    parser.add_argument("--grade12", type=Path,
+                        help="Doğrulanmış 12. sınıf T.C. İnkılap Tarihi kitabı")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    result = build({10: args.grade10, 11: args.grade11})
+    sources = {10: args.grade10, 11: args.grade11}
+    if args.grade12:
+        sources[12] = args.grade12
+    result = build(sources)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
 

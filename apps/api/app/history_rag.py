@@ -19,6 +19,14 @@ from .history_source import BOOK
 
 INDEX_PATH = Path(os.getenv("HISTORY_RAG_INDEX", "/private/derived/history-rag-v1.json"))
 SECTION = re.compile(r"^(\d)\.(\d)\.\s+(.+?)\s*\.{3,}\s*(\d{1,3})\s*$")
+SECTION_WITH_SUBPAGE = re.compile(r"^(\d)\.(\d)\.\d+\.\s+.+?\.{3,}\s*(\d{1,3})\s*$")
+SECTION_WITHOUT_PAGE = re.compile(r"^(\d)\.(\d)\.\s+(.+?)\s*$")
+# Some current MEB TOCs prefix this with ``1. Ünite`` and suffix it with
+# ``Soruları``.  The dotted leader/page number keeps this deliberately tied
+# to a TOC row rather than prose in the opening pages.
+ASSESSMENT = re.compile(
+    r"^(?=.*\bölçme\b)(?=.*\bdeğerlendirme\b).*?\.{3,}\s*(\d{1,3})\s*$", re.IGNORECASE
+)
 TOKENS = re.compile(r"[a-zçğıöşü0-9]+", re.IGNORECASE)
 STOP = {"ve", "veya", "ile", "bir", "bu", "da", "de", "için", "olan", "olarak",
         "tarih", "tarihi", "tarihin", "hangi", "aşağıdaki", "göre", "ise", "en", "ne"}
@@ -41,18 +49,111 @@ def terms(value: str) -> list[str]:
     return [word for word in TOKENS.findall(fold(value)) if len(word) > 2 and word not in STOP]
 
 
+def _word_toc_sections(pdf) -> list[dict]:
+    """Recover TOC rows whose title and page number are separate PDF blocks.
+
+    Certain MEB exports place the right-aligned page number in another text
+    block.  Reading blocks alone then yields a valid heading with no page
+    number.  This geometry-based recovery only accepts top-level ``1.2.``
+    forms plus a same-row, in-range page number, so lesson headings later in
+    the PDF cannot be mistaken for a TOC row.
+    """
+    recovered = []
+    for page_number in range(min(15, pdf.page_count)):
+        words = pdf[page_number].get_text("words")
+        for x0, y0, _x1, _y1, word, *_ in words:
+            match = re.fullmatch(r"(\d)\.(\d)\.", word)
+            if not match:
+                continue
+            row = sorted((item for item in words if abs(item[1] - y0) <= 1.5 and item[0] >= x0 - 1),
+                         key=lambda item: item[0])
+            start = next((index for index, item in enumerate(row) if item[4] == word and abs(item[0] - x0) <= 1), None)
+            if start is None:
+                continue
+            numeric = [index for index, item in enumerate(row[start + 1:], start + 1)
+                       if item[4].isdigit() and 1 <= int(item[4]) <= pdf.page_count]
+            if not numeric:
+                continue
+            page_index = numeric[-1]
+            title_words = [item[4] for item in row[start + 1:page_index]
+                           if not re.fullmatch(r"\.{3,}", item[4])]
+            title = _clean(" ".join(title_words))
+            if len(title) < 4:
+                continue
+            recovered.append({"id": f"{match[1]}.{match[2]}", "title": title,
+                              "start": int(row[page_index][4])})
+    return recovered
+
+
 def sections(pdf) -> list[dict]:
-    toc = pdf[6].get_text().splitlines()
+    # The 9th-grade pilot kept a page cap for its three units.  That made a
+    # later textbook silently impossible to index.  Parse the whole front
+    # matter instead: real TOC entries carry dotted leaders and a page number,
+    # while lesson headings do not.
+    toc = []
+    for page_number in range(min(15, pdf.page_count)):
+        # ``get_text()`` can return visually separate TOC blocks in tagged-PDF
+        # order (1, 3, 2).  Blocks retain their own line/page-number pairing;
+        # sorting them by geometry restores the reading sequence and works for
+        # both one-column and multi-column MEB layouts.
+        blocks = [block for block in pdf[page_number].get_text("blocks") if len(block) >= 5]
+        for block in sorted(blocks, key=lambda item: (item[1], item[0])):
+            toc.extend(block[4].splitlines())
+    # Long 11th-grade section names sometimes wrap before their dotted leader
+    # and page number. Join only a root row with its prose continuation; never
+    # join it to a numbered child heading.
+    joined_toc = []
+    for raw_line in toc:
+        normalized_line = re.sub(r"\s+", " ", raw_line).strip()
+        previous = joined_toc[-1] if joined_toc else ""
+        previous_compact = re.sub(r"^(\d)\.\s+(\d)\.", r"\1.\2.", previous)
+        root_without_page = (SECTION_WITHOUT_PAGE.match(previous_compact)
+                             if not re.search(r"\d{1,3}\s*$", previous_compact) else None)
+        if (root_without_page and normalized_line
+                and not re.match(r"^\d\.\d\.\d+\.", normalized_line)):
+            combined = f"{previous} {normalized_line}"
+            compact = re.sub(r"\s+", " ", combined).strip()
+            if SECTION.match(re.sub(r"^(\d)\.\s+(\d)\.", r"\1.\2.", compact)):
+                joined_toc[-1] = compact
+                continue
+        joined_toc.append(raw_line)
+    toc = joined_toc
     result = []
+    pending_sections: dict[str, str] = {}
+    assessment_pages = []
     for line in toc:
-        match = SECTION.match(re.sub(r"\s+", " ", line).strip())
+        normalized = re.sub(r"\s+", " ", line).strip()
+        # A few rows encode ``5. 1.`` rather than ``5.1.``.  Normalize only
+        # the section prefix, preserving title dates such as ``20. Yüzyıl``.
+        normalized = re.sub(r"^(\d)\.\s+(\d)\.", r"\1.\2.", normalized)
+        match = SECTION.match(normalized)
         if match:
             result.append({"id": f"{match[1]}.{match[2]}", "title": match[3].strip(),
                            "start": int(match[4])})
-    if len(result) < 10:
-        # Newer MEB books wrap entries across lines and label units separately.
-        # Recover only numbered subheadings followed by a page number; the
-        # resulting index still carries PDF page coordinates for review.
+            pending_sections.pop(f"{match[1]}.{match[2]}", None)
+        else:
+            # Wrapped headings occasionally put the page number only on the
+            # first child row.  We retain the root title temporarily, then
+            # use that child's printed start page.  No page means no section.
+            root = SECTION_WITHOUT_PAGE.match(normalized)
+            if root and not re.match(r"^\d\.\d\.\d+\.", normalized):
+                pending_sections[f"{root[1]}.{root[2]}"] = root[3].rstrip(". ")
+            child = SECTION_WITH_SUBPAGE.match(normalized)
+            if child:
+                section_id = f"{child[1]}.{child[2]}"
+                if section_id in pending_sections:
+                    result.append({"id": section_id, "title": pending_sections.pop(section_id),
+                                   "start": int(child[3])})
+        assessment = ASSESSMENT.match(normalized)
+        if assessment:
+            assessment_pages.append(int(assessment[1]))
+    # Geometry recovery augments ordinary text parsing for rows whose page
+    # number was split into a separate PDF block.
+    result.extend(_word_toc_sections(pdf))
+    if len(result) < 3:
+        # Last-resort recovery for a short or unusually formatted textbook.
+        # A valid book can have fewer than ten sections, so the former pilot
+        # threshold would throw away good entries from small future sources.
         result = []
         for page_number in range(min(15, pdf.page_count)):
             lines = [_clean(line) for line in pdf[page_number].get_text().splitlines()]
@@ -63,10 +164,20 @@ def sections(pdf) -> list[dict]:
                                    "start": int(match[4])})
         if len(result) < 3:
             raise ValueError("MEB içindekiler bölüm başlangıçları doğrulanamadı")
-    result = list({item["id"]: item for item in result}.values())
+    # Text-layer rows are preferred over geometry recovery when both exist;
+    # geometry is strictly a repair path for rows whose page number was split
+    # into a separate PDF block.
+    unique: dict[str, dict] = {}
+    for item in result:
+        unique.setdefault(item["id"], item)
+    result = sorted(unique.values(), key=lambda item: item["start"])
     for index, item in enumerate(result):
-        item["end"] = result[index + 1]["start"] - 1 if index + 1 < len(result) else 243
-        item["end"] = min(item["end"], {"1": 60, "2": 154, "3": 243}[item["id"][0]])
+        next_section = result[index + 1]["start"] - 1 if index + 1 < len(result) else pdf.page_count
+        next_assessment = next((page - 1 for page in assessment_pages if page > item["start"]), None)
+        # Assessment pages are excluded from candidate extraction even when a
+        # unit has no following numbered subsection.  If the TOC lacks an
+        # assessment entry, retain the conservative next-section/document end.
+        item["end"] = min(next_section, next_assessment) if next_assessment else next_section
     return result
 
 

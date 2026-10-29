@@ -44,6 +44,9 @@ TTS için kaynaklı kalite araştırması, ölçütler ve deney karar kuralı
 | 2026-10 | Fine tune | İlk V3 referans-ses deneyi bitmeden eğitim başlatılmadı | Temel modelin yeterli olduğu yerde gereksiz veri, GPU ve kalite riski oluşmamalı | Beklemede |
 | 2026-10 | Eğitim verisi | MEB kitabı metni test ve alan sözlüğü olarak ayrıldı; doğrudan ses eğitimi verisi sayılmadı | TTS fine tune için izinli insan sesi ve eşleşen transkript gerekir | Uygulandı |
 | 2026-10 | Referans ses verisi | Harici ses kaynağının izin mesajı depolanmadı | Konuşmacının özel iletişim verisi yerelde veya Git'te tutulmamalı | Uygulandı |
+| 2026-10 | AYT Tarih-2 MEB kanıtı | 10, 11 ve checksum doğrulanmış 12. sınıf MEB kitapları tek private inceleme corpus'unda birleştirildi | Millî Mücadele, Lozan ve Atatürkçülük kanıtı 12. sınıf kitabı olmadan eksikti; ham PDF ve soru içeriği ürün/Kaggle alanına taşınmadı | Öğretmen PDF kırpımı incelemesi bekliyor |
+| 2026-10 | PDF içindekiler ayrıştırması | Sabit 9. sınıf sayfa sınırları kaldırıldı; satır kırığı, blok sırası ve ayrı sayfa numarası onarımı eklendi | Yeni MEB kitaplarında sabit sınır yanlış kaynak aralığı üretiyordu; üç gerçek kitap ve birim testleriyle doğrulandı | Uygulandı |
+| 2026-10 | AYT kanıt önerisi | Yıl etiketi bağlanmış adaylar için checksum bağlı, onaysız MEB kanıt önerisi üretildi | Otomatik eşleşme kaynak onayı değildir; yıl bağlanamayan adaylar ve tüm öneriler öğrenci RAG'ından kapalı tutulur | Öğretmen incelemesi bekliyor |
 
 ## Kullanılan teknoloji ve bileşen envanteri
 

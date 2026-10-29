@@ -50,7 +50,20 @@ def sections(pdf) -> list[dict]:
             result.append({"id": f"{match[1]}.{match[2]}", "title": match[3].strip(),
                            "start": int(match[4])})
     if len(result) < 10:
-        raise ValueError("MEB içindekiler bölüm başlangıçları doğrulanamadı")
+        # Newer MEB books wrap entries across lines and label units separately.
+        # Recover only numbered subheadings followed by a page number; the
+        # resulting index still carries PDF page coordinates for review.
+        result = []
+        for page_number in range(min(15, pdf.page_count)):
+            lines = [_clean(line) for line in pdf[page_number].get_text().splitlines()]
+            for index, line in enumerate(lines):
+                match = re.match(r"^(\d)\.(\d)\.\s+(.+?)\s*\.{2,}\s*(\d{1,3})$", line)
+                if match:
+                    result.append({"id": f"{match[1]}.{match[2]}", "title": match[3].strip(),
+                                   "start": int(match[4])})
+        if len(result) < 3:
+            raise ValueError("MEB içindekiler bölüm başlangıçları doğrulanamadı")
+    result = list({item["id"]: item for item in result}.values())
     for index, item in enumerate(result):
         item["end"] = result[index + 1]["start"] - 1 if index + 1 < len(result) else 243
         item["end"] = min(item["end"], {"1": 60, "2": 154, "3": 243}[item["id"][0]])

@@ -50,6 +50,8 @@ TTS için kaynaklı kalite araştırması, ölçütler ve deney karar kuralı
 | 2026-10 | AYT yıl bağlama | Dikey yakınlık kuralı kaldırıldı; yıl etiketi yalnız aynı soru kutusundaki PDF koordinatıyla bağlanıyor | İki sütunlu sayfada komşu sütunun yılı yanlış atanmıştı; 2018–2021 adayları kapsam dışı, 2022–2026 adayları ayrı tutuluyor | Uygulandı |
 | 2026-10 | AYT öneri havuzu | Otomatik öneri yalnız `review_for_approval` ders bilgisi adaylarıyla sınırlandı | Etkinlik/yönerge, görsel açıklaması ve belirsiz parçalar BM25 ile yüksek çıksa da kanıt önerisi değildir | Uygulandı; PDF kırpımı incelemesi bekliyor |
 | 2026-10 | AYT PDF kırpım incelemesi | 2022–2026'ya bağlı 27 aday için ilk üç MEB önerisi private HTML/PDF kırpım paketi olarak üretildi | Öğretmen metin katmanındaki bozulmaya değil, kaynak PDF görünümüne göre karar vermeli; paket cevap vermez ve onay kaydı yazmaz | Uygulandı; 81 kırpım inceleme bekliyor |
+| 2026-10 | AYT retrieval ön incelemesi | Bağımsız öğretmen rolündeki agent, 27 güncel adayın ilk üç önerisini onay vermeden sınıflandırdı: 9 primary adayı, 8 sınırlı bağlam, 10 yetersiz | Öneri kalitesi henüz yeterli değil; agent sonucu insan öğretmen yerine geçmez ve yalnız hedefli yeniden-getirme ile altın etiketleme sırasını belirler | Uygulandı; insan PDF kırpım incelemesi bekliyor |
+| 2026-10 | Retrieval ölçüm kapısı | PDF kırpımı kontrolü, primary rolü ve inceleyen bilgisi olmadan BM25 değerlendirmesine girmeyen private altın kanıt şablonu eklendi | Dense/RRF/reranker deneyi, taban çizgi ve kapalı kaynak kimlikleri olmadan anlamlı karşılaştırma üretmez | Uygulandı; etiket bekliyor |
 
 ## Kullanılan teknoloji ve bileşen envanteri
 

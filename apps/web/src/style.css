@@ -114,3 +114,8 @@
 .learning-shell a { color: #164e7a; text-underline-offset: .2em; }
 .learning-shell .student-actions a { min-height: 44px; display: inline-flex; align-items: center; padding: .4rem; }
 @media (forced-colors: active) { .learning-shell .learning-option:has(input:checked) { outline: 2px solid Highlight; } }
+
+.scope-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); gap: .75rem; }
+.scope-form label { margin: 0; }
+.bank-page-approval table { width: 100%; border-collapse: collapse; overflow-wrap: anywhere; }
+.bank-page-approval th, .bank-page-approval td { border: 1px solid #8da4b8; padding: .45rem; text-align: left; }

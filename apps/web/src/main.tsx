@@ -10,6 +10,7 @@ import { HistoryRagReview } from "./HistoryRagReview";
 import { QuestionBankReview } from "./QuestionBankReview";
 import { QuestionBankStudent } from "./QuestionBankStudent";
 import { TutorDatasetReview } from "./TutorDatasetReview";
+import { YksScopeReview } from "./YksScopeReview";
 import { StudentLibrary } from "./StudentLibrary";
 import { VoiceCommandPanel } from "./VoiceCommandPanel";
 import { WritingSpace } from "./WritingSpace";
@@ -432,7 +433,7 @@ function ReviewerPublish() {
 }
 
 const mode = new URLSearchParams(window.location.search).get("mode");
-const isTeacherRoute = ["teacher", "learning-review", "pilot", "learning-release", "question-bank-review", "rag-review", "tutor-dataset-review", "teacher-editor", "table-review", "benchmark", "reviewer"].includes(mode ?? "");
-const screen = mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "question-bank-review" ? <QuestionBankReview api={API} /> : mode === "rag-review" ? <HistoryRagReview api={API} /> : mode === "tutor-dataset-review" ? <TutorDatasetReview api={API} /> : mode === "teacher-editor" ? <TeacherReview /> : mode === "teacher" ? <TeacherHome /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : mode === "student" ? <StudentApp /> : <EntryPortal />;
+const isTeacherRoute = ["teacher", "learning-review", "pilot", "learning-release", "question-bank-review", "rag-review", "tutor-dataset-review", "yks-scope-review", "teacher-editor", "table-review", "benchmark", "reviewer"].includes(mode ?? "");
+const screen = mode === "learning-review" ? <LearningManagement api={API} panel="review" /> : mode === "pilot" ? <LearningManagement api={API} panel="pilot" /> : mode === "learning-release" ? <LearningManagement api={API} panel="release" /> : mode === "question-bank-review" ? <QuestionBankReview api={API} /> : mode === "rag-review" ? <HistoryRagReview api={API} /> : mode === "tutor-dataset-review" ? <TutorDatasetReview api={API} /> : mode === "yks-scope-review" ? <YksScopeReview api={API} /> : mode === "teacher-editor" ? <TeacherReview /> : mode === "teacher" ? <TeacherHome /> : mode === "table-review" ? <TableReviewWorkspace /> : mode === "benchmark" ? <GoldAnnotationReview /> : mode === "reviewer" ? <ReviewerPublish /> : mode === "student" ? <StudentApp /> : <EntryPortal />;
 createRoot(document.getElementById("root")!).render(<><AccessibilitySettings />{isTeacherRoute && <><ExploreSpeech routeKey={`teacher:${mode}`} /><PortalNav mode={mode ?? ""} /></>}{screen}</>);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js");

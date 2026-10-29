@@ -1,6 +1,6 @@
 import json
 
-from app.pipeline.ayt_evidence_review_pack import build
+from app.pipeline.ayt_evidence_review_pack import _write_html, build
 
 
 def test_empty_suggestions_create_private_review_shell_and_escape_question(tmp_path):
@@ -21,3 +21,12 @@ def test_empty_suggestions_create_private_review_shell_and_escape_question(tmp_p
     assert result["crop_count"] == 0
     assert json.loads((tmp_path / "pack" / "manifest.json").read_text())["corpus_checksum"] == "corpus-v1"
     assert "&lt;metin&gt;" in (tmp_path / "pack" / "index.html").read_text()
+
+
+def test_constraint_caption_handles_absent_optional_clause_list(tmp_path):
+    target = tmp_path / "index.html"
+    _write_html({"reviews": [{"exam_year": 2024, "candidate_id": "q1", "question_text": "metin",
+                  "cards": [{"rank": 1, "source_name": "history.pdf", "grade": 9, "page": 1,
+                             "section_title": "Tarih", "crop": "crop.png",
+                             "constraint_clause_id": "hatun-hukumdar", "constraint_clause_ids": None}]}]}, target)
+    assert "Kısıt: hatun-hukumdar" in target.read_text(encoding="utf-8")

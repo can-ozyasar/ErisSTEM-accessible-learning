@@ -190,7 +190,10 @@ def _candidate(text: str, bbox: list[float], page_height: float) -> bool:
         return False
     if not 105 <= len(text) <= 2000 or len(terms(text)) < 12:
         return False
-    if EXCLUDE.match(text) or text.startswith(("“", '"', "(")):
+    # Textbook source quotations can carry the only direct wording for a
+    # historical relation. They enter the manual-review queue below; they are
+    # never automatically treated as student evidence.
+    if EXCLUDE.match(text) or text.startswith("("):
         return False
     if ACTIVITY.search(text):
         return False
@@ -286,6 +289,11 @@ def source_review_recommendation(text: str, layout: dict | None = None) -> dict:
         return {"decision": "manual_review", "confidence": "low",
                 "explanation": "PDF metninde bölünmüş sözcük riski var; PDF kırpımıyla anlamı doğrulanmadan kullanmayın.",
                 "reasons": ["ocr_bozulmasi"], "features": layout}
+    if text.startswith(("“", '"')):
+        return {"decision": "manual_review", "confidence": "medium",
+                "explanation": "Ders kitabındaki kaynak alıntısı olabilir; bağlamı ve PDF kırpımı doğrulanmadan ders kanıtı sayılmaz.",
+                "reasons": ["kaynak_alintisi_baglam_kontrolu"], "source_type": "quoted_source",
+                "features": layout}
     if _EXPLANATORY.search(text) and quality["word_count"] >= 6:
         return {"decision": "review_for_approval", "confidence": "medium",
                 "explanation": "Neden-sonuç veya tarihsel açıklama içeriyor gibi görünüyor; PDF ile aynıysa ders kanıtı olarak uygun olabilir.",
@@ -325,7 +333,7 @@ def build_index(source: Path = BOOK) -> dict:
                                    "page": page_number, "bbox": box, "text": text,
                                    "review_status": "candidate", "quality": chunk_quality(text),
                                    "layout": layout, "pre_review": pre_review})
-    return {"schema": 1, "policy_version": "source-type-v2", "source_checksum": checksum, "source_name": source.name,
+    return {"schema": 1, "policy_version": "source-type-v3", "source_checksum": checksum, "source_name": source.name,
             "sections": chapter, "chunks": chunks, "exclusions": exclusions}
 
 

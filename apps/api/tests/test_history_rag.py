@@ -75,3 +75,17 @@ def test_pre_review_uses_generic_poetry_layout_not_a_specific_title():
              "Bu değişim farklı mesleklerin ortaya çıkmasına da katkı sağladı."]
     assert source_review_recommendation(" ".join(prose), block_layout(prose))["decision"] == "review_for_approval"
     assert source_review_recommendation("III. Adım: Soruları cevaplayınız.")["decision"] == "do_not_use"
+
+
+def test_source_quote_is_kept_for_manual_pdf_review_only():
+    from app.history_rag import _candidate, source_review_recommendation
+
+    quote = (
+        "“Gök Türklerde siyasi iktidar kut tabiri ile ifade olunuyordu ve "
+        "kağan töreyi uygulardı; meclis kağanın icraatını denetlerdi.”"
+    )
+    assert _candidate(quote, [30, 60, 400, 200], 800)
+    result = source_review_recommendation(quote)
+    assert result["decision"] == "manual_review"
+    assert result["reasons"] == ["kaynak_alintisi_baglam_kontrolu"]
+    assert result["source_type"] == "quoted_source"

@@ -77,6 +77,9 @@ def build(questions: dict, proposals: dict, source_root: Path, output: Path,
                     "section_title": suggestion["section_title"], "page": suggestion["page"],
                     "source_checksum": suggestion["source_checksum"], "chunk_id": suggestion["chunk_id"],
                     "crop": relative.as_posix(), "pre_review": suggestion.get("pre_review", {}),
+                    "constraint_clause_id": suggestion.get("constraint_clause_id"),
+                    "constraint_clause_ids": suggestion.get("constraint_clause_ids"),
+                    "source_type": suggestion.get("source_type"),
                 })
                 crop_count += 1
             rows.append({"candidate_id": proposal["candidate_id"], "exam_year": proposal["exam_year"],
@@ -99,12 +102,20 @@ def build(questions: dict, proposals: dict, source_root: Path, output: Path,
 
 
 def _write_html(manifest: dict, target: Path) -> None:
+    def constraint_caption(card: dict) -> str:
+        if not card.get("constraint_clause_id"):
+            return ""
+        clauses = card.get("constraint_clause_ids") or [card["constraint_clause_id"]]
+        source_type = f'<br>Kaynak türü: {html.escape(card["source_type"])}' if card.get("source_type") else ""
+        return "<br>Kısıt: " + html.escape(", ".join(clauses)) + source_type
+
     blocks = []
     for row in manifest["reviews"]:
         cards = "".join(
             "<figure><figcaption>"
             f'#{card["rank"]} · {html.escape(card["source_name"])} · {card["grade"]}. sınıf · '
-            f's. {card["page"]}<br>{html.escape(card["section_title"])}</figcaption>'
+            f's. {card["page"]}<br>{html.escape(card["section_title"])}'
+            f'{constraint_caption(card)}</figcaption>'
             f'<img src="{html.escape(card["crop"])}" alt="MEB PDF kanıt kırpımı"></figure>'
             for card in row["cards"]
         )

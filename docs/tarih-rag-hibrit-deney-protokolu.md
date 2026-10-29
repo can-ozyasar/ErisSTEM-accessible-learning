@@ -41,6 +41,63 @@ sorularında 10–12. sınıf corpus'unda kapsam deliği vardır; hedefli yenide
 getirme yapılmadan önce 9. sınıf kitabının ayrı checksum sürümü eklenmeli ya
 da bu sorular ilk ürün kapsamından çıkarılmalıdır.
 
+### 9. sınıf kapsama deneyi — 29 Ekim 2026
+
+Bu boşluğu sınamak için 9. sınıf kitabı, çalışmakta olan 10–12. sınıf
+corpus'una eklenmedi. Aynı 27 bağlı soru için yalnız inceleme amaçlı ikinci
+bir corpus üretildi: temel corpus checksum'ı
+`6581a0ecc45b10801dae723b6580f90de801cd0eb910939d440750f3c1ff33ce`,
+deney corpus checksum'ı
+`df9704f4fdefb52f4c9c0c65b0e1c31503bf7afffd421234c2d2e0d8ce94fa67`.
+
+| Karşılaştırma sonucu | Soru sayısı |
+|---|---:|
+| İncelenen bağlı soru | 27 |
+| İlk önerisi değişen | 1 |
+| İlk üçte 9. sınıf adayı alan | 2 |
+
+Bu sayılar doğruluk veya kalite sonucu değildir. İki değişikliğin altılı PDF
+kırpım paketi private alanda oluşturuldu; her aday için kaynak rolü ve
+PDF-görünüm doğrulaması yapılmadan 9. sınıf parçası öğrenci RAG'ına, altın
+değerlendirme kümesine veya QLoRA verisine giremez. Deney sonucu, 9. sınıfı
+tüm corpus'a koşulsuz katmak için yeterli kanıt oluşturmaz.
+
+Bu iki karttaki bağımsız ön incelemede `primary=0`, `context=2` ve
+`insufficient=4` bulundu. Bu sonuç öğretmen onayı değildir; ancak geniş
+sorgunun bağlam getirdiğini, zorunlu kişi–olay ve kavram ilişkilerini
+kanıtlamadığını gösterir. Bu nedenle bir sonraki deneyde bütün soru için tek
+BM25 sırası yerine öğretmen denetimli zorunlu ilişki maddeleri kullanıldı.
+Her maddeyi karşılayan bir PDF parçası bulunamazsa araç
+`insufficient_evidence` döndürür.
+
+Kaynak PDF taramasında kimi gerekli kavramların kitapta bulunup mevcut
+inceleme dizinine girmediği görüldü: kitap içi tırnaklı kaynak alıntıları
+eski filtreden önce eleniyordu. Çıkarım politikası `source-type-v3` olarak
+sürümlendi. Bu bloklar artık yalnız `manual_review` statüsüyle private PDF
+kırpım keşfine girebilir; varsayılan retrieval, öğrenci RAG'ı ve QLoRA yolu
+onları hâlâ dışarıda tutar. Ayrıca çoklu kitap corpus checksum'ı artık yalnız
+PDF checksum'ından değil, kaynak indeksinin tamamından da üretilir. Böylece
+çıkarım politikası değiştiğinde eski retrieval veya embedding yapıtı geçerli
+sayılmaz.
+
+İlk zorunlu-kısıt deneyi, eski Türk devlet/toplum kavramı için tüm maddeleri
+karşılayan sekiz *manual-review* alıntı adayı buldu; bunlar için sekizli PDF
+kırpım paketi üretildi. Türgiş–Karluk–Talas ilişkisi için gerekli üç maddeyi
+birlikte karşılayan aday bulunmadı ve sistem çekimser kaldı. İlk bulgu ürün
+kalitesi sonucu değildir: yalnız insan PDF incelemesinin hangi kaynakları
+kontrol edeceğini daraltır.
+
+Ham-PDF geri dönüşünün bağımsız ön incelemesi, 9. sınıf s.198'deki alıntının
+`hatun → kağanın eşi / devlet işlerinde rol` ilişkisini; aynı sayfadaki başka
+alıntının da `otağ → hükümdarlık sembolü` ilişkisini doğrudan taşıdığını
+buldu. Kurultay, kut ve kurgan için de ayrı doğrudan adaylar var. Ancak hiçbir
+incelenen parça `otağ = hükümdarın çadırı` eş anlamını açıkça vermiyor.
+Koç bu nedenle öğrenciyi hükümdarlık ilişkisini fark etmeye yöneltebilir;
+bu eş anlamı kaynaklı kesin bilgi veya cevap olarak söyleyemez. Alıntıların
+hepsi `source_type=quoted_source` ve `manual_review` olarak kalır; insan
+öğretmen PDF kırpımı onayı olmadan allowlist, altın veri, öğrenci RAG'ı ya da
+QLoRA için kullanılamaz.
+
 Bir sonraki geçerli ölçüm akışı şöyledir:
 
 1. Her kart, PDF kırpımı üzerinden insan öğretmen tarafından `primary`,

@@ -133,3 +133,25 @@ def test_teacher_review_controls_student_release(tmp_path, monkeypatch):
     flagged = next(item for item in recheck["questions"] if item["question"]["id"] == approved["id"])
     assert "approved_page_furniture_review_required" in flagged["issues"]
     assert "TARİH SORU BANKASI" not in str(flagged["source_candidate"])
+
+
+def test_yks_tag_endpoint_keeps_question_text_out_of_metadata(tmp_path, monkeypatch):
+    monkeypatch.delenv("APP_ENV", raising=False)
+    store = LearningOperationsStore(make_session_factory(f"sqlite:///{tmp_path / 'yks.db'}"))
+    app = FastAPI()
+    app.include_router(question_bank_routes.question_bank_router(store))
+    client = TestClient(app)
+    payload = {"exam_id": "tyt-2025-tarih-01", "year": 2025, "test": "TYT", "question_number": 1,
+               "grade": 10, "unit_id": "10-1", "concept": "yerlesme", "relation_type": "neden_sonuc",
+               "visual_dependency": False, "direct_evidence": True, "accessible": True,
+               "reviewer": "Ogretmen", "approved": True, "expected_revision": 0}
+    accepted = client.put("/v1/question-bank/teacher/yks/tags/tyt-2025-tarih-01",
+                          headers={"X-Role": "teacher"}, json=payload)
+    assert accepted.status_code == 200, accepted.text
+    report = client.get("/v1/question-bank/teacher/yks/selection", headers={"X-Role": "teacher"})
+    assert report.status_code == 200
+    assert report.json()["grade_ranking"][0]["grade"] == 10
+    leaked = {**payload, "exam_id": "tyt-2025-tarih-02", "question_text": "Bu alan yasak"}
+    rejected = client.put("/v1/question-bank/teacher/yks/tags/tyt-2025-tarih-02",
+                          headers={"X-Role": "teacher"}, json=leaked)
+    assert rejected.status_code == 422

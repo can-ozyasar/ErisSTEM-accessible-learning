@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { useLearningSpeech } from "./useLearningSpeech";
 
 type Source = { id: string; page: number; section: string; excerpt: string };
-type Reply = { session_id: string; stage: string; error_type: string; student_prompt: string; short_spoken_text: string; source_ids: string[]; abstain_reason: string | null; can_reveal_explanation: boolean; sources: Source[] };
+type EvidenceCard = { role: "primary" | "context" | "relation" | "contrast"; source_id: string; text: string };
+type Reply = { session_id: string; stage: string; error_type: string; student_prompt: string; short_spoken_text: string; source_ids: string[]; abstain_reason: string | null; can_reveal_explanation: boolean; sources: Source[]; evidence_cards?: EvidenceCard[] };
 type Entry = { message: string; response: Reply; selectedChoice: string | null };
 type Recognition = { lang: string; continuous: boolean; interimResults: boolean; processLocally?: boolean;
   onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
@@ -63,7 +64,8 @@ export function QuestionTutor({ api, questionId, selectedChoice }: { api: string
     <>
       <ol className="tutor-dialogue" aria-live="polite">{entries.map((entry, index) => <li key={index}>
         <p><strong>Sen:</strong> {entry.message}</p><p><strong>Destekçi:</strong> {entry.response.student_prompt}</p>
-        {entry.response.sources.length > 0 && <details><summary>MEB kitap kanıtı</summary><ul>{entry.response.sources.map(source => <li key={`${source.page}-${source.excerpt}`}><strong>{source.section}, PDF s. {source.page}:</strong> {source.excerpt}</li>)}</ul></details>}
+        {entry.response.evidence_cards && entry.response.evidence_cards.length > 0 && <details><summary>Bilgi bağlantıları ve MEB kanıtı</summary><ul>{entry.response.evidence_cards.map(card => <li key={`${card.role}-${card.source_id}`}><strong>{card.role === "primary" ? "Ana bilgi" : card.role === "relation" ? "Bilgi bağlantısı" : card.role === "context" ? "Bağlam" : "Şıkkı ayıran bilgi"}:</strong> {card.text}</li>)}</ul></details>}
+        {entry.response.sources.length > 0 && <details><summary>Kaynağın PDF konumu</summary><ul>{entry.response.sources.map(source => <li key={`${source.page}-${source.excerpt}`}><strong>{source.section}, PDF s. {source.page}:</strong> {source.excerpt}</li>)}</ul></details>}
         <button type="button" className="quiet-button" onClick={() => speak(entry.response.short_spoken_text)}>Yanıtı dinle</button>
       </li>)}</ol>
       {entries.length < 12 && <form onSubmit={event => { event.preventDefault(); if (message.trim()) void ask(message.trim()); }}>

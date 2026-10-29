@@ -76,3 +76,11 @@ def test_same_choice_twice_gets_source_correction_before_reveal():
     assert reply.stage == "sik_elemesi"
     assert "Kaynaktaki" in reply.student_prompt
     assert "C şıkkı" not in reply.student_prompt
+
+
+def test_coach_uses_approved_relation_as_a_recall_prompt():
+    value = context()
+    value = value.__class__(**{**value.__dict__, "evidence_by_role": {"relation": "Olay ile tarih arasındaki bağ kaynakta açıkça belirtilmektedir."}})
+    reply = coach(value, "soru_analizi", "Bir tarih hatırlıyorum.", False, None, None, None)
+    assert reply.stage == "hatirlayani_ortaya_cikar"
+    assert "Olay ile tarih" in reply.student_prompt

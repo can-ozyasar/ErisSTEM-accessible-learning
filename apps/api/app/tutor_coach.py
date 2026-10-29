@@ -6,7 +6,7 @@ import json
 import os
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -30,7 +30,7 @@ class CoachReply(BaseModel):
     error_type: str
     student_prompt: str = Field(min_length=1, max_length=600)
     short_spoken_text: str = Field(min_length=1, max_length=240)
-    source_ids: list[str] = Field(default_factory=list, max_length=3)
+    source_ids: list[str] = Field(default_factory=list, max_length=4)
     abstain_reason: str | None = Field(default=None, max_length=240)
     can_reveal_explanation: bool = False
     timings_ms: dict[str, int] = Field(default_factory=dict)
@@ -46,6 +46,7 @@ class CoachContext:
     evidence: str
     error_type: str
     repeat_attempts: int = 0
+    evidence_by_role: dict[str, str] = field(default_factory=dict)
 
 
 def next_stage(previous: str | None, submit_answer: bool) -> str:
@@ -94,6 +95,9 @@ def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
         }
         return prompts[context.error_type]
     if stage == "hatirlayani_ortaya_cikar":
+        relation = context.evidence_by_role.get("relation") or context.evidence_by_role.get("context")
+        if relation:
+            return f"Kaynakta ‘{_short_evidence(relation, 150)}’ bilgisi var. Buradaki bağlantı sana neyi hatırlatıyor?"
         prompts = {
             "tarih": "Olayın adını hatırlamaya çalış. Bu olayın yanındaki tarih hangi döneme ait olabilir?",
             "yer": "Önce olayın geçtiği yeri gözünde canlandır. Kaynakta hangi yer adı geçiyor?",
@@ -106,8 +110,14 @@ def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
         }
         return prompts[context.error_type]
     if stage == "kanitla_bag_kur":
+        relation = context.evidence_by_role.get("relation")
+        if relation:
+            return f"İki kanıtı birlikte düşün: ‘{_short_evidence(context.evidence, 105)}’ ve ‘{_short_evidence(relation, 105)}’. Aralarındaki bağ ne olabilir?"
         return "Kaynakta bu soruya yardım eden bir cümle var. O cümledeki hangi sözcük seçeneğini destekliyor ya da zayıflatıyor?"
     if stage == "sik_elemesi":
+        contrast = context.evidence_by_role.get("contrast")
+        if contrast:
+            return f"Seçtiğin ifadeyi ‘{_short_evidence(contrast, 150)}’ bilgisiyle karşılaştır. Hangi ayrıntı şıkkı zayıflatıyor?"
         if context.choice_text:
             return "Seçtiğin şıktaki ifadeyi kaynakla karşılaştır. Hangi kelime ya da tarih onu destekliyor veya zayıflatıyor?"
         return "Şıkları sırayla ele. Kaynakla uyuşmayan ilk ifadeyi ve nedenini söyleyebilir misin?"

@@ -12,11 +12,19 @@ from uuid import uuid4
 import pymupdf
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import IntegrityError
 
 from .auth import Role, require_roles
 from .demo_audio import resolve_demo_audio
+from .evidence_graph import (
+    EvidenceBundle,
+    GraphEdge,
+    GraphNode,
+    relation_proposals,
+    validate_bundle,
+    validate_edge,
+)
 from .history_rag import (
     candidate_review_warnings,
     chunk_quality,
@@ -35,6 +43,7 @@ from .question_bank_structure import Question, navigation_units, question_audio_
 from .tutor_authoring import create_drafts, infer_error_type, review_draft
 from .tutor_coach import CoachContext, coach
 from .tutor_dataset import CASES, TutorReviewInput, review_id, validate_review_payload
+from .yks_selection import ExamTag, rank_scope
 
 SOURCE = Path("/private/question-bank/vip-9-sinif-tarih-soru-bankasi.pdf")
 
@@ -118,6 +127,37 @@ class EvidenceReview(BaseModel):
     expected_revision: int = Field(ge=0)
 
 
+class EvidenceBundleReview(EvidenceBundle):
+    expected_revision: int = Field(ge=0)
+
+
+class GraphReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    nodes: list[GraphNode] = Field(min_length=2, max_length=60)
+    edges: list[GraphEdge] = Field(min_length=1, max_length=120)
+    reviewer: str = Field(min_length=2, max_length=80)
+    reason: str = Field(min_length=10, max_length=600)
+    expected_revision: int = Field(ge=0)
+
+
+class YksTagReview(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    exam_id: str = Field(min_length=4, max_length=80)
+    year: int = Field(ge=2022, le=2026)
+    test: str = Field(pattern=r"^(TYT|AYT)$")
+    question_number: int = Field(ge=1, le=80)
+    grade: int = Field(ge=9, le=11)
+    unit_id: str = Field(min_length=2, max_length=80)
+    concept: str = Field(min_length=2, max_length=120)
+    relation_type: str = Field(min_length=2, max_length=40)
+    visual_dependency: bool
+    direct_evidence: bool
+    accessible: bool
+    reviewer: str = Field(min_length=2, max_length=80)
+    approved: bool
+    expected_revision: int = Field(ge=0)
+
+
 class TutorTurn(BaseModel):
     message: str = Field(min_length=1, max_length=500)
     session_id: str | None = Field(default=None, max_length=80)
@@ -142,6 +182,14 @@ def _approved_rag_ids(store, checksum):
 
 def _evidence_review_id(question_id: str) -> str:
     return f"rag-evidence:{question_id}"
+
+
+def _bundle_id(question_id: str) -> str:
+    return f"rag-bundle:{question_id}"
+
+
+def _graph_id(question_id: str) -> str:
+    return f"rag-graph:{question_id}"
 
 
 def _student_question(book, store, question_id):
@@ -274,14 +322,25 @@ def question_bank_router(store: LearningOperationsStore):
         topic = _book()["page_contexts"][question.source.page].get("topic")
         if not matching_sections(index, topic):
             raise HTTPException(422, "Bu soru MEB başlığıyla güvenle eşleşmiyor")
+        bundle = store.get(_bundle_id(question.id))
+        approved_ids = _approved_rag_ids(store, index["source_checksum"])
+        if bundle and bundle.get("approved") and bundle.get("source_checksum") == index["source_checksum"]:
+            cards = bundle.get("cards", [])
+            allowed_ids = {card["source_id"] for card in cards} & approved_ids
+            sources = [{**chunk, "evidence_role": next(card["role"] for card in cards if card["source_id"] == chunk["id"]),
+                        "evidence_quote": next(card["quote"] for card in cards if card["source_id"] == chunk["id"])}
+                       for chunk in index["chunks"] if chunk["id"] in allowed_ids]
+            if len(sources) == len(cards):
+                role_order = {"primary": 0, "relation": 1, "context": 2, "contrast": 3}
+                return index, sorted(sources, key=lambda item: (role_order[item["evidence_role"]], item["id"]))
         evidence_review = store.get(_evidence_review_id(question.id))
         if not evidence_review or not evidence_review.get("approved") or evidence_review.get("source_checksum") != index["source_checksum"]:
             raise HTTPException(422, "Bu soru için öğretmen onaylı doğrudan MEB kanıtı henüz seçilmedi")
-        allowed_ids = set(evidence_review.get("source_ids", [])) & _approved_rag_ids(store, index["source_checksum"])
+        allowed_ids = set(evidence_review.get("source_ids", [])) & approved_ids
         sources = [chunk for chunk in index["chunks"] if chunk["id"] in allowed_ids]
         if len(sources) != len(allowed_ids) or not sources:
             raise HTTPException(422, "Seçilen MEB kanıtı kaynak onayıyla eşleşmiyor")
-        return index, sorted(sources, key=lambda item: item["id"])
+        return index, sorted(({**item, "evidence_role": "primary", "evidence_quote": item["text"][:520]} for item in sources), key=lambda item: item["id"])
 
     @router.get("/teacher/tutor/candidates")
     def tutor_candidates(limit: int = 120, _: Role = teacher):
@@ -338,6 +397,84 @@ def question_bank_router(store: LearningOperationsStore):
                                 "review_warnings": candidate_review_warnings(item["text"]),
                                 "quality": item.get("quality") or chunk_quality(item["text"])}
                                for item in chosen[:12]]}
+
+    @router.get("/teacher/yks/selection")
+    def yks_selection(_: Role = teacher):
+        tags = []
+        for item in store.list("yks_exam_tag", "yks-history-v1"):
+            payload = {key: value for key, value in item.items() if key not in {"id", "revision"}}
+            tags.append(ExamTag(**payload))
+        return rank_scope(tags)
+
+    @router.put("/teacher/yks/tags/{exam_id}")
+    def save_yks_tag(exam_id: str, item: YksTagReview, _: Role = teacher):
+        if item.exam_id != exam_id:
+            raise HTTPException(409, "YKS soru kimliği URL ile eşleşmiyor")
+        payload = item.model_dump(exclude={"expected_revision"})
+        try:
+            ExamTag(**payload).validate()
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        return store.save(f"yks-tag:{exam_id}", "yks_exam_tag", "yks-history-v1", payload, item.expected_revision)
+
+    @router.get("/teacher/tutor/questions/{question_id}/evidence-bundle")
+    def get_evidence_bundle(question_id: str, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        return store.get(_bundle_id(question_id)) or {"question_id": question_id, "status": "not_reviewed"}
+
+    @router.put("/teacher/tutor/questions/{question_id}/evidence-bundle")
+    def save_evidence_bundle(question_id: str, item: EvidenceBundleReview, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        index = _rag_index()
+        allowed_ids = _approved_rag_ids(store, index["source_checksum"])
+        allowed = {chunk["id"]: chunk["text"] for chunk in index["chunks"] if chunk["id"] in allowed_ids}
+        try:
+            validate_bundle(item, allowed)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        payload = item.model_dump(exclude={"expected_revision"})
+        payload.update({"question_id": question_id, "source_checksum": index["source_checksum"]})
+        return store.save(_bundle_id(question_id), "rag_evidence_bundle", book["source_checksum"][:16], payload,
+                          item.expected_revision)
+
+    @router.get("/teacher/tutor/questions/{question_id}/graph-proposals")
+    def graph_proposals(question_id: str, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        index = _rag_index()
+        bundle = store.get(_bundle_id(question_id)) or {}
+        source_ids = {card["source_id"] for card in bundle.get("cards", [])}
+        sources = [chunk for chunk in index["chunks"] if chunk["id"] in source_ids]
+        return {"question_id": question_id, "proposals": relation_proposals(sources),
+                "notice": "Öneriler grafiğe yazılmaz; düğüm, ilişki türü ve alıntı öğretmen tarafından PDF ile onaylanır."}
+
+    @router.get("/teacher/tutor/questions/{question_id}/graph")
+    def get_graph(question_id: str, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        return store.get(_graph_id(question_id)) or {"question_id": question_id, "status": "not_reviewed"}
+
+    @router.put("/teacher/tutor/questions/{question_id}/graph")
+    def save_graph(question_id: str, item: GraphReview, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        index = _rag_index()
+        allowed_ids = _approved_rag_ids(store, index["source_checksum"])
+        allowed = {chunk["id"]: chunk["text"] for chunk in index["chunks"] if chunk["id"] in allowed_ids}
+        nodes = {node.id: node for node in item.nodes}
+        if len(nodes) != len(item.nodes):
+            raise HTTPException(422, "Grafik düğüm kimlikleri tekrarlanamaz")
+        try:
+            for edge in item.edges:
+                validate_edge(edge, nodes, allowed)
+        except ValueError as error:
+            raise HTTPException(422, str(error)) from error
+        payload = item.model_dump(exclude={"expected_revision"})
+        payload.update({"question_id": question_id, "source_checksum": index["source_checksum"]})
+        return store.save(_graph_id(question_id), "rag_graph", book["source_checksum"][:16], payload,
+                          item.expected_revision)
 
     @router.get("/teacher/tutor/questions/{question_id}/evidence-review")
     def get_evidence_review(question_id: str, _: Role = teacher):
@@ -580,7 +717,7 @@ def question_bank_router(store: LearningOperationsStore):
         # answer label stays below this boundary and is never used for retrieval.
         try:
             _, reviewed_sources = tutor_sources(question)
-            sources = rank_chunks(reviewed_sources, query, limit=2)
+            sources = rank_chunks(reviewed_sources, query, limit=4)
         except HTTPException:
             sources = []
         retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
@@ -602,7 +739,8 @@ def question_bank_router(store: LearningOperationsStore):
                                      source_ids=[item["id"] for item in sources],
                                      evidence=evidence["text"][:900] if evidence else "",
                                      error_type=infer_error_type(" ".join(part.text for part in question.parts), selected.text if selected else None),
-                                     repeat_attempts=repeat_attempts)
+                                     repeat_attempts=repeat_attempts,
+                                     evidence_by_role={item.get("evidence_role", "primary"): item.get("evidence_quote", item["text"]) for item in sources})
         reply = coach(coach_context, previous_stage, turn.message, turn.submit_answer,
                       turn.selected_choice, question.answer_label if question.answer_source_checked else None,
                       answer_choice_text if question.answer_source_checked else None)
@@ -613,6 +751,8 @@ def question_bank_router(store: LearningOperationsStore):
                     "last_choice": turn.selected_choice, "repeat_attempts": repeat_attempts},
                    (prior or {}).get("revision", 0))
         return {"session_id": session_id, **reply.model_dump(),
+                "evidence_cards": [{"role": item.get("evidence_role", "primary"), "source_id": item["id"],
+                                    "text": item.get("evidence_quote", item["text"][:240])} for item in sources],
                 "sources": [{"id": item["id"], "page": item["page"], "section": item["section_title"],
                              "section_id": item["section_id"], "bbox": item["bbox"],
                              "excerpt": item["text"][:420]} for item in sources]}

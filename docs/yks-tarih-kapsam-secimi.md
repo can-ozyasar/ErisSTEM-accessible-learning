@@ -37,9 +37,14 @@ havuzuna alınmaz. Bu onarım yalnız kaynak koordinatı çıkarır; tarihsel id
 üretmez ve parça onayı vermez.
 
 Resmî AYT Sözel derlemesinden 48 soru adayı yalnız private alanda çıkarıldı.
-Yakındaki yıl etiketiyle güvenilir biçimde bağlanan 15 aday için, üç MEB
-kitabı üzerinde sekizer kanıt önerisi üretildi. Yılı henüz bağlanamayan 33
-aday otomatik olarak engellendi. Öneri sonucu `teacher_review_required`
+PDF'de görünen yıl etiketi, aynı soru kutusunun yatay ve dikey koordinatları
+içinde değilse bağlanmaz; iki sütun arasında yalnız dikey yakınlığa dayanmak
+yanlış yıl atayabiliyordu. Bu kural ile 2022–2026 kapsamındaki 27 aday yıl
+etiketiyle bağlandı; 2018–2021'e ait 21 aday `out_of_scope` durumunda kapalı
+tutuldu. 27 aday için üç MEB kitabı üzerinde sekizer kanıt önerisi üretildi.
+Öneri motoru yalnız ders bilgisi adayı olarak işaretlenen, uyarısız parçaları
+görür; etkinlik, görsel açıklaması ve belirsiz metin parçaları otomatik
+öneriye katılmaz. Öneri sonucu `teacher_review_required`
 olup öğrenci RAG'ına, QLoRA dışa aktarımına veya çalışma zamanı indeksine
 aktarılmaz. Her öneri kaynak kitap checksum'ı, sayfa ve koordinat taşır;
 PDF kırpımı ve öğretmen onayı olmadan kullanılamaz.

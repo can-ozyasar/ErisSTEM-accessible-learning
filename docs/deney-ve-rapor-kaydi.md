@@ -47,6 +47,8 @@ TTS için kaynaklı kalite araştırması, ölçütler ve deney karar kuralı
 | 2026-10 | AYT Tarih-2 MEB kanıtı | 10, 11 ve checksum doğrulanmış 12. sınıf MEB kitapları tek private inceleme corpus'unda birleştirildi | Millî Mücadele, Lozan ve Atatürkçülük kanıtı 12. sınıf kitabı olmadan eksikti; ham PDF ve soru içeriği ürün/Kaggle alanına taşınmadı | Öğretmen PDF kırpımı incelemesi bekliyor |
 | 2026-10 | PDF içindekiler ayrıştırması | Sabit 9. sınıf sayfa sınırları kaldırıldı; satır kırığı, blok sırası ve ayrı sayfa numarası onarımı eklendi | Yeni MEB kitaplarında sabit sınır yanlış kaynak aralığı üretiyordu; üç gerçek kitap ve birim testleriyle doğrulandı | Uygulandı |
 | 2026-10 | AYT kanıt önerisi | Yıl etiketi bağlanmış adaylar için checksum bağlı, onaysız MEB kanıt önerisi üretildi | Otomatik eşleşme kaynak onayı değildir; yıl bağlanamayan adaylar ve tüm öneriler öğrenci RAG'ından kapalı tutulur | Öğretmen incelemesi bekliyor |
+| 2026-10 | AYT yıl bağlama | Dikey yakınlık kuralı kaldırıldı; yıl etiketi yalnız aynı soru kutusundaki PDF koordinatıyla bağlanıyor | İki sütunlu sayfada komşu sütunun yılı yanlış atanmıştı; 2018–2021 adayları kapsam dışı, 2022–2026 adayları ayrı tutuluyor | Uygulandı |
+| 2026-10 | AYT öneri havuzu | Otomatik öneri yalnız `review_for_approval` ders bilgisi adaylarıyla sınırlandı | Etkinlik/yönerge, görsel açıklaması ve belirsiz parçalar BM25 ile yüksek çıksa da kanıt önerisi değildir | Uygulandı; PDF kırpımı incelemesi bekliyor |
 
 ## Kullanılan teknoloji ve bileşen envanteri
 

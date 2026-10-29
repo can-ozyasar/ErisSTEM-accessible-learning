@@ -42,3 +42,11 @@ def test_proposals_are_checksum_bound_and_never_auto_approved():
     assert bound["suggestions"][0]["review_status"] == "candidate"
     assert unbound["status"] == "blocked_until_exam_year_review"
     assert unbound["suggestions"] == []
+
+
+def test_out_of_scope_year_never_reaches_retrieval():
+    source = {"schema": "ayt-tarih2-candidates-v1", "source_checksum": "questions-v1",
+              "candidates": [_question("old", "out_of_scope")]}
+    result = build(source, _corpus(), limit=3)
+    assert result["proposals"][0]["status"] == "out_of_scope"
+    assert result["proposals"][0]["suggestions"] == []

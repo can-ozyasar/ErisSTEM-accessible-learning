@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 
 from ..history_rag import rank_chunks
@@ -18,7 +19,19 @@ def _question_text(question: dict) -> str:
     """Use only visible stem and option text; answer metadata is ignored."""
     parts = [part.get("text", "") for part in question.get("parts", [])]
     choices = [choice.get("text", "") for choice in question.get("choices", [])]
-    return " ".join(piece.strip() for piece in [*parts, *choices] if piece.strip())
+    joined = " ".join(piece.strip() for piece in [*parts, *choices] if piece.strip())
+    # The source prints the exam-year label beside a question. It is navigation
+    # metadata, never a retrieval term.
+    return re.sub(r"\b20(?:18|19|2[0-6])-AYT\b", "", joined)
+
+
+def _lesson_prose_candidates(book: dict) -> list[dict]:
+    """Keep uncertain, instructional and caption-like fragments out of automatic proposals."""
+    return [
+        chunk for chunk in book["index"].get("chunks", [])
+        if chunk.get("pre_review", {}).get("decision") == "review_for_approval"
+        and not chunk.get("quality", {}).get("warnings")
+    ]
 
 
 def _candidate(chunk: dict, book: dict) -> dict:
@@ -50,6 +63,14 @@ def build(question_candidates: dict, corpus: dict, limit: int = 8) -> dict:
     rows = []
     for source_candidate in question_candidates.get("candidates", []):
         candidate_id = source_candidate["candidate_id"]
+        if source_candidate.get("year_status") == "out_of_scope":
+            rows.append({
+                "candidate_id": candidate_id,
+                "status": "out_of_scope",
+                "exam_year": source_candidate.get("exam_year"),
+                "suggestions": [],
+            })
+            continue
         if source_candidate.get("year_status") != "bound":
             rows.append({
                 "candidate_id": candidate_id,
@@ -62,7 +83,7 @@ def build(question_candidates: dict, corpus: dict, limit: int = 8) -> dict:
         query = _question_text(source_candidate.get("question", {}))
         ranked = []
         for book in corpus.get("books", []):
-            for item in rank_chunks(book["index"].get("chunks", []), query, limit=limit):
+            for item in rank_chunks(_lesson_prose_candidates(book), query, limit=limit):
                 ranked.append(_candidate(item, book))
         ranked.sort(key=lambda item: (-item["score"], item["grade"], item["page"], item["chunk_id"]))
         suggestions = ranked[:limit]

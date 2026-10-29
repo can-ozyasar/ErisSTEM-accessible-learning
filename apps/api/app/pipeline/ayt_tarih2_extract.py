@@ -11,8 +11,24 @@ import pymupdf
 
 from ..question_bank_extract import extract_page
 
-YEAR = re.compile(r"\b(20(?:22|23|24|25|26))-AYT\b")
+YEAR = re.compile(r"\b(20(?:18|19|2[0-6]))-AYT\b")
 PAGES = range(129, 150)
+TARGET_YEARS = {2022, 2023, 2024, 2025, 2026}
+
+
+def _year_in_question_box(labels: list[tuple[int, tuple]], box: tuple | list) -> int | None:
+    """Bind a year only when its printed label is inside this question lane.
+
+    The AYT PDF interleaves years in two columns. Vertical proximity alone can
+    assign a label from the other column; containment is auditable through the
+    recorded question and label coordinates.
+    """
+    x0, y0, x1, y1 = box
+    matches = {
+        year for year, (lx0, ly0, lx1, ly1) in labels
+        if x0 - 2 <= (lx0 + lx1) / 2 <= x1 + 2 and y0 - 2 <= (ly0 + ly1) / 2 <= y1 + 2
+    }
+    return next(iter(matches)) if len(matches) == 1 else None
 
 def build(source: Path) -> dict:
     raw = source.read_bytes(); checksum = hashlib.sha256(raw).hexdigest(); rows=[]
@@ -26,12 +42,17 @@ def build(source: Path) -> dict:
                 text=' '.join(''.join(s['text'] for s in line['spans']) for line in block['lines'])
                 for hit in YEAR.finditer(text): labels.append((int(hit.group(1)), block['bbox']))
             for candidate in candidates:
-                q=candidate['question']; box=q['source']['bbox']; near=[year for year,b in labels if abs(b[1]-box[1])<170]
-                year=near[0] if len(set(near))==1 else None
+                q=candidate['question']; box=q['source']['bbox']; year=_year_in_question_box(labels, box)
+                if year in TARGET_YEARS:
+                    year_status, extra_issues = 'bound', []
+                elif year is None:
+                    year_status, extra_issues = 'review_required', ['exam_year_review_required']
+                else:
+                    year_status, extra_issues = 'out_of_scope', ['outside_2022_2026_scope']
                 rows.append({'candidate_id':f'ayt-soz-t2:{checksum[:12]}:{page_no}:{q["number"]}:{len(rows)}',
                   'source_kind':'official_exam_private','source_checksum':checksum,'page':page_no,'bbox':box,
-                  'test':'Tarih-2','exam_year':year,'year_status':'bound' if year else 'review_required',
-                  'issues': sorted(set(candidate['issues']+([] if year else ['exam_year_review_required']))),
+                  'test':'Tarih-2','exam_year':year,'year_status':year_status,
+                  'issues': sorted(set(candidate['issues'] + extra_issues)),
                   'question':q})
     return {'schema':'ayt-tarih2-candidates-v1','source_checksum':checksum,'page_allowlist':list(PAGES),
       'candidate_count':len(rows),'candidates':rows,

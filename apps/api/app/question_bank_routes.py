@@ -225,6 +225,30 @@ def question_bank_router(store: LearningOperationsStore):
                 "source_checksum": book["source_checksum"],
                 "notice": "Vip Yayınları telifli PDF: yalnız yerel öğretmen incelemesi."}
 
+    @router.get("/teacher/tutor/evidence-summary")
+    def tutor_evidence_summary(_: Role = teacher):
+        book = _book()
+        module_id = book["source_checksum"][:16]
+        questions = [item["question"] for item in store.list("qb", module_id)
+                     if item["question"].get("status") == "approved" and not _layout_contaminated(item["question"])]
+        reviews = store.list("rag_evidence_review", module_id)
+        direct = [item for item in reviews if item.get("approved") and item.get("evidence_quality") == "direct"
+                  and not item.get("visual_dependency")]
+        by_topic: dict[str, dict[str, int]] = {}
+        for question in questions:
+            topic = book["page_contexts"][question["source"]["page"]].get("topic") or "Başlık eşleşmedi"
+            bucket = by_topic.setdefault(topic, {"approved_questions": 0, "direct_evidence": 0})
+            bucket["approved_questions"] += 1
+        question_ids = {item["id"] for item in questions}
+        for review in direct:
+            if review.get("question_id") in question_ids:
+                question = next(item for item in questions if item["id"] == review["question_id"])
+                topic = book["page_contexts"][question["source"]["page"]].get("topic") or "Başlık eşleşmedi"
+                by_topic[topic]["direct_evidence"] += 1
+        return {"target_questions": 120, "approved_questions": len(questions), "direct_evidence_reviews": len(direct),
+                "remaining": max(0, 120 - len(direct)), "by_topic": by_topic,
+                "notice": "Otomatik öneri kanıt değildir. Kaggle dışa aktarımı için tam 120 soru, doğrudan ve öğretmen onaylı kanıt gerektirir."}
+
     @router.get("/teacher/tutor/summary")
     def tutor_summary(_: Role = teacher):
         book = _book()
@@ -232,10 +256,12 @@ def question_bank_router(store: LearningOperationsStore):
         questions = [item for item in store.list("qb", module_id)
                      if item["question"].get("status") == "approved" and not _layout_contaminated(item["question"])]
         reviewed = [item for item in store.list("tutor_review", module_id) if item.get("approved")]
+        evidence_reviewed = [item for item in store.list("rag_evidence_review", module_id)
+                             if item.get("approved") and item.get("evidence_quality") == "direct" and not item.get("visual_dependency")]
         groups = {item["question_id"] for item in reviewed}
         complete = {question_id for question_id in groups
                     if {item["case"] for item in reviewed if item["question_id"] == question_id} == set(CASES)}
-        return {"approved_questions": len(questions), "approved_examples": len(reviewed),
+        return {"approved_questions": len(questions), "direct_evidence_questions": len(evidence_reviewed), "approved_examples": len(reviewed),
                 "complete_question_groups": len(complete), "required_questions": 120,
                 "required_examples": 720, "ready_for_qlora_export": len(complete) >= 120,
                 "notice": "Her soru altı koçluk durumuyla incelenir. Kaggle örnekleri kısa, onaylı soru ve MEB kanıtı içerir; cevap anahtarı içermez."}

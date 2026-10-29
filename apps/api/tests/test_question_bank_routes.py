@@ -65,7 +65,11 @@ def test_teacher_review_controls_student_release(tmp_path, monkeypatch):
                                       + approved["parts"][0]["text"]}]}
     monkeypatch.setattr(question_bank_routes, "_rag_index", lambda: fake_index)
     store.save("rag:aaaaaaaaaaaa:sample", "rag", "a" * 16,
-               {"chunk_id": "sample", "source_checksum": "a" * 64, "approved": True}, 0)
+               {"chunk_id": "sample", "source_checksum": "a" * 64, "approved": True,
+                "quality_checked": True}, 0)
+    store.save(f"rag-evidence:{approved['id']}", "rag_evidence_review", approved["source"]["source_checksum"][:16],
+               {"question_id": approved["id"], "source_ids": ["sample"], "approved": True,
+                "evidence_quality": "direct", "visual_dependency": False, "source_checksum": "a" * 64}, 0)
     first_turn = client.post(f"{base}/student/questions/{approved['id']}/tutor", headers=student,
                              json={"message": "Bu soruyu nasıl çözebilirim?"})
     assert first_turn.status_code == 200

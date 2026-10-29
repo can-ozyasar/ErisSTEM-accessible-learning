@@ -90,6 +90,17 @@ _REVIEW_CAPTION = re.compile(
 )
 
 
+def chunk_quality(text: str) -> dict:
+    """Explainable PDF quality metadata. It is a review aid, never approval."""
+    warnings = candidate_review_warnings(text)
+    ocr = bool(_OCR_FRAGMENT.search(text)) if "_OCR_FRAGMENT" in globals() else False
+    caption = bool(_CAPTIONISH.search(text)) if "_CAPTIONISH" in globals() else False
+    return {"text_quality": "review_required" if warnings or ocr or caption else "clean",
+            "visual_or_caption_risk": caption or "gorsel_aciklama_olabilir" in warnings,
+            "instruction_risk": "etkinlik_yonergesi_olabilir" in warnings,
+            "ocr_fragment_risk": ocr, "warnings": warnings, "word_count": len(terms(text))}
+
+
 def candidate_review_warnings(text: str) -> list[str]:
     """Flag likely non-lesson material for manual review, without filtering it."""
     warnings = []
@@ -120,7 +131,7 @@ def build_index(source: Path = BOOK) -> dict:
                     chunks.append({"id": hashlib.sha256(key.encode()).hexdigest()[:20],
                                    "section_id": section["id"], "section_title": section["title"],
                                    "page": page_number, "bbox": box, "text": text,
-                                   "review_status": "candidate"})
+                                   "review_status": "candidate", "quality": chunk_quality(text)})
     return {"schema": 1, "source_checksum": checksum, "source_name": source.name,
             "sections": chapter, "chunks": chunks}
 

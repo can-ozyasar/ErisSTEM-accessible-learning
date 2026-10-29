@@ -19,10 +19,11 @@ from .auth import Role, require_roles
 from .demo_audio import resolve_demo_audio
 from .history_rag import (
     candidate_review_warnings,
+    chunk_quality,
     load_index,
     matching_sections,
+    rank_chunks,
     recommend_evidence,
-    retrieve,
 )
 from .history_source import BOOK as HISTORY_BOOK
 from .history_speech import history_spoken_text
@@ -103,6 +104,19 @@ class RagApproval(BaseModel):
     expected_revision: int = Field(ge=0)
 
 
+class EvidenceReview(BaseModel):
+    source_ids: list[str] = Field(min_length=1, max_length=2)
+    evidence_quality: str = Field(pattern=r"^(direct|partial|insufficient)$")
+    visual_dependency: bool
+    source_checked: bool
+    source_fit_checked: bool
+    quality_checked: bool
+    approved: bool
+    reviewer: str = Field(min_length=2, max_length=80)
+    reason: str = Field(min_length=10, max_length=600)
+    expected_revision: int = Field(ge=0)
+
+
 class TutorTurn(BaseModel):
     message: str = Field(min_length=1, max_length=500)
     session_id: str | None = Field(default=None, max_length=80)
@@ -118,8 +132,15 @@ def _rag_index():
 
 
 def _approved_rag_ids(store, checksum):
+    # Legacy approvals remain visible to teachers but cannot enter new reviewed
+    # evidence exports until the source-quality check is recorded.
     return {item["chunk_id"] for item in store.list("rag", checksum[:16])
-            if item.get("approved") and item.get("source_checksum") == checksum}
+            if item.get("approved") and item.get("quality_checked")
+            and item.get("source_checksum") == checksum}
+
+
+def _evidence_review_id(question_id: str) -> str:
+    return f"rag-evidence:{question_id}"
 
 
 def _student_question(book, store, question_id):
@@ -145,9 +166,11 @@ def question_bank_router(store: LearningOperationsStore):
     def rag_summary(_: Role = teacher):
         index = _rag_index()
         approved = _approved_rag_ids(store, index["source_checksum"])
+        legacy = [item for item in store.list("rag", index["source_checksum"][:16])
+                  if item.get("approved") and not item.get("quality_checked")]
         return {"source_checksum": index["source_checksum"], "section_count": len(index["sections"]),
                 "candidate_count": len(index["chunks"]), "approved_count": len(approved),
-                "sections": index["sections"]}
+                "legacy_recheck_count": len(legacy), "sections": index["sections"]}
 
     @router.get("/teacher/rag/sections/{section_id}")
     def rag_section(section_id: str, _: Role = teacher):
@@ -156,6 +179,7 @@ def question_bank_router(store: LearningOperationsStore):
             raise HTTPException(404, "Konu bulunamadı")
         approved = _approved_rag_ids(store, index["source_checksum"])
         return [{**chunk, "approved": chunk["id"] in approved,
+                 "quality": chunk.get("quality") or chunk_quality(chunk["text"]),
                  "review_warnings": candidate_review_warnings(chunk["text"]),
                  "revision": (store.get(f"rag:{index['source_checksum'][:12]}:{chunk['id']}") or {}).get("revision", 0)}
                 for chunk in index["chunks"] if chunk["section_id"] == section_id]
@@ -171,7 +195,8 @@ def question_bank_router(store: LearningOperationsStore):
         return store.save(f"rag:{index['source_checksum'][:12]}:{chunk_id}", "rag",
                           index["source_checksum"][:16],
                           {"chunk_id": chunk_id, "source_checksum": index["source_checksum"],
-                           "approved": approval.approved, "reason": approval.reason}, approval.expected_revision)
+                           "approved": approval.approved, "quality_checked": approval.source_checked and approval.fact_only_checked,
+                           "reason": approval.reason}, approval.expected_revision)
 
     @router.get("/teacher/rag/chunks/{chunk_id}/preview")
     def rag_chunk_preview(chunk_id: str, _: Role = teacher):
@@ -220,11 +245,14 @@ def question_bank_router(store: LearningOperationsStore):
         topic = _book()["page_contexts"][question.source.page].get("topic")
         if not matching_sections(index, topic):
             raise HTTPException(422, "Bu soru MEB başlığıyla güvenle eşleşmiyor")
-        sources = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic,
-                           " ".join(part.text for part in question.parts), limit=2)
-        if not sources:
-            raise HTTPException(422, "Bu soru için öğretmence onaylı MEB kanıtı bulunmuyor")
-        return index, sources
+        evidence_review = store.get(_evidence_review_id(question.id))
+        if not evidence_review or not evidence_review.get("approved") or evidence_review.get("source_checksum") != index["source_checksum"]:
+            raise HTTPException(422, "Bu soru için öğretmen onaylı doğrudan MEB kanıtı henüz seçilmedi")
+        allowed_ids = set(evidence_review.get("source_ids", [])) & _approved_rag_ids(store, index["source_checksum"])
+        sources = [chunk for chunk in index["chunks"] if chunk["id"] in allowed_ids]
+        if len(sources) != len(allowed_ids) or not sources:
+            raise HTTPException(422, "Seçilen MEB kanıtı kaynak onayıyla eşleşmiyor")
+        return index, sorted(sources, key=lambda item: item["id"])
 
     @router.get("/teacher/tutor/candidates")
     def tutor_candidates(limit: int = 120, _: Role = teacher):
@@ -238,13 +266,11 @@ def question_bank_router(store: LearningOperationsStore):
             if question_payload.get("status") != "approved" or _layout_contaminated(question_payload):
                 continue
             question = Question.model_validate(question_payload)
-            try:
-                _, sources = tutor_sources(question)
-            except HTTPException:
-                continue
+            evidence_review = store.get(_evidence_review_id(question.id)) or {}
             topic = book["page_contexts"][question.source.page].get("topic") or "Başlık eşleşmedi"
             candidates.append({"question_id": question.id, "number": question.number, "topic": topic,
-                               "page": question.source.page, "source_ids": [source["id"] for source in sources],
+                               "page": question.source.page, "source_ids": evidence_review.get("source_ids", []),
+                               "evidence_reviewed": bool(evidence_review.get("approved")),
                                "drafted_cases": sum(bool(store.get(f"tutor-draft:{question.id}:{case}")) for case in CASES),
                                "reviewed_cases": sum(bool(store.get(review_id(question.id, case))) for case in CASES)})
         # Round-robin topic ordering avoids selecting only the most frequent test section.
@@ -280,15 +306,48 @@ def question_bank_router(store: LearningOperationsStore):
                                 "evidence_score": item.get("evidence_score"), "signals": item.get("signals", {}),
                                 "reasons": item.get("reasons", []), "recommendation": item.get("review_recommendation"),
                                 "approved": item["id"] in approved,
-                                "review_warnings": candidate_review_warnings(item["text"])}
+                                "review_warnings": candidate_review_warnings(item["text"]),
+                                "quality": item.get("quality") or chunk_quality(item["text"])}
                                for item in chosen[:12]]}
+
+    @router.get("/teacher/tutor/questions/{question_id}/evidence-review")
+    def get_evidence_review(question_id: str, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        return store.get(_evidence_review_id(question_id)) or {"question_id": question_id, "status": "not_reviewed"}
+
+    @router.put("/teacher/tutor/questions/{question_id}/evidence-review")
+    def save_evidence_review(question_id: str, item: EvidenceReview, _: Role = teacher):
+        book = _book()
+        _student_question(book, store, question_id)
+        index = _rag_index()
+        chunks = {chunk["id"]: chunk for chunk in index["chunks"]}
+        if len(set(item.source_ids)) != len(item.source_ids) or any(source_id not in chunks for source_id in item.source_ids):
+            raise HTTPException(422, "Seçilen MEB kanıt parçaları geçersiz")
+        approved_sources = _approved_rag_ids(store, index["source_checksum"])
+        if item.approved and (not item.source_checked or not item.source_fit_checked or not item.quality_checked):
+            raise HTTPException(422, "Kaynak, soruya uygunluk ve metin kalitesi ayrı ayrı doğrulanmalı")
+        if item.approved and (item.evidence_quality != "direct" or item.visual_dependency or not set(item.source_ids) <= approved_sources):
+            raise HTTPException(422, "Öğrenci RAG’ı yalnız doğrudan, görsele bağımlı olmayan ve onaylı kanıt kullanabilir")
+        payload = {"question_id": question_id, "source_ids": item.source_ids,
+                   "evidence_quality": item.evidence_quality, "visual_dependency": item.visual_dependency,
+                   "source_checked": item.source_checked, "source_fit_checked": item.source_fit_checked,
+                   "quality_checked": item.quality_checked, "approved": item.approved,
+                   "reviewer": item.reviewer, "reason": item.reason,
+                   "source_checksum": index["source_checksum"]}
+        return store.save(_evidence_review_id(question_id), "rag_evidence_review", book["source_checksum"][:16], payload,
+                          item.expected_revision)
 
     @router.get("/teacher/tutor/questions/{question_id}/review")
     def tutor_review_candidate(question_id: str, _: Role = teacher):
         book = _book()
         question = _student_question(book, store, question_id)
-        _, sources = tutor_sources(question)
+        index = _rag_index()
+        evidence_review = store.get(_evidence_review_id(question_id)) or {}
+        source_ids = set(evidence_review.get("source_ids", []))
+        sources = [item for item in index["chunks"] if item["id"] in source_ids]
         return {"question_id": question_id, "question_text": " ".join(part.text for part in question.parts),
+                "evidence_review": evidence_review,
                 "choices": [{"label": choice.label, "text": choice.text} for choice in question.choices],
                 "sources": [{"id": item["id"], "text": item["text"][:520], "page": item["page"],
                              "section": item["section_title"]} for item in sources],
@@ -488,7 +547,13 @@ def question_bank_router(store: LearningOperationsStore):
         query = " ".join([turn.message, *(part.text for part in question.parts),
                           selected.text if selected else ""])
         retrieval_started = time.monotonic()
-        sources = retrieve(index, _approved_rag_ids(store, index["source_checksum"]), topic, query)
+        # A question-specific teacher evidence review is required here.  The
+        # answer label stays below this boundary and is never used for retrieval.
+        try:
+            _, reviewed_sources = tutor_sources(question)
+            sources = rank_chunks(reviewed_sources, query, limit=2)
+        except HTTPException:
+            sources = []
         retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
         session_id = turn.session_id or uuid4().hex
         prior = store.get(f"tutor:{session_id}") if turn.session_id else None

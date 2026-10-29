@@ -20,4 +20,7 @@ def test_gold_review_view_is_answer_free_and_binds_crop_metadata(tmp_path):
     assert "answer_label" not in text
     assert "ayt-retrieval-gold-v1" in text
     assert "chunk-v1" in text
+    assert "Doğrudan kanıt" in text
+    assert "Bu sayfada ne yapacağım?" in text
+    assert "Yeterli kanıt yok" in text
     json.dumps(manifest)

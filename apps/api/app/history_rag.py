@@ -148,6 +148,7 @@ def source_review_recommendation(text: str) -> dict:
 def build_index(source: Path = BOOK) -> dict:
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
     chunks = []
+    exclusions: dict[str, int] = {}
     with pymupdf.open(source) as pdf:
         chapter = sections(pdf)
         for section in chapter:
@@ -161,13 +162,20 @@ def build_index(source: Path = BOOK) -> dict:
                     box = [round(float(n), 2) for n in block["bbox"]]
                     if not _candidate(text, box, page.rect.height):
                         continue
+                    pre_review = source_review_recommendation(text)
+                    # Obvious non-evidence must not consume teacher review time.
+                    # Keep only conservative uncertainty and lesson-prose candidates.
+                    if pre_review["decision"] == "do_not_use":
+                        exclusions[pre_review["reasons"][0]] = exclusions.get(pre_review["reasons"][0], 0) + 1
+                        continue
                     key = f"{checksum}:{page_number}:{box}:{text}"
                     chunks.append({"id": hashlib.sha256(key.encode()).hexdigest()[:20],
                                    "section_id": section["id"], "section_title": section["title"],
                                    "page": page_number, "bbox": box, "text": text,
-                                   "review_status": "candidate", "quality": chunk_quality(text)})
+                                   "review_status": "candidate", "quality": chunk_quality(text),
+                                   "pre_review": pre_review})
     return {"schema": 1, "source_checksum": checksum, "source_name": source.name,
-            "sections": chapter, "chunks": chunks}
+            "sections": chapter, "chunks": chunks, "exclusions": exclusions}
 
 
 def write_index(source: Path = BOOK, destination: Path = INDEX_PATH) -> dict:

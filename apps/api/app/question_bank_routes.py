@@ -181,7 +181,7 @@ def question_bank_router(store: LearningOperationsStore):
         approved = _approved_rag_ids(store, index["source_checksum"])
         return [{**chunk, "approved": chunk["id"] in approved,
                  "quality": chunk.get("quality") or chunk_quality(chunk["text"]),
-                 "pre_review": source_review_recommendation(chunk["text"]),
+                 "pre_review": chunk.get("pre_review") or source_review_recommendation(chunk["text"]),
                  "review_warnings": candidate_review_warnings(chunk["text"]),
                  "revision": (store.get(f"rag:{index['source_checksum'][:12]}:{chunk['id']}") or {}).get("revision", 0)}
                 for chunk in index["chunks"] if chunk["section_id"] == section_id]

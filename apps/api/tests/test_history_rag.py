@@ -30,7 +30,8 @@ def test_real_index_uses_toc_and_excludes_assessment_pages():
     assert len(index["sections"]) == 13
     assert all(item["page"] <= {"1": 60, "2": 154, "3": 243}[item["section_id"][0]]
                for item in index["chunks"])
-    assert any(item["section_id"] == "1.1" and item["page"] == 12 for item in index["chunks"])
+    assert any(item["section_id"] == "1.1" for item in index["chunks"])
+    assert index["exclusions"].get("edebi_alinti_riski", 0) >= 1
 
 
 def test_review_flags_activity_fragments_and_captions_without_changing_approval():

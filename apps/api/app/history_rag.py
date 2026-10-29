@@ -93,7 +93,10 @@ _REVIEW_CAPTION = re.compile(
 def chunk_quality(text: str) -> dict:
     """Explainable PDF quality metadata. It is a review aid, never approval."""
     warnings = candidate_review_warnings(text)
-    ocr = bool(_OCR_FRAGMENT.search(text)) if "_OCR_FRAGMENT" in globals() else False
+    # Whitespace alone cannot identify OCR corruption reliably in Turkish:
+    # legitimate suffixes and word starts create the same pattern.  Keep OCR
+    # diagnosis for line-aware audits; do not penalize source eligibility here.
+    ocr = False
     caption = bool(_CAPTIONISH.search(text)) if "_CAPTIONISH" in globals() else False
     return {"text_quality": "review_required" if warnings or ocr or caption else "clean",
             "visual_or_caption_risk": caption or "gorsel_aciklama_olabilir" in warnings,
@@ -111,39 +114,61 @@ def candidate_review_warnings(text: str) -> list[str]:
     return warnings
 
 
-_POETIC = re.compile(
-    r"(?:ne kadar duygulu|gönlü dolan|mübârek|hatıralar rüzgârı|seher|şiir|mısra|dizeler)", re.IGNORECASE)
 _EXPLANATORY = re.compile(
-    r"(?:sağladı|etkiledi|gelişti|oluşturdu|ortaya çıktı|yaygınlaştı|kuruldu|değişti|sonucunda|nedeniyle)", re.IGNORECASE)
+    r"(?:sağladı|etkiledi|gelişti|oluşturdu|ortaya çıktı|yaygınlaştı|kuruldu|değişti|sonucunda|nedeniyle)", re.IGNORECASE
+)
 
 
-def source_review_recommendation(text: str) -> dict:
-    """Conservative pre-review for a human teacher, never an approval decision."""
+def block_layout(lines: list[str]) -> dict:
+    """Stable PDF-layout features used by the document-type policy.
+
+    The values describe structure, never historical correctness; retaining them
+    makes a later model or a different textbook policy auditable.
+    """
+    clean = [line.strip() for line in lines if line.strip()]
+    word_counts = [len(terms(line)) for line in clean]
+    return {"line_count": len(clean),
+            "mean_terms_per_line": round(sum(word_counts) / max(1, len(word_counts)), 2),
+            "short_line_ratio": round(sum(count <= 10 for count in word_counts) / max(1, len(word_counts)), 2),
+            "has_ellipsis_line": any(re.fullmatch(r"[.()… ]+", line) for line in clean),
+            "first_line_is_title": bool(clean and not re.search(r"[.!?;:]", clean[0]) and len(terms(clean[0])) <= 8),
+            "terminal_line_ratio": round(sum(line.endswith((".", "!", "?")) for line in clean) / max(1, len(clean)), 2)}
+
+
+def source_review_recommendation(text: str, layout: dict | None = None) -> dict:
+    """Conservative cross-book pre-review based on document type and quality.
+
+    `do_not_use` is deliberately reserved for high-precision document types.
+    Ambiguous prose stays visible to the teacher rather than being silently lost.
+    """
     quality = chunk_quality(text)
-    if _POETIC.search(text) or ("(...)" in text and len(re.findall(r"[,;]", text)) >= 3):
+    layout = layout or {}
+    poetic_layout = (layout.get("line_count", 0) >= 4 and layout.get("mean_terms_per_line", 99) <= 10
+                     and layout.get("short_line_ratio", 0) >= .75
+                     and layout.get("has_ellipsis_line"))
+    if poetic_layout:
         return {"decision": "do_not_use", "confidence": "high",
-                "explanation": "Edebî/şiirsel anlatım içeriyor; doğrudan ders kanıtı değildir.",
-                "reasons": ["edebi_alinti_riski"]}
+                "explanation": "Kısa dizeler, başlık ve satır düzeni edebî alıntı biçimine uyuyor; doğrudan ders kanıtı değildir.",
+                "reasons": ["edebi_alinti_yapisi"], "features": layout}
     if quality["visual_or_caption_risk"]:
         return {"decision": "do_not_use", "confidence": "high",
                 "explanation": "Görsel veya eser açıklaması olabilir; soru kanıtı olarak tek başına kullanılmaz.",
-                "reasons": ["gorsel_aciklamasi"]}
+                "reasons": ["gorsel_aciklamasi"], "features": layout}
     if quality["instruction_risk"]:
         return {"decision": "do_not_use", "confidence": "high",
                 "explanation": "Etkinlik yönergesi olabilir; ders bilgisini doğrudan kanıtlamaz.",
-                "reasons": ["etkinlik_yonergesi"]}
+                "reasons": ["etkinlik_yonergesi"], "features": layout}
     if quality["ocr_fragment_risk"]:
         return {"decision": "manual_review", "confidence": "low",
                 "explanation": "PDF metninde bölünmüş sözcük riski var; PDF kırpımıyla anlamı doğrulanmadan kullanmayın.",
-                "reasons": ["ocr_bozulmasi"]}
+                "reasons": ["ocr_bozulmasi"], "features": layout}
     if _EXPLANATORY.search(text) and quality["word_count"] >= 6:
         return {"decision": "review_for_approval", "confidence": "medium",
                 "explanation": "Neden-sonuç veya tarihsel açıklama içeriyor gibi görünüyor; PDF ile aynıysa ders kanıtı olarak uygun olabilir.",
-                "reasons": ["ders_bilgisi_adayi"]}
+                "reasons": ["ders_bilgisi_adayi"], "features": layout}
     return {"decision": "manual_review", "confidence": "low",
             "explanation": "Metin ders bilgisi olabilir; ancak tek başına doğrudan kanıt olup olmadığı PDF bağlamında net değil.",
-            "reasons": ["baglam_kontrolu_gerekli"]}
-
+            "reasons": ["baglam_kontrolu_gerekli"], "features": layout}
 
 def build_index(source: Path = BOOK) -> dict:
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
@@ -157,12 +182,14 @@ def build_index(source: Path = BOOK) -> dict:
                 for block in page.get_text("dict")["blocks"]:
                     if block["type"] != 0:
                         continue
-                    text = _clean(" ".join("".join(span["text"] for span in line["spans"])
-                                           for line in block["lines"]))
+                    raw_lines = ["".join(span["text"] for span in line["spans"])
+                                 for line in block["lines"]]
+                    text = _clean(" ".join(raw_lines))
+                    layout = block_layout(raw_lines)
                     box = [round(float(n), 2) for n in block["bbox"]]
                     if not _candidate(text, box, page.rect.height):
                         continue
-                    pre_review = source_review_recommendation(text)
+                    pre_review = source_review_recommendation(text, layout)
                     # Obvious non-evidence must not consume teacher review time.
                     # Keep only conservative uncertainty and lesson-prose candidates.
                     if pre_review["decision"] == "do_not_use":
@@ -173,8 +200,8 @@ def build_index(source: Path = BOOK) -> dict:
                                    "section_id": section["id"], "section_title": section["title"],
                                    "page": page_number, "bbox": box, "text": text,
                                    "review_status": "candidate", "quality": chunk_quality(text),
-                                   "pre_review": pre_review})
-    return {"schema": 1, "source_checksum": checksum, "source_name": source.name,
+                                   "layout": layout, "pre_review": pre_review})
+    return {"schema": 1, "policy_version": "source-type-v2", "source_checksum": checksum, "source_name": source.name,
             "sections": chapter, "chunks": chunks, "exclusions": exclusions}
 
 
@@ -272,7 +299,7 @@ if __name__ == "__main__":
 
 # Evidence proposal is intentionally separate from production retrieval. It ranks
 # unapproved PDF passages for a teacher to inspect; it never changes approval.
-_OCR_FRAGMENT = re.compile(r"\b\w{4,}\s+[a-zçğıöşü]{1,2}\b", re.IGNORECASE)
+_OCR_FRAGMENT = re.compile(r"\b\w{3,}\s+[a-zçğıöşü]{1,2}\w{2,}\b", re.IGNORECASE)
 _CAPTIONISH = re.compile(r"(?:museum|müzesi|görsel|fotoğraf|yaklaşık m[ös])", re.IGNORECASE)
 
 

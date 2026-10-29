@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 type Section = { id: string; title: string; start: number; end: number };
 type Chunk = { id: string; page: number; bbox: number[]; text: string; approved: boolean; revision: number; review_warnings: string[]; pre_review?: { decision: "do_not_use" | "review_for_approval" | "manual_review"; confidence: string; explanation: string; reasons: string[] } };
-type Summary = { candidate_count: number; approved_count: number; sections: Section[] };
+type Summary = { candidate_count: number; approved_count: number; policy_version?: string; excluded_by_type?: Record<string, number>; sections: Section[] };
 const headers = { "X-Role": "teacher" };
 
 function SourcePreview({ api, chunk }: { api: string; chunk: Chunk }) {
@@ -62,6 +62,7 @@ export function HistoryRagReview({ api }: { api: string }) {
     <p className="eyebrow">MEB KAYNAK HAZIRLIĞI</p><h2 id="rag-review-title">Konu bazlı bilgi parçaları</h2>
     <p>Alıştırma ve görsel adayları ayıklandı. Her metni PDF sayfasıyla karşılaştırıp yalnız ders bilgisi içeriyorsa onaylayın. Onaylar kaynak sürümüne bağlıdır.</p>
     <p>{summary ? `${summary.approved_count} / ${summary.candidate_count} parça onaylı.` : "Dizin yükleniyor."}</p>
+    {summary && Object.keys(summary.excluded_by_type ?? {}).length > 0 && <p className="notice">Yapısal kaynak türü filtresi ({summary.policy_version}): {Object.entries(summary.excluded_by_type ?? {}).map(([kind, count]) => `${count} ${kind.replaceAll("_", " ")}`).join(" · ")} inceleme havuzuna alınmadı.</p>}
     <p role="status">{message}</p>
     {summary && <label>Konu<select value={section} onChange={event => { setSection(event.target.value); setChecked(""); }}>
       {summary.sections.map(item => <option key={item.id} value={item.id}>{item.id} {item.title} · s. {item.start}–{item.end}</option>)}

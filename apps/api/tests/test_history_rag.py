@@ -31,7 +31,7 @@ def test_real_index_uses_toc_and_excludes_assessment_pages():
     assert all(item["page"] <= {"1": 60, "2": 154, "3": 243}[item["section_id"][0]]
                for item in index["chunks"])
     assert any(item["section_id"] == "1.1" for item in index["chunks"])
-    assert index["exclusions"].get("edebi_alinti_riski", 0) >= 1
+    assert index["exclusions"].get("edebi_alinti_yapisi", 0) >= 1
 
 
 def test_review_flags_activity_fragments_and_captions_without_changing_approval():
@@ -53,9 +53,13 @@ def test_duplicate_chunks_are_collapsed_and_conflicting_ids_rejected():
     with pytest.raises(ValueError, match='çakışan'):
         deduplicate_chunks([chunk, {**chunk, 'text': 'Farklı metin'}])
 
-def test_pre_review_keeps_poetry_and_instructions_out_of_evidence_pool():
-    from app.history_rag import source_review_recommendation
-    poem = "Süleymaniye’de Bayram Sabahı (...) Ne kadar duygulu, engin ve mübârek bu seher! Kadın erkek ve çocuk, gönlü dolanlar, yer yer, Dinliyor hepsi büyük hâtıralar rüzgârını."
-    assert source_review_recommendation(poem)["decision"] == "do_not_use"
+def test_pre_review_uses_generic_poetry_layout_not_a_specific_title():
+    from app.history_rag import block_layout, source_review_recommendation
+    poetry = ["Başlık", "(...) ", "Kısa bir dize ve ritim", "Başka kısa bir dize", "Son kısa dize."]
+    result = source_review_recommendation(" ".join(poetry), block_layout(poetry))
+    assert result["decision"] == "do_not_use"
+    assert result["reasons"] == ["edebi_alinti_yapisi"]
+    prose = ["Tarım üretimi yerleşik yaşamın gelişmesini sağladı ve toplumsal yapıyı değiştirdi.",
+             "Bu değişim farklı mesleklerin ortaya çıkmasına da katkı sağladı."]
+    assert source_review_recommendation(" ".join(prose), block_layout(prose))["decision"] == "review_for_approval"
     assert source_review_recommendation("III. Adım: Soruları cevaplayınız.")["decision"] == "do_not_use"
-    assert source_review_recommendation("Tarım üretimi yerleşik yaşamın gelişmesini sağladı.")["decision"] == "review_for_approval"

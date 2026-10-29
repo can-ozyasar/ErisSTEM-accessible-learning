@@ -171,7 +171,8 @@ def question_bank_router(store: LearningOperationsStore):
                   if item.get("approved") and not item.get("quality_checked")]
         return {"source_checksum": index["source_checksum"], "section_count": len(index["sections"]),
                 "candidate_count": len(index["chunks"]), "approved_count": len(approved),
-                "legacy_recheck_count": len(legacy), "sections": index["sections"]}
+                "legacy_recheck_count": len(legacy), "policy_version": index.get("policy_version", "legacy"),
+                "excluded_by_type": index.get("exclusions", {}), "sections": index["sections"]}
 
     @router.get("/teacher/rag/sections/{section_id}")
     def rag_section(section_id: str, _: Role = teacher):

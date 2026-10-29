@@ -57,7 +57,21 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.build_multi_histor
   --output data/private/yks-ayt-source-v1/multi-history-rag-v2.json
 
 PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.ayt_evidence_match \
-  --questions data/private/yks-ayt-source-v1/ayt-tarih2-candidates-v1.json \
+  --questions data/private/yks-ayt-source-v1/ayt-tarih2-candidates-v2.json \
   --corpus data/private/yks-ayt-source-v1/multi-history-rag-v2.json \
-  --output data/private/yks-ayt-source-v1/ayt-evidence-proposals-v1.json
+  --output data/private/yks-ayt-source-v1/ayt-evidence-proposals-v2.json
+```
+
+Öğretmen kararını PDF metnine bakmadan yalnız düz metin önerisiyle vermemeli.
+Bu nedenle önerilerden private bir inceleme paketi de üretilir. Paket, her
+2022–2026 adayı için ilk üç MEB önerisinin sayfa kırpımını, checksum'ını ve
+bölüm bilgisini taşır; cevap içermez ve onay durumu değiştirmez.
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.ayt_evidence_review_pack \
+  --questions data/private/yks-ayt-source-v1/ayt-tarih2-candidates-v2.json \
+  --proposals data/private/yks-ayt-source-v1/ayt-evidence-proposals-v2.json \
+  --source-root data/meb \
+  --output data/private/yks-ayt-source-v1/evidence-review-pack-v1 \
+  --per-question 3
 ```

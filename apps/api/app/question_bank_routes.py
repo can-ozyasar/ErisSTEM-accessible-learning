@@ -40,6 +40,7 @@ from .history_speech import history_spoken_text
 from .knowledge_architecture import (
     EXTERNAL_EVALUATION_SCHEMA,
     GRAPH_PREFILL_REPORT_SCHEMA,
+    SOURCE_RELATION_PROPOSAL_SCHEMA,
     build_manifest,
     load_experiment_artifact,
     load_pilot_snapshot,
@@ -265,7 +266,9 @@ def question_bank_router(store: LearningOperationsStore):
                               graph_prefill_report=_architecture_experiment_artifact(
                                   "HISTORY_GRAPH_PREFILL_REPORT", GRAPH_PREFILL_REPORT_SCHEMA),
                               external_evaluation=_architecture_experiment_artifact(
-                                  "HISTORY_EXTERNAL_EVIDENCE_EVALUATION", EXTERNAL_EVALUATION_SCHEMA))
+                                  "HISTORY_EXTERNAL_EVIDENCE_EVALUATION", EXTERNAL_EVALUATION_SCHEMA),
+                              source_relation_proposals=_architecture_experiment_artifact(
+                                  "HISTORY_SOURCE_RELATION_PROPOSALS", SOURCE_RELATION_PROPOSAL_SCHEMA))
 
     @router.get("/teacher/rag/sections/{section_id}")
     def rag_section(section_id: str, _: Role = teacher):

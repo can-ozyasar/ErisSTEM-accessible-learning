@@ -92,3 +92,9 @@ Deney; yalnız iddia ile kısa kaynak kesitini PDF kırpım inceleme sırasına
 yardımcı olmak için değerlendirebilir. Cevap anahtarı ve öğrenci verisi
 gönderilmez; model kararı hiçbir zaman kaynak onayı, grafik kenarı, retrieval,
 QLoRA satırı veya öğrenci yanıtı olmaz. Bu deney öğrenci çalışma anında kapalıdır.
+
+Kaynak-içi ilişki pilotu için `HISTORY_SOURCE_RELATION_PROPOSALS` kullanılır.
+Bu pilot yalnız seçilmiş MEB kesitinden çıkarılan, iki ucu ve kısa kaynak fiili
+yerelde doğrulanmış **önerileri** sayar. Soru metni veya cevap anahtarı dış
+inceleyiciye gitmez. İlişki, ilgili PDF kırpımı insan tarafından doğrulanmadan
+grafiğe, RAG'a veya QLoRA verisine aktarılamaz.

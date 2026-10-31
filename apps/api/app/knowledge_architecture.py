@@ -16,6 +16,7 @@ SCHEMA = "history-knowledge-architecture-v1"
 PILOT_SCHEMA = "history-knowledge-pilot-snapshot-v1"
 GRAPH_PREFILL_REPORT_SCHEMA = "ayt-graph-prefill-report-v1"
 EXTERNAL_EVALUATION_SCHEMA = "deepseek-evidence-judge-v1"
+SOURCE_RELATION_PROPOSAL_SCHEMA = "deepseek-source-relation-proposals-v1"
 FORBIDDEN_FIELDS = frozenset({
     "text", "quote", "question", "question_text", "choices", "answer",
     "answer_key", "answer_label", "correct_choice", "student_data",
@@ -117,6 +118,31 @@ def _external_evaluation_summary(artifact: dict | None) -> dict | None:
     }
 
 
+def _source_relation_summary(artifact: dict | None) -> dict | None:
+    if not artifact:
+        return None
+    summary, sources = artifact.get("summary"), artifact.get("sources")
+    if not isinstance(summary, dict) or not isinstance(sources, list):
+        raise TypeError("Kaynak ilişkisi deney özeti geçersiz")
+    latency = [float(item["latency_ms"]) for item in sources
+               if isinstance(item, dict) and isinstance(item.get("latency_ms"), (int, float))]
+    return {
+        "provider_model": artifact.get("model", "belirsiz"),
+        "source_count": int(summary.get("source_count", len(sources))),
+        "proposed_relation_count": int(summary.get("proposed_relation_count", 0)),
+        "rejected_relation_count": int(summary.get("rejected_relation_count", 0)),
+        "invalid_json_retries": int(summary.get("invalid_json_retries", 0)),
+        "invalid_json_final_failures": int(summary.get("invalid_json_final_failures", 0)),
+        "relation_types": {str(key): int(value)
+                           for key, value in (summary.get("relation_types") or {}).items()},
+        "latency_ms": {"p50": _percentile(latency, 0.50), "p95": _percentile(latency, 0.95)},
+        "answer_key_accessed": bool(artifact.get("answer_key_accessed", False)),
+        "question_text_accessed": bool(artifact.get("question_text_accessed", False)),
+        "is_teacher_approval": bool(artifact.get("is_teacher_approval", False)),
+        "runtime_enabled": False,
+    }
+
+
 def _candidate_status(chunk: dict) -> str:
     return (chunk.get("pre_review") or {}).get("decision", "manual_review")
 
@@ -183,7 +209,8 @@ def _current_records(store, kind: str, source_checksum: str) -> list[dict]:
 def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
                    hybrid_artifact: dict | None = None,
                    graph_prefill_report: dict | None = None,
-                   external_evaluation: dict | None = None) -> dict:
+                   external_evaluation: dict | None = None,
+                   source_relation_proposals: dict | None = None) -> dict:
     """Build the teacher-only, content-free architecture map payload."""
     checksum = index["source_checksum"]
     chunks = index.get("chunks", [])
@@ -262,6 +289,7 @@ def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
         "experiments": {
             "graph_prefill": _graph_prefill_summary(graph_prefill_report),
             "external_evidence_evaluation": _external_evaluation_summary(external_evaluation),
+            "source_relation_proposals": _source_relation_summary(source_relation_proposals),
         },
         "retrieval": retrieval,
         "stale_records": stale,

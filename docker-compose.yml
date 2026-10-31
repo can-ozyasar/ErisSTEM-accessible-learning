@@ -16,6 +16,7 @@ services:
       # student runtime and contain no source prose, question, answer or key.
       HISTORY_GRAPH_PREFILL_REPORT: /private/architecture/ayt-graph-prefill-report-priority-v1.json
       HISTORY_EXTERNAL_EVIDENCE_EVALUATION: /private/architecture/deepseek-evidence-judge-pilot-v1.json
+      HISTORY_SOURCE_RELATION_PROPOSALS: /private/architecture/deepseek-source-relation-pilot-v1.json
       # Set only with the gpu profile. Without this endpoint the API uses its
       # answer-key-isolated deterministic coaching fallback.
       LOCAL_TUTOR_LLM_URL: ${LOCAL_TUTOR_LLM_URL:-}

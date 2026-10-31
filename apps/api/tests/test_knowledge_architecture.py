@@ -11,6 +11,7 @@ from app.knowledge_architecture import (
     EXTERNAL_EVALUATION_SCHEMA,
     GRAPH_PREFILL_REPORT_SCHEMA,
     PILOT_SCHEMA,
+    SOURCE_RELATION_PROPOSAL_SCHEMA,
     build_manifest,
     build_pilot_snapshot,
     load_pilot_snapshot,
@@ -101,12 +102,19 @@ def test_manifest_summarizes_experiments_without_private_candidates_or_excerpts(
     }, "evaluations": [{"latency_ms": 100.0, "candidate_id": "private-question"},
                          {"latency_ms": 240.0, "candidate_id": "private-question-2"}],
                 "answer_key_accessed": False, "is_teacher_approval": False}
+    relation = {"schema": SOURCE_RELATION_PROPOSAL_SCHEMA, "model": "private-model", "summary": {
+        "source_count": 2, "proposed_relation_count": 1, "rejected_relation_count": 1,
+        "relation_types": {"iliskilidir": 1},
+    }, "sources": [{"latency_ms": 110.0, "chunk_id": "private-source"}],
+                 "answer_key_accessed": False, "question_text_accessed": False,
+                 "is_teacher_approval": False}
     manifest = build_manifest(_index(), Store({}), graph_prefill_report=graph,
-                              external_evaluation=external)
+                              external_evaluation=external, source_relation_proposals=relation)
     serialized = json.dumps(manifest, ensure_ascii=False)
     assert manifest["experiments"]["graph_prefill"]["literal_claim_coverage"] == 0.0
     assert manifest["experiments"]["external_evidence_evaluation"]["latency_ms"]["p95"] == 240.0
     assert manifest["experiments"]["external_evidence_evaluation"]["runtime_enabled"] is False
+    assert manifest["experiments"]["source_relation_proposals"]["proposed_relation_count"] == 1
     assert "private-question" not in serialized
 
 

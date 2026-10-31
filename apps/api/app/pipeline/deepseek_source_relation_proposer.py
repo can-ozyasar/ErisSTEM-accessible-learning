@@ -24,6 +24,15 @@ RELATIONS = {
     "gerceklesti_tarih", "gerceklesti_yer", "once_geldi", "sonra_geldi",
     "neden_oldu", "sonuc_oldu", "gerceklestirdi", "tanımlar", "iliskilidir",
 }
+EVENT_MARKERS = {
+    "antlaş", "ateskes", "ayaklan", "darbe", "devrim", "harekat", "isyan",
+    "kongre", "kuşatma", "muharebe", "savaş", "sefer", "sözleş", "vaka",
+}
+CLAUSE_MARKERS = {
+    "bastır", "başla", "çık", "dönüştür", "etti", "etme", "oldu", "olma",
+    "sağla", "umutlandır", "verdi", "verme", "yaptı", "yapma", "yönetti",
+}
+PASSIVE_SUFFIXES = ("ıldı", "ildi", "uldu", "üldü", "ılmış", "ilmiş", "ulmuş", "ülmüş", "lendi")
 
 
 def _source_lookup(corpus: dict) -> dict[tuple[str, str], dict]:
@@ -103,6 +112,34 @@ def _term_present(required: str, observed: set[str]) -> bool:
                                for term in wanted)
 
 
+def _event_like(value: str) -> bool:
+    return any(token.startswith(marker) for token in terms(value) for marker in EVENT_MARKERS)
+
+
+def _endpoint_like(value: str) -> bool:
+    """Reject sentence clauses masquerading as graph entities."""
+    tokens = terms(value)
+    return bool(tokens) and len(tokens) <= 9 and not any(
+        token.startswith(marker) for token in tokens for marker in CLAUSE_MARKERS
+    )
+
+
+def _semantic_shape_valid(fact: dict) -> bool:
+    subject, obj, phrase, relation = (fact["subject"], fact["object"],
+                                      fact["relation_phrase"], fact["relation"])
+    if not _endpoint_like(subject) or not _endpoint_like(obj):
+        return False
+    if set(terms(phrase)) & set(terms(obj)):
+        return False
+    if any(token.endswith(PASSIVE_SUFFIXES) for token in terms(phrase)):
+        return False
+    if relation in {"gerceklesti_tarih", "gerceklesti_yer"} and not _event_like(subject):
+        return False
+    return relation != "gerceklestirdi" or (
+        fact.get("subject_kind") == "kisi" and fact.get("object_kind") == "olay"
+    )
+
+
 def _parse_response(body: dict, source: dict) -> tuple[list[dict], int]:
     try:
         payload = json.loads(body["choices"][0]["message"]["content"])
@@ -131,7 +168,10 @@ def _parse_response(body: dict, source: dict) -> tuple[list[dict], int]:
                 or fact.get("object_kind") not in KINDS or relation not in RELATIONS or not valid_typed_relation
                 or _normalised(quote) not in source_text
                 or not _term_present(subject, observed) or not _term_present(obj, observed)
-                or not _term_present(phrase, observed)):
+                or not _term_present(phrase, observed)
+                or not _semantic_shape_valid({"subject": subject, "object": obj, "relation_phrase": phrase,
+                                              "relation": relation, "subject_kind": fact.get("subject_kind"),
+                                              "object_kind": fact.get("object_kind")})):
             rejected += 1
             continue
         accepted.append({

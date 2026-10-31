@@ -60,3 +60,35 @@ def test_relation_proposer_retries_invalid_json_without_persisting_the_raw_respo
     assert len(calls) == 2
     assert result["summary"]["invalid_json_retries"] == 1
     assert result["summary"]["invalid_json_final_failures"] == 0
+
+
+def test_relation_proposer_rejects_clause_nodes_and_wrong_typed_relation_shape():
+    proposals, corpus = _inputs()
+
+    def fake_call(_request, _key, _timeout):
+        return {"choices": [{"message": {"content": json.dumps({"facts": [{
+            "subject": "Mustafa Kemal", "subject_kind": "olay", "relation": "gerceklesti_tarih",
+            "object": "1896", "object_kind": "tarih_donem", "relation_phrase": "girdi",
+            "evidence_excerpt": "Mustafa Kemal tarih öğretmeni Mehmet Tevfik Bey'in etkisiyle tarihe ilgi duydu.",
+        }, {"subject": "Mustafa Kemal", "subject_kind": "kisi", "relation": "iliskilidir",
+            "object": "tarihe ilgi duydu", "object_kind": "kavram", "relation_phrase": "ilgi duydu",
+            "evidence_excerpt": "Mustafa Kemal tarih öğretmeni Mehmet Tevfik Bey'in etkisiyle tarihe ilgi duydu.",
+        }]})}}]}
+
+    result = propose(proposals, corpus, "secret", request_fn=fake_call)
+    assert result["summary"]["proposed_relation_count"] == 0
+    assert result["summary"]["rejected_relation_count"] == 2
+
+
+def test_relation_proposer_rejects_passive_relation_that_can_reverse_direction():
+    proposals, corpus = _inputs()
+
+    def fake_call(_request, _key, _timeout):
+        return {"choices": [{"message": {"content": json.dumps({"facts": [{
+            "subject": "Mustafa Kemal", "subject_kind": "kisi", "relation": "iliskilidir",
+            "object": "Mehmet Tevfik Bey", "object_kind": "kisi", "relation_phrase": "etkilendi",
+            "evidence_excerpt": "Mustafa Kemal tarih öğretmeni Mehmet Tevfik Bey'in etkisiyle tarihe ilgi duydu.",
+        }]})}}]}
+
+    result = propose(proposals, corpus, "secret", request_fn=fake_call)
+    assert result["summary"]["proposed_relation_count"] == 0

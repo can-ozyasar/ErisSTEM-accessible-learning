@@ -38,6 +38,12 @@ hazırlanır: soruyu anlama, hatırladığını ortaya çıkarma, kanıtla bağ 
 şıkkı sınama, yanlış yanıtı düzeltme ve doğru yanıtı pekiştirme. QLoRA dışa
 aktarım kapısı 120 tamamlanmış soru grubu ve 720 onaylı örnektir.
 
+`app.pipeline.tutor_qlora_readiness` dışa aktarımdan önce fail-closed bir
+hazırlık raporu üretir: her grupta altı durum, kaynak bağlı kalite alanları,
+erken ifşa yasağı ve 84/18/18 soru-grubu bölmesi birlikte doğrulanır. Rapor
+içerik, soru, alıntı veya cevap anahtarı taşımaz. Kapı `blocked` ise Kaggle
+dizini oluşturulmaz ve eğitim başlatılmaz.
+
 ```bash
 cd apps/api
 .venv/bin/python -m app.pipeline.export_tutor_qlora \

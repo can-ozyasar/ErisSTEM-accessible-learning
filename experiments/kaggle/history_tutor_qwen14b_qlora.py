@@ -27,16 +27,21 @@ def rows(name: str) -> list[dict]:
     if not parsed:
         raise ValueError(f"{name} is empty")
     forbidden = ("answer_label", "answer_key", "source_text", "pdf", "bbox", "page", "answer_source_checked")
-    groups = set()
+    groups: dict[str, set[str]] = {}
     for item in parsed:
         if set(item) != {"group_id", "case", "error_type", "prompt", "completion"}:
             raise ValueError("unexpected data field; export only reviewed coach examples")
         if any(word in json.dumps(item, ensure_ascii=False).lower() for word in forbidden):
             raise ValueError("source or answer material found in QLoRA input")
-        if item["group_id"] in groups:
-            # Three turns are permitted per group, but a stage cannot repeat.
-            continue
-        groups.add(item["group_id"])
+        group_cases = groups.setdefault(item["group_id"], set())
+        if item["case"] in group_cases:
+            raise ValueError("a coaching stage repeats within a question group")
+        group_cases.add(item["case"])
+    expected_groups = 84 if name == "train" else 18
+    if len(groups) != expected_groups or len(parsed) != expected_groups * 6:
+        raise ValueError(f"{name} must contain {expected_groups} complete question groups and six cases each")
+    if any(len(cases) != 6 for cases in groups.values()):
+        raise ValueError("each question group must contain exactly six distinct coaching cases")
     return parsed
 
 

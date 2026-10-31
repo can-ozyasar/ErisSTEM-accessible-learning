@@ -13,6 +13,7 @@ from pathlib import Path
 from ..job_store import make_session_factory
 from ..learning_operations import LearningOperationsStore
 from ..tutor_dataset import export_rows
+from .tutor_qlora_readiness import assess
 
 
 def write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -28,11 +29,16 @@ def main() -> None:
     parser.add_argument("--module-id", required=True, help="Question-bank source checksum's first 16 characters")
     args = parser.parse_args()
     store = LearningOperationsStore(make_session_factory(args.database_url))
-    rows, summary = export_rows(store.list("tutor_review", args.module_id))
+    records = store.list("tutor_review", args.module_id)
+    readiness = assess(records)
+    if readiness["status"] != "ready":
+        raise SystemExit("QLoRA dışa aktarımı kalite kapısından geçmedi: " + json.dumps(readiness["blocking_reasons"], ensure_ascii=False))
+    rows, summary = export_rows(records)
     for split in ("train", "dev"):
         write_jsonl(args.kaggle_output / f"{split}.jsonl", rows[split])
     write_jsonl(args.sealed_output / "sealed_test.jsonl", rows["sealed_test"])
-    (args.kaggle_output / "manifest.json").write_text(json.dumps({**summary, "sealed_test_included": False},
+    (args.kaggle_output / "manifest.json").write_text(json.dumps({**summary, "sealed_test_included": False,
+                                                                      "readiness": readiness},
                                                                ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({**summary, "kaggle_output": str(args.kaggle_output), "sealed_output": str(args.sealed_output)},
                      ensure_ascii=False))

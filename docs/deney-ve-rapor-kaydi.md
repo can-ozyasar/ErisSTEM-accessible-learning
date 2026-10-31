@@ -659,3 +659,4 @@ bir kaynak bölümü canlı isteklerle sınandı; her iki dönen WAV da kurulu V
 dosyasının özetiyle eşleşti. Dinamik veya önceden bilinmeyen arayüz metinleri
 ve sayısal bölümler bu pakette değildir; bunlar için insan dinlemesi ve ayrı
 okunuş kuralları gerekir.
+| 2026-10 | Kanıt demeti motoru | Sabit soru başına üç kesit varsayımı kaldırıldı; öğretmen/agent taslağındaki zorunlu kanıt iddialarını ayrı arayan, sayfa çeşitliliği koruyan private demet motoru eklendi | Anahtar kelime benzerliği, temel olgu ve kişi–olay/tarih–olay ilişkisini aynı anda kanıtlamaz; eksik zorunlu iddiada sistem çekimser kalmalı | Uygulandı; 14 birim testi geçti, agent taslak planı ve PDF kırpım incelemesi bekliyor |

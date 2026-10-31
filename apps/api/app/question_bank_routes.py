@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import time
@@ -36,6 +37,7 @@ from .history_rag import (
 )
 from .history_source import BOOK as HISTORY_BOOK
 from .history_speech import history_spoken_text
+from .knowledge_architecture import build_manifest, load_pilot_snapshot
 from .learning_operations import LearningOperationsStore, LearningRecord
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
 from .question_bank_extract import extract_book
@@ -137,6 +139,7 @@ class GraphReview(BaseModel):
     edges: list[GraphEdge] = Field(min_length=1, max_length=120)
     reviewer: str = Field(min_length=2, max_length=80)
     reason: str = Field(min_length=10, max_length=600)
+    approved: bool = True
     expected_revision: int = Field(ge=0)
 
 
@@ -170,6 +173,20 @@ def _rag_index():
         return load_index()
     except (FileNotFoundError, ValueError):
         raise HTTPException(503, "MEB bilgi dizini yok veya kaynak değişmiş; yeniden hazırlayın") from None
+
+
+def _hybrid_architecture_artifact() -> dict | None:
+    """Read optional experiment metadata without exposing private query outputs."""
+    value = os.getenv("HISTORY_RAG_HYBRID_ARTIFACT")
+    if not value:
+        return None
+    path = Path(value)
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
 
 
 def _approved_rag_ids(store, checksum):
@@ -221,6 +238,17 @@ def question_bank_router(store: LearningOperationsStore):
                 "candidate_count": len(index["chunks"]), "approved_count": len(approved),
                 "legacy_recheck_count": len(legacy), "policy_version": index.get("policy_version", "legacy"),
                 "excluded_by_type": index.get("exclusions", {}), "sections": index["sections"]}
+
+    @router.get("/teacher/architecture/manifest")
+    def architecture_manifest(_: Role = teacher):
+        """Teacher-only, content-free status for the RAG/graph/LLM architecture."""
+        index = _rag_index()
+        try:
+            pilot = load_pilot_snapshot()
+        except ValueError as error:
+            raise HTTPException(503, str(error)) from error
+        return build_manifest(index, store, pilot_snapshot=pilot,
+                              hybrid_artifact=_hybrid_architecture_artifact())
 
     @router.get("/teacher/rag/sections/{section_id}")
     def rag_section(section_id: str, _: Role = teacher):

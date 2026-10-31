@@ -9,6 +9,9 @@ services:
       LOCAL_TTS_CACHE_ROOT: /private/tts-cache
       LOCAL_TTS_DEMO_ROOT: /private/tts-v5-demo
       LOCAL_TTS_DEMO_EXTRA_ROOT: /private/tts-v5-extra/installed
+      # Content-free AYT 10--12 architecture summary.  The endpoint exposes
+      # only counts/checksums; the private corpus itself never reaches web.
+      HISTORY_ARCHITECTURE_SNAPSHOT: /private/architecture/history-architecture-snapshot-v1.json
       # Set only with the gpu profile. Without this endpoint the API uses its
       # answer-key-isolated deterministic coaching fallback.
       LOCAL_TUTOR_LLM_URL: ${LOCAL_TUTOR_LLM_URL:-}
@@ -18,6 +21,7 @@ services:
       - ./data/soru_bankasi:/private/question-bank:ro
       - ./data/private/tts-v5-demo-installed-v1:/private/tts-v5-demo:ro
       - ./data/private/tts-v5-extra-storage:/private/tts-v5-extra:ro
+      - ./data/private/yks-ayt-source-v1:/private/architecture:ro
       - tts_audio_cache:/private/tts-cache
     depends_on:
       db:

@@ -42,6 +42,29 @@ class GraphNode(StrictModel):
     label: str = Field(min_length=2, max_length=120)
     kind: Literal["kisi", "olay", "tarih_donem", "yer", "kavram"]
     aliases: list[str] = Field(default_factory=list, max_length=12)
+    temporal: TemporalRange | None = None
+
+    @model_validator(mode="after")
+    def temporal_only_for_periods(self):
+        if self.temporal is not None and self.kind != "tarih_donem":
+            raise ValueError("Zaman aralığı yalnız tarih/dönem düğümünde tutulabilir")
+        return self
+
+
+class TemporalRange(StrictModel):
+    """Normalised timeline coordinates; they are display aids, never proof."""
+    start_year: int | None = Field(default=None, ge=-5000, le=2500)
+    end_year: int | None = Field(default=None, ge=-5000, le=2500)
+    precision: Literal["year", "range", "century", "period", "unknown"] = "unknown"
+    era: Literal["mo", "ms", "mixed", "unknown"] = "unknown"
+
+    @model_validator(mode="after")
+    def chronological_range(self):
+        if self.start_year is not None and self.end_year is not None and self.start_year > self.end_year:
+            raise ValueError("Zaman aralığının başlangıcı bitişinden sonra olamaz")
+        if self.precision == "year" and self.start_year != self.end_year:
+            raise ValueError("Yıl hassasiyeti için başlangıç ve bitiş aynı olmalı")
+        return self
 
 
 class GraphEdge(StrictModel):

@@ -12,3 +12,10 @@ def test_scope_ranking_uses_only_reviewed_metadata_and_is_explainable():
     assert result["chosen_grade"] == 10
     assert len(result["selected_units"]) == 6
     assert result["weights"]["frequency"] == .40
+
+
+def test_scope_accepts_twelfth_grade_ayt_metadata():
+    tags = [tag(f"g12-{index}", 12, f"12.{index % 6}") for index in range(12)]
+    result = rank_scope(tags)
+    assert result["chosen_grade"] == 12
+    assert result["ready"] is True

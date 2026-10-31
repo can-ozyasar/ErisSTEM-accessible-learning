@@ -11,7 +11,10 @@ from statistics import mean
 
 WEIGHTS = {"frequency": .40, "evidence": .25, "graph": .20, "accessibility": .15}
 YEARS = frozenset(range(2022, 2027))
-GRADES = frozenset({9, 10, 11})
+# AYT Tarih-2 includes 12th-grade Cumhuriyet tarihi content.  Keeping this
+# set aligned with the installed MEB corpus prevents a valid AYT tag from
+# being rejected before its evidence can be reviewed.
+GRADES = frozenset({9, 10, 11, 12})
 
 
 @dataclass(frozen=True)

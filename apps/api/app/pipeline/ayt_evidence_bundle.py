@@ -48,7 +48,11 @@ def _claim_all_of(claim: dict) -> list[str]:
 
 
 def _claim_query_terms(claim: dict) -> list[str]:
-    return claim.get("query_terms", claim.get("search_terms", []))
+    values = list(claim.get("query_terms", claim.get("search_terms", [])))
+    for strategy in claim.get("query_strategies", []):
+        for query in strategy.get("queries", []):
+            values.extend(query if isinstance(query, list) else [query])
+    return values
 
 
 def _all_groups(claim: dict) -> list[list[str]]:
@@ -216,6 +220,23 @@ def _rank_partial_discovery(pool: list[tuple[dict, dict]], claim: dict, per_clai
     return selected
 
 
+def _case_pool(pool: list[tuple[dict, dict]], case: dict) -> list[tuple[dict, dict]]:
+    """Apply only explicit hard section filters during private discovery."""
+    filters = [item.get("section_title", "") for item in case.get("discovery_section_filters", [])
+               if item.get("hard")]
+    if not filters:
+        return pool
+    filtered = []
+    for book, chunk in pool:
+        title_terms = set(terms(chunk.get("section_title", "")))
+        if any(_covered(set(terms(expected)), title_terms) == set(terms(expected)) for expected in filters):
+            filtered.append((book, chunk))
+    # An absent/renamed heading must not silently erase the discovery queue.
+    # Keep the full pool and report the filter as ineffective through the
+    # unchanged result; a teacher can then repair the title alias explicitly.
+    return filtered or pool
+
+
 def _validate_plan(question_candidates: dict, corpus: dict, plan: dict, per_claim: int) -> None:
     if question_candidates.get("schema") != "ayt-tarih2-candidates-v1":
         raise ValueError("Beklenen AYT soru aday şeması bulunamadı")
@@ -287,9 +308,10 @@ def build(question_candidates: dict, corpus: dict, plan: dict, per_claim: int = 
     proposals = []
     for case in _plan_cases(plan):
         claims = _case_claims(case)
-        ranked_by_claim = {claim["id"]: _rank_claim(pool, claim, per_claim) for claim in claims}
+        case_pool = _case_pool(pool, case)
+        ranked_by_claim = {claim["id"]: _rank_claim(case_pool, claim, per_claim) for claim in claims}
         discovery_by_claim = {
-            claim["id"]: (ranked_by_claim[claim["id"]] or _rank_partial_discovery(pool, claim, per_claim))
+            claim["id"]: (ranked_by_claim[claim["id"]] or _rank_partial_discovery(case_pool, claim, per_claim))
             for claim in claims
         }
         required_ids = case.get("support_requirements", {}).get(

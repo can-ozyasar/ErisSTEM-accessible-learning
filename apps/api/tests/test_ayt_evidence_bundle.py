@@ -99,3 +99,13 @@ def test_bundle_interprets_nested_agent_groups_as_separate_required_groups():
     claim["all_of_groups"] = [["Kurultay"], [["meclis"], ["devlet meseleleri"]]]
     row = build(questions, corpus, plan)["proposals"][0]
     assert row["status"] == "teacher_review_required"
+
+
+def test_bundle_uses_teacher_hard_section_filter_only_for_discovery():
+    questions, corpus, plan = _inputs()
+    corpus["books"][0]["index"]["chunks"].append(_chunk(
+        "matching-section", "Kurultay bir meclis olarak devlet meselelerini görüşürdü.", 12
+    ) | {"section_title": "Hedef bölüm"})
+    plan["cases"][0]["discovery_section_filters"] = [{"section_title": "Hedef bölüm", "hard": True}]
+    row = build(questions, corpus, plan)["proposals"][0]
+    assert {item["section_title"] for item in row["suggestions"]} == {"Hedef bölüm"}

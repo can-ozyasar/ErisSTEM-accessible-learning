@@ -134,6 +134,9 @@ def _group_coverage(observed: set[str], claim: dict) -> tuple[int, int]:
 
 
 def _candidate(book: dict, chunk: dict, claim: dict, score: tuple[int, int, int]) -> dict:
+    observed = set(terms(chunk["text"]))
+    entities = claim.get("entities", [])
+    literal_entity_match = bool(entities) and all(_phrase_matches(observed, entity) for entity in entities)
     return {
         "claim_id": claim["id"],
         "suggested_role": claim["role"],
@@ -154,6 +157,8 @@ def _candidate(book: dict, chunk: dict, claim: dict, score: tuple[int, int, int]
             "query_term_overlap": score[2],
         },
         "review_status": "candidate",
+        "literal_entity_match": literal_entity_match,
+        "claim_proof_mode": "literal" if literal_entity_match else "alias_or_constraint",
     }
 
 

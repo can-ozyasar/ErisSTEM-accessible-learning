@@ -23,7 +23,8 @@ from .ayt_constraint_probe import _covered, _eligible_chunks
 ALLOWED_ROLES = {"primary", "context", "relation", "contrast"}
 ALLOWED_CLAIM_TYPES = {
     "fact", "definition", "person_event", "date_event", "place_event", "chronology",
-    "cause_effect", "scope", "institutional_decision",
+    "cause_effect", "scope", "institutional_decision", "military_strategy",
+    "constitutional_principle",
 }
 ALLOWED_STAGES = {"question_analysis", "recall", "evidence_link", "choice_check"}
 ALLOWED_OUTCOMES = {"reretrieve", "insufficient", "blocked"}
@@ -50,11 +51,60 @@ def _claim_query_terms(claim: dict) -> list[str]:
     return claim.get("query_terms", claim.get("search_terms", []))
 
 
+def _all_groups(claim: dict) -> list[list[str]]:
+    """Mandatory groups; terms inside one group are aliases, groups are AND."""
+    if claim.get("all_of_groups"):
+        return _normalise_groups(claim["all_of_groups"])
+    return _normalise_groups(_claim_all_of(claim))
+
+
+def _any_groups(claim: dict) -> list[list[str]]:
+    """At least one alias group must match when optional anchors are supplied."""
+    if claim.get("any_of_groups"):
+        return _normalise_groups(claim["any_of_groups"])
+    return _normalise_groups(claim.get("any_of", []))
+
+
+def _normalise_groups(groups: list) -> list[list[str]]:
+    """Repair nested agent draft groups into explicit alias groups.
+
+    A nested group means several mandatory groups, while a flat string list is
+    one group of aliases.  Rejecting or silently stringifying nested input
+    would hide an instruction-plan defect and produce misleading matches.
+    """
+    normalised: list[list[str]] = []
+    for group in groups:
+        if isinstance(group, str):
+            normalised.append([group])
+        elif all(isinstance(value, str) for value in group):
+            normalised.append(group)
+        elif all(isinstance(value, list) for value in group):
+            normalised.extend(_normalise_groups(group))
+        else:
+            raise ValueError("Kanıt ilişki grubu yalnız metin veya metin listesi içermeli")
+    return normalised
+
+
+def _group_terms(groups: list[list[str]]) -> set[str]:
+    return set(terms(" ".join(alias for group in groups for alias in group)))
+
+
+def _phrase_matches(observed: set[str], phrase: str) -> bool:
+    phrase_terms = set(terms(phrase))
+    return bool(phrase_terms) and _covered(phrase_terms, observed) == phrase_terms
+
+
+def _group_matches(observed: set[str], aliases: list[str]) -> bool:
+    return any(_phrase_matches(observed, alias) for alias in aliases)
+
+
 def _matches_terms(observed: set[str], claim: dict) -> bool:
     """Require all core terms and at least one optional anchor, if supplied."""
-    all_of = set(terms(" ".join(_claim_all_of(claim))))
-    any_of = set(terms(" ".join(claim.get("any_of", []))))
-    return _covered(all_of, observed) == all_of and (not any_of or bool(_covered(any_of, observed)))
+    all_groups = _all_groups(claim)
+    any_groups = _any_groups(claim)
+    return all(_group_matches(observed, aliases) for aliases in all_groups) and (
+        not any_groups or any(_group_matches(observed, aliases) for aliases in any_groups)
+    )
 
 
 def _title_overlap(chunk: dict, section_hints: list[str]) -> int:
@@ -65,7 +115,7 @@ def _title_overlap(chunk: dict, section_hints: list[str]) -> int:
 
 def _score(book: dict, chunk: dict, claim: dict) -> tuple[int, int, int]:
     observed = set(terms(chunk["text"]))
-    required = set(terms(" ".join([*_claim_all_of(claim), *claim.get("any_of", [])])))
+    required = _group_terms([*_all_groups(claim), *_any_groups(claim)])
     query = set(terms(" ".join(_claim_query_terms(claim))))
     # The exact claim gate is checked first.  These transparent tie breakers
     # only decide among passages that already carry every mandatory term.
@@ -74,16 +124,9 @@ def _score(book: dict, chunk: dict, claim: dict) -> tuple[int, int, int]:
     return claim_hits, _title_overlap(chunk, claim.get("section_hints", [])), query_hits
 
 
-def _entity_groups(claim: dict) -> list[set[str]]:
-    """Return entity/anchor groups that must be kept separate for discovery."""
-    anchors = claim.get("entities", _claim_all_of(claim))
-    return [set(terms(anchor)) for anchor in anchors if terms(anchor)]
-
-
 def _group_coverage(observed: set[str], claim: dict) -> tuple[int, int]:
-    groups = _entity_groups(claim)
-    covered = sum(_covered(group, observed) == group for group in groups)
-    return covered, len(groups)
+    groups = _all_groups(claim)
+    return sum(_group_matches(observed, aliases) for aliases in groups), len(groups)
 
 
 def _candidate(book: dict, chunk: dict, claim: dict, score: tuple[int, int, int]) -> dict:
@@ -212,7 +255,7 @@ def _validate_plan(question_candidates: dict, corpus: dict, plan: dict, per_clai
             stage = claim.get("stage_min", claim.get("stage"))
             if stage and stage not in ALLOWED_STAGES:
                 raise ValueError("Kanıt iddiası aşaması geçersiz")
-            if not _claim_all_of(claim) and not claim.get("any_of"):
+            if not _all_groups(claim) and not _any_groups(claim):
                 raise ValueError("Kanıt iddiası en az bir arama dayanağı içermeli")
         discriminator_ids = set()
         for discriminator in case.get("option_discriminators", []):

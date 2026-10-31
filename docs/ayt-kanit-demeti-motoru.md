@@ -53,3 +53,15 @@ BM25, dense, RRF ve reranker deneylerinden önce PDF kırpımıyla onaylanmış 
 - checksum, sayfa, koordinat ve kırpım eşleşmesi (%100 beklenir)
 
 Bu metrikler, kaynak bulmayı modelin güzel yanıt üretmesinden ayrı ölçer. Bir retrieval yöntemi geliştirme kümesinde kabul kapılarını geçmeden öğrenci çalışma akışına eklenmez.
+
+## Agent taslağını güvenli biçimde iyileştirme
+
+Agent denetimi, kaynak rolü ya da onayı vermez. Bir yanlış negatif denetiminden sonra `ayt_evidence_plan_patch` yalnız arama eş anlamlarını, bölüm ipuçlarını, iddia bölme/birleştirme kurallarını ve hedefli sorgu stratejisini uygular. Yama:
+
+- cevap anahtarı erişimi veya öğretmen onayı taşıyamaz,
+- bilinmeyen soru/iddia kimliğine bağlanamaz,
+- PDF kırpımı, checksum ve primary zorunluluğunu kaldıramaz.
+
+İki sürüm aynı corpus ve soru checksum'ına bağlıyken `ayt_evidence_bundle_eval compare` şu tanısal farkı üretir: zorunlu iddia kapsamı, eksik iddia sayısı, sıkı aday sayısı ve yanlışlıkla onaylanmış kaynak sayısı. Son değer daima sıfır olmalıdır; bu araç kaynak onayı üretmez.
+
+İlk 9 soruluk private pilotta yama, eksik zorunlu iddia sayısını 23'ten 17'ye indirdi ve bir sıkı inceleme adayı oluşturdu. Bu doğruluk, retrieval kabulü veya model başarısı değildir. Bağımsız tarih agentı bu adayın Hicaz–Medine ilişkisi için yalnız PDF kırpım inceleme önceliği taşıdığını; alias ve iki kesitli ilişki nedeniyle öğrenci RAG'ı, altın etiket ve QLoRA dışında kalması gerektiğini raporladı.

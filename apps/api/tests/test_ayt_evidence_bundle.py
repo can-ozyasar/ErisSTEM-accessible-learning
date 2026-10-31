@@ -91,3 +91,11 @@ def test_bundle_accepts_full_teacher_schema_and_uses_explicit_support_gate():
     assert row["status"] == "teacher_review_required"
     assert row["evidence_plan"]["required_claim_ids"] == ["kurultay-islev"]
     assert row["evidence_plan"]["option_discriminators"][0]["id"] == "actor"
+
+
+def test_bundle_interprets_nested_agent_groups_as_separate_required_groups():
+    questions, corpus, plan = _inputs()
+    claim = plan["cases"][0]["claims"][0]
+    claim["all_of_groups"] = [["Kurultay"], [["meclis"], ["devlet meseleleri"]]]
+    row = build(questions, corpus, plan)["proposals"][0]
+    assert row["status"] == "teacher_review_required"

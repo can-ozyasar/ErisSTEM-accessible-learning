@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pymupdf
 
-from ..history_rag import _clean, block_layout, chunk_quality, source_review_recommendation
-from .ayt_constraint_probe import _matches, _rank_matches
+from ..history_rag import _clean, block_layout, chunk_quality, source_review_recommendation, terms
+from .ayt_constraint_probe import _covered, _rank_matches
 
 
 def _checksum(path: Path) -> str:
@@ -26,7 +26,7 @@ def _section_for_page(book: dict, page: int) -> dict | None:
                  if section["start"] <= page <= section["end"]), None)
 
 
-def _raw_blocks(book: dict, source_root: Path) -> list[tuple[dict, dict]]:
+def _raw_blocks(book: dict, source_root: Path, section_terms: list[set[str]]) -> list[tuple[dict, dict]]:
     source = source_root / book["source_name"]
     if not source.is_file() or _checksum(source) != book["source_checksum"]:
         raise ValueError("MEB kaynak PDF checksum'ı eşleşmiyor")
@@ -34,7 +34,8 @@ def _raw_blocks(book: dict, source_root: Path) -> list[tuple[dict, dict]]:
     with pymupdf.open(source) as pdf:
         for page_number, page in enumerate(pdf, start=1):
             section = _section_for_page(book, page_number)
-            if section is None:
+            if section is None or (section_terms and not any(
+                    _covered(required, set(terms(section["title"]))) == required for required in section_terms)):
                 continue
             for block in page.get_text("dict")["blocks"]:
                 if block["type"] != 0:
@@ -59,6 +60,17 @@ def _raw_blocks(book: dict, source_root: Path) -> list[tuple[dict, dict]]:
     return blocks
 
 
+def _matches_clause(chunk: dict, clause: dict) -> bool:
+    observed = set(terms(chunk["text"]))
+    aliases = clause.get("aliases", {})
+    for required in clause.get("all_of", []):
+        options = [required, *aliases.get(required, [])]
+        if not any(_covered(set(terms(option)), observed) == set(terms(option)) for option in options):
+            return False
+    any_of = set(terms(" ".join(clause.get("any_of", []))))
+    return not any_of or bool(_covered(any_of, observed))
+
+
 def _suggestion(book: dict, chunk: dict, clause: dict) -> dict:
     return {
         "chunk_id": chunk["id"], "grade": book["grade"], "source_name": book["source_name"],
@@ -80,7 +92,10 @@ def build(corpus: dict, constraints: dict, source_root: Path, per_clause: int = 
         raise ValueError("Kısıt ve corpus checksum'ları eşleşmiyor")
     if per_clause < 1:
         raise ValueError("Her kısıt için en az bir aday gerekli")
-    pool = [item for book in corpus.get("books", []) for item in _raw_blocks(book, source_root)]
+    section_terms = [set(terms(title)) for case in constraints.get("cases", [])
+                     for clause in case.get("required_clauses", [])
+                     for title in clause.get("target_section_titles", []) if terms(title)]
+    pool = [item for book in corpus.get("books", []) for item in _raw_blocks(book, source_root, section_terms)]
     rows = []
     for case in constraints.get("cases", []):
         clauses = case.get("required_clauses", [])
@@ -88,7 +103,7 @@ def build(corpus: dict, constraints: dict, source_root: Path, per_clause: int = 
             raise ValueError("Her kısıt vakasında kimlikli zorunlu madde gerekli")
         suggestions, missing = [], []
         for clause in clauses:
-            matches = [(book, chunk) for book, chunk in pool if _matches(chunk, clause)]
+            matches = [(book, chunk) for book, chunk in pool if _matches_clause(chunk, clause)]
             ranked = _rank_matches(matches, clause, case.get("query_terms", []), per_clause)
             if not ranked:
                 missing.append(clause["id"])

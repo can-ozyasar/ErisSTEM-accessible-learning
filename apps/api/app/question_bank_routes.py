@@ -37,7 +37,13 @@ from .history_rag import (
 )
 from .history_source import BOOK as HISTORY_BOOK
 from .history_speech import history_spoken_text
-from .knowledge_architecture import build_manifest, load_pilot_snapshot
+from .knowledge_architecture import (
+    EXTERNAL_EVALUATION_SCHEMA,
+    GRAPH_PREFILL_REPORT_SCHEMA,
+    build_manifest,
+    load_experiment_artifact,
+    load_pilot_snapshot,
+)
 from .learning_operations import LearningOperationsStore, LearningRecord
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
 from .question_bank_extract import extract_book
@@ -189,6 +195,13 @@ def _hybrid_architecture_artifact() -> dict | None:
         return None
 
 
+def _architecture_experiment_artifact(environment_name: str, schema: str) -> dict | None:
+    try:
+        return load_experiment_artifact(os.getenv(environment_name), schema)
+    except (TypeError, ValueError) as error:
+        raise HTTPException(503, str(error)) from error
+
+
 def _approved_rag_ids(store, checksum):
     # Legacy approvals remain visible to teachers but cannot enter new reviewed
     # evidence exports until the source-quality check is recorded.
@@ -248,7 +261,11 @@ def question_bank_router(store: LearningOperationsStore):
         except ValueError as error:
             raise HTTPException(503, str(error)) from error
         return build_manifest(index, store, pilot_snapshot=pilot,
-                              hybrid_artifact=_hybrid_architecture_artifact())
+                              hybrid_artifact=_hybrid_architecture_artifact(),
+                              graph_prefill_report=_architecture_experiment_artifact(
+                                  "HISTORY_GRAPH_PREFILL_REPORT", GRAPH_PREFILL_REPORT_SCHEMA),
+                              external_evaluation=_architecture_experiment_artifact(
+                                  "HISTORY_EXTERNAL_EVIDENCE_EVALUATION", EXTERNAL_EVALUATION_SCHEMA))
 
     @router.get("/teacher/rag/sections/{section_id}")
     def rag_section(section_id: str, _: Role = teacher):

@@ -14,6 +14,8 @@ from typing import Any
 
 SCHEMA = "history-knowledge-architecture-v1"
 PILOT_SCHEMA = "history-knowledge-pilot-snapshot-v1"
+GRAPH_PREFILL_REPORT_SCHEMA = "ayt-graph-prefill-report-v1"
+EXTERNAL_EVALUATION_SCHEMA = "deepseek-evidence-judge-v1"
 FORBIDDEN_FIELDS = frozenset({
     "text", "quote", "question", "question_text", "choices", "answer",
     "answer_key", "answer_label", "correct_choice", "student_data",
@@ -50,6 +52,69 @@ def load_pilot_snapshot(path: str | None = None) -> dict | None:
         raise ValueError("Mimari pilot özeti şeması tanınmıyor")
     _safe_pilot(snapshot)
     return snapshot
+
+
+def load_experiment_artifact(path: str | None, schema: str) -> dict | None:
+    """Load a content-free experiment summary used only by the teacher map."""
+    if not path:
+        return None
+    source = Path(path)
+    if not source.is_file():
+        return None
+    artifact = json.loads(source.read_text(encoding="utf-8"))
+    if artifact.get("schema") != schema:
+        raise ValueError("Deney özeti şeması tanınmıyor")
+    _safe_pilot(artifact)
+    return artifact
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = round((len(ordered) - 1) * percentile)
+    return round(ordered[index], 2)
+
+
+def _graph_prefill_summary(artifact: dict | None) -> dict | None:
+    if not artifact:
+        return None
+    summary = artifact.get("summary")
+    if not isinstance(summary, dict):
+        raise TypeError("Grafik ön doldurma özeti geçersiz")
+    allowed = {
+        "question_count", "required_claim_count", "literal_claim_coverage",
+        "edge_proposal_count", "reviewable_case_count", "insufficient_case_count",
+        "relation_types", "unapproved_edge_count",
+    }
+    return {key: summary[key] for key in allowed if key in summary}
+
+
+def _external_evaluation_summary(artifact: dict | None) -> dict | None:
+    if not artifact:
+        return None
+    summary = artifact.get("summary")
+    evaluations = artifact.get("evaluations")
+    if not isinstance(summary, dict) or not isinstance(evaluations, list):
+        raise TypeError("Harici değerlendirme özeti geçersiz")
+    latency = [float(item["latency_ms"]) for item in evaluations
+               if isinstance(item, dict) and isinstance(item.get("latency_ms"), (int, float))]
+    verdicts = summary.get("verdicts", {})
+    if not isinstance(verdicts, dict):
+        raise TypeError("Harici değerlendirme karar özeti geçersiz")
+    return {
+        "provider_model": artifact.get("model", "belirsiz"),
+        "evaluated_count": int(summary.get("evaluated_count", len(evaluations))),
+        "verdicts": {str(key): int(value) for key, value in verdicts.items()},
+        "latency_ms": {
+            "p50": _percentile(latency, 0.50), "p95": _percentile(latency, 0.95),
+            "mean": round(sum(latency) / len(latency), 2) if latency else None,
+        },
+        "answer_key_accessed": bool(artifact.get("answer_key_accessed", False)),
+        "is_teacher_approval": bool(artifact.get("is_teacher_approval", False)),
+        "runtime_enabled": False,
+        "purpose": "private_pdf_crop_review_prioritization_only",
+    }
 
 
 def _candidate_status(chunk: dict) -> str:
@@ -116,7 +181,9 @@ def _current_records(store, kind: str, source_checksum: str) -> list[dict]:
 
 
 def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
-                   hybrid_artifact: dict | None = None) -> dict:
+                   hybrid_artifact: dict | None = None,
+                   graph_prefill_report: dict | None = None,
+                   external_evaluation: dict | None = None) -> dict:
     """Build the teacher-only, content-free architecture map payload."""
     checksum = index["source_checksum"]
     chunks = index.get("chunks", [])
@@ -191,6 +258,10 @@ def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
             "node_kinds": _count(node_kinds), "relation_kinds": _count(relation_kinds),
             "temporal_precision": _count(temporal_precision),
             "review_policy": "automatic_proposal_human_pdf_crop_approval",
+        },
+        "experiments": {
+            "graph_prefill": _graph_prefill_summary(graph_prefill_report),
+            "external_evidence_evaluation": _external_evaluation_summary(external_evaluation),
         },
         "retrieval": retrieval,
         "stale_records": stale,

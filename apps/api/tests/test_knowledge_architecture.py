@@ -8,6 +8,8 @@ from app import question_bank_routes
 from app.evidence_graph import GraphNode
 from app.job_store import make_session_factory
 from app.knowledge_architecture import (
+    EXTERNAL_EVALUATION_SCHEMA,
+    GRAPH_PREFILL_REPORT_SCHEMA,
     PILOT_SCHEMA,
     build_manifest,
     build_pilot_snapshot,
@@ -87,6 +89,25 @@ def test_pilot_snapshot_rejects_private_content_fields(tmp_path):
     path.write_text(json.dumps({"schema": PILOT_SCHEMA, "books": [], "question_text": "yasak"}), encoding="utf-8")
     with pytest.raises(ValueError, match="private içerik"):
         load_pilot_snapshot(str(path))
+
+
+def test_manifest_summarizes_experiments_without_private_candidates_or_excerpts():
+    graph = {"schema": GRAPH_PREFILL_REPORT_SCHEMA, "summary": {
+        "question_count": 9, "required_claim_count": 22, "literal_claim_coverage": 0.0,
+        "edge_proposal_count": 0, "unapproved_edge_count": 0, "relation_types": {},
+    }}
+    external = {"schema": EXTERNAL_EVALUATION_SCHEMA, "model": "private-model", "summary": {
+        "evaluated_count": 2, "verdicts": {"direct": 1, "irrelevant": 1},
+    }, "evaluations": [{"latency_ms": 100.0, "candidate_id": "private-question"},
+                         {"latency_ms": 240.0, "candidate_id": "private-question-2"}],
+                "answer_key_accessed": False, "is_teacher_approval": False}
+    manifest = build_manifest(_index(), Store({}), graph_prefill_report=graph,
+                              external_evaluation=external)
+    serialized = json.dumps(manifest, ensure_ascii=False)
+    assert manifest["experiments"]["graph_prefill"]["literal_claim_coverage"] == 0.0
+    assert manifest["experiments"]["external_evidence_evaluation"]["latency_ms"]["p95"] == 240.0
+    assert manifest["experiments"]["external_evidence_evaluation"]["runtime_enabled"] is False
+    assert "private-question" not in serialized
 
 
 def test_temporal_nodes_require_a_valid_period_shape():

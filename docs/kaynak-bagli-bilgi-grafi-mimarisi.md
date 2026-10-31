@@ -76,3 +76,19 @@ API sürecinde `HISTORY_ARCHITECTURE_SNAPSHOT` bu private dosyayı göstermelidi
 İsteğe bağlı kabul edilmiş hibrit retrieval yapıtı için
 `HISTORY_RAG_HYBRID_ARTIFACT` kullanılır. Her iki dosya da Git ve öğrenci
 istemcisi dışında kalır.
+
+## Pilot deneyler ve dış ikinci görüş
+
+Grafik ön doldurma, yalnız kaynakta iki uçlu ilişkiyi birebir bulduğunda
+**öneri** üretir. `HISTORY_GRAPH_PREFILL_REPORT` ile yüklenen rapor; soru ve
+iddia sayısını, birebir kapsama oranını ve onaysız öneri sayısını gösterir.
+Sıfır öneri, yetersiz kanıt bulunduğunu gösteren güvenli bir sonuçtur; sistem
+bu durumda ilişki uydurmaz.
+
+İzinli, private bir harici model deneyi yapılacaksa
+`HISTORY_EXTERNAL_EVIDENCE_EVALUATION` yalnız içeriği saklamayan deney özetini
+yükler: karar sayıları, süre yüzdeleri, model etiketi ve erişim sınırları.
+Deney; yalnız iddia ile kısa kaynak kesitini PDF kırpım inceleme sırasına
+yardımcı olmak için değerlendirebilir. Cevap anahtarı ve öğrenci verisi
+gönderilmez; model kararı hiçbir zaman kaynak onayı, grafik kenarı, retrieval,
+QLoRA satırı veya öğrenci yanıtı olmaz. Bu deney öğrenci çalışma anında kapalıdır.

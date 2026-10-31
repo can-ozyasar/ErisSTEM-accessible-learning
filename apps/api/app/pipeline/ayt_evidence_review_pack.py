@@ -61,7 +61,7 @@ def build(questions: dict, proposals: dict, source_root: Path, output: Path,
         rows = []
         crop_count = 0
         for proposal in proposals.get("proposals", []):
-            if proposal.get("status") not in {"teacher_review_required", "reretrieve_required"}:
+            if proposal.get("status") not in {"teacher_review_required", "reretrieve_required", "external_review_required"}:
                 continue
             question = candidates.get(proposal["candidate_id"])
             if question is None:

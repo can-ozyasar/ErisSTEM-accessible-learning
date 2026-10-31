@@ -48,13 +48,13 @@ def _source_lookup(corpus: dict) -> dict[tuple[str, str], dict]:
     return lookup
 
 
-def selected_sources(proposals: dict, corpus: dict, max_sources: int) -> list[dict]:
+def selected_sources(proposals: dict, corpus: dict, max_sources: int, skip_sources: int = 0) -> list[dict]:
     """Return distinct private source passages, without carrying question text."""
     if proposals.get("schema") != "ayt-evidence-bundle-proposals-v1":
         raise ValueError("Beklenen kanıt demeti öneri şeması bulunamadı")
     if proposals.get("corpus_checksum") != corpus.get("corpus_checksum"):
         raise ValueError("Kaynak önerisi ve corpus sürümü eşleşmiyor")
-    if max_sources < 1:
+    if max_sources < 1 or skip_sources < 0:
         raise ValueError("En az bir kaynak kesiti gerekli")
     lookup, selected = _source_lookup(corpus), []
     seen = set()
@@ -69,6 +69,8 @@ def selected_sources(proposals: dict, corpus: dict, max_sources: int) -> list[di
             if source.get("text") != suggestion.get("text"):
                 raise ValueError("Önerilen kaynak kesiti corpus metniyle eşleşmiyor")
             seen.add(key)
+            if len(seen) <= skip_sources:
+                continue
             selected.append(source)
             if len(selected) >= max_sources:
                 return selected
@@ -193,12 +195,12 @@ def _retry_request(request: dict) -> dict:
 
 
 def propose(proposals: dict, corpus: dict, api_key: str, model: str = "deepseek-chat",
-            max_sources: int = 4, timeout_s: float = 30, request_fn=_call) -> dict:
+            max_sources: int = 4, timeout_s: float = 30, skip_sources: int = 0, request_fn=_call) -> dict:
     """Create a private, unapproved relation-review queue from source excerpts."""
     if not api_key:
         raise ValueError("API anahtarı gerekli")
     rows, rejected, parse_retries, parse_failures = [], 0, 0, 0
-    for source in selected_sources(proposals, corpus, max_sources):
+    for source in selected_sources(proposals, corpus, max_sources, skip_sources):
         request = build_request(source, model)
         started = time.perf_counter()
         response = request_fn(request, api_key, timeout_s)
@@ -226,6 +228,7 @@ def propose(proposals: dict, corpus: dict, api_key: str, model: str = "deepseek-
     all_facts = [fact for row in rows for fact in row["facts"]]
     return {
         "schema": SCHEMA, "model": model, "corpus_checksum": corpus["corpus_checksum"],
+        "source_offset": skip_sources,
         "sources": rows,
         "summary": {"source_count": len(rows), "proposed_relation_count": len(all_facts),
                     "rejected_relation_count": rejected, "invalid_json_retries": parse_retries,
@@ -237,6 +240,39 @@ def propose(proposals: dict, corpus: dict, api_key: str, model: str = "deepseek-
     }
 
 
+def merge_batches(batches: list[dict]) -> dict:
+    """Merge checkpointed batches without hiding duplicate source processing."""
+    if not batches:
+        raise ValueError("Birleştirilecek en az bir parti gerekli")
+    corpus_checksums = {item.get("corpus_checksum") for item in batches}
+    models = {item.get("model") for item in batches}
+    if len(corpus_checksums) != 1 or len(models) != 1 or any(item.get("schema") != SCHEMA for item in batches):
+        raise ValueError("Partilerin şeması, modeli ve corpus sürümü aynı olmalı")
+    sources, seen = [], set()
+    for batch in batches:
+        for source in batch.get("sources", []):
+            identity = (source.get("source_checksum"), source.get("chunk_id"))
+            if identity in seen:
+                raise ValueError("Aynı kaynak kesiti iki kez işlenmiş")
+            seen.add(identity)
+            sources.append(source)
+    facts = [fact for source in sources for fact in source.get("facts", [])]
+    return {
+        "schema": SCHEMA, "model": batches[0]["model"], "corpus_checksum": batches[0]["corpus_checksum"],
+        "source_offset": 0, "sources": sources,
+        "summary": {
+            "source_count": len(sources), "proposed_relation_count": len(facts),
+            "rejected_relation_count": sum(item.get("summary", {}).get("rejected_relation_count", 0) for item in batches),
+            "invalid_json_retries": sum(item.get("summary", {}).get("invalid_json_retries", 0) for item in batches),
+            "invalid_json_final_failures": sum(item.get("summary", {}).get("invalid_json_final_failures", 0) for item in batches),
+            "relation_types": dict(sorted(Counter(fact["relation"] for fact in facts).items())),
+        },
+        "answer_key_accessed": False, "question_text_accessed": False,
+        "student_data_accessed": False, "is_teacher_approval": False, "runtime_enabled": False,
+        "notice": "Merged private source-only relation proposals. Every fact remains pending teacher PDF-crop review.",
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--proposals", type=Path, required=True)
@@ -245,6 +281,7 @@ def main() -> None:
     parser.add_argument("--api-key-env", default="DEEPSEEK_API_KEY")
     parser.add_argument("--model", default="deepseek-chat")
     parser.add_argument("--max-sources", type=int, default=4)
+    parser.add_argument("--skip-sources", type=int, default=0)
     parser.add_argument("--timeout-seconds", type=float, default=30)
     parser.add_argument("--allow-external-private-evaluation", action="store_true")
     args = parser.parse_args()
@@ -255,7 +292,7 @@ def main() -> None:
         raise SystemExit(f"{args.api_key_env} ortam değişkeni tanımlı değil")
     result = propose(json.loads(args.proposals.read_text(encoding="utf-8")),
                      json.loads(args.corpus.read_text(encoding="utf-8")), api_key, args.model,
-                     args.max_sources, args.timeout_seconds)
+                     args.max_sources, args.timeout_seconds, args.skip_sources)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
 

@@ -1,6 +1,6 @@
 import json
 
-from app.pipeline.deepseek_source_relation_proposer import build_request, propose
+from app.pipeline.deepseek_source_relation_proposer import build_request, merge_batches, propose
 
 
 def _inputs():
@@ -92,3 +92,21 @@ def test_relation_proposer_rejects_passive_relation_that_can_reverse_direction()
 
     result = propose(proposals, corpus, "secret", request_fn=fake_call)
     assert result["summary"]["proposed_relation_count"] == 0
+
+
+def test_checkpoint_batches_have_distinct_sources_and_merge_without_approving():
+    proposals, corpus = _inputs()
+    duplicate = {**corpus["books"][0]["index"]["chunks"][0], "id": "chunk-two"}
+    corpus["books"][0]["index"]["chunks"].append(duplicate)
+    proposals["proposals"][0]["suggestions"].append({
+        "source_checksum": "source-v1", "chunk_id": "chunk-two", "text": duplicate["text"],
+    })
+
+    def fake_call(_request, _key, _timeout):
+        return {"choices": [{"message": {"content": json.dumps({"facts": []})}}]}
+
+    first = propose(proposals, corpus, "secret", max_sources=1, request_fn=fake_call)
+    second = propose(proposals, corpus, "secret", max_sources=1, skip_sources=1, request_fn=fake_call)
+    merged = merge_batches([first, second])
+    assert [row["chunk_id"] for row in merged["sources"]] == ["chunk-one", "chunk-two"]
+    assert merged["is_teacher_approval"] is False

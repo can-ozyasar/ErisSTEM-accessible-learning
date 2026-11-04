@@ -15,10 +15,13 @@ from __future__ import annotations
 import json
 import os
 import re
+import subprocess
+import sys
 import time
 from pathlib import Path
 
-INPUT = Path(os.environ.get("AYT_DISCOVERY_INPUT", "/kaggle/input/ayt-relation-discovery-calibration-v1/qlora-relation-discovery-calibration-v1.json"))
+DATASET_HANDLE = "muhammedcanozyasar/eristem-ayt-relation-discovery-calibration-v1"
+INPUT = Path(os.environ.get("AYT_DISCOVERY_INPUT", "/kaggle/input/eristem-ayt-relation-discovery-calibration-v1/qlora-relation-discovery-calibration-v1.json"))
 OUTPUT = Path(os.environ.get("AYT_DISCOVERY_OUTPUT", "/kaggle/working/ayt-relation-retrieval-rankings-v1.json"))
 MODEL_ID = os.environ.get("BGE_M3_MODEL", "BAAI/bge-m3")
 TOP_K = int(os.environ.get("TOP_K", "24"))
@@ -62,9 +65,19 @@ def _rank_ids(scores, documents: list[dict]) -> list[str]:
         range(len(documents)), key=lambda index: (-float(scores[index]), documents[index]["id"]))]
 
 
+def _ensure_dependencies() -> None:
+    """Install only the two packages absent from standard Kaggle images."""
+    try:
+        import FlagEmbedding  # noqa: F401
+        import rank_bm25  # noqa: F401
+    except ImportError:
+        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "FlagEmbedding", "rank-bm25"], check=True)
+
+
 def main() -> None:
     data = json.loads(INPUT.read_text(encoding="utf-8"))
     _assert_private_calibration(data)
+    _ensure_dependencies()
     import numpy as np
     import torch
     from FlagEmbedding import BGEM3FlagModel

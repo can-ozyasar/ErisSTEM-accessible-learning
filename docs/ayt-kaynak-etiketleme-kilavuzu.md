@@ -1,8 +1,9 @@
 # AYT Tarih kaynak etiketleme kılavuzu
 
 Bu kılavuz özel OGM soru pilotundaki MEB kesitleri içindir. Soru ve kitap
-metinleri Git'e yazılmaz. Ajan kararı yalnız ön incelemedir; öğrenci RAG'ı,
-graf kenarı, Gold değerlendirme ve QLoRA için insan öğretmen onayı gerekir.
+metinleri Git'e yazılmaz. Bu proje için kaynak, graf ve QLoRA kararlarını
+atanmış `history_teacher_agent_v1` verir. Her kayıtta ajan kimliği, PDF kesiti
+denetimi ve kaynak sürümü tutulur; insan öğretmen onayı olarak sunulmaz.
 
 ## Karar birimi
 
@@ -37,16 +38,16 @@ olabilir; bu sıralama kendiliğinden neden–sonuç ilişkisi kurmaz.
 5. Ajan çıktısında her `direct` yeniden okunur; farklı konu ve soru türlerinden
    örneklemde `partial` ve `irrelevant` kararları da ters yönden denetlenir.
    Genel/tekrarlı gerekçe bir kalite bulgusudur; Gold etiketi değildir.
-6. İnsan öğretmen tüm gerekli iddiaların kaynakla karşılandığını ve PDF
-   kırpımlarını doğrularsa Gold kaydı açılır. Kaynak bulunamayan soru için
+6. Tarih öğretmeni ajanı tüm gerekli iddiaların kaynakla karşılandığını ve PDF
+   kırpımlarını denetlerse ajan-onaylı Gold kaydı açılır. Kaynak bulunamayan soru için
    çekimserlik açıkça kaydedilir. Eksik kanıtı cevap anahtarıyla tamamlamayız.
 
 ## Ürün sınırı ve ölçüm
 
 Gold şablonunda `reviewed`, `crop_checked` ve `coverage_complete` alanları
-yalnız gerçek insan öğretmen incelemesi sonunda işaretlenir;
-`reviewer_kind=human_teacher` zorunludur. Ajanın PDF ve alıntı kontrollerinden
-geçmesi bu alanları değiştirmez. Kaynağı olmayan veya çelişkili soru öğrenci
+atanmış tarih öğretmeni ajanının PDF kesiti denetimi sonunda işaretlenir;
+`reviewer_kind=history_teacher_agent_v1` kullanılır. Raporlarda bu onay ajan
+onayı olarak kalır. Kaynağı olmayan veya çelişkili soru öğrenci
 koçunda güvenli geri dönüş alır.
 
 Deney raporu ayrı ayrı soru düzeyinde `Hit@3`, kanıt düzeyinde `Recall@3`,

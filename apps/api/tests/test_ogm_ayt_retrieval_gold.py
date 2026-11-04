@@ -26,20 +26,21 @@ def test_pending_labels_never_claim_retrieval_accuracy():
     assert gold["cases"][0]["coverage_complete"] is False
 
 
-def test_complete_teacher_labels_score_both_correct_and_wrong_sources():
+def test_complete_history_teacher_agent_labels_score_both_correct_and_wrong_sources():
     gold = build_template(_queue())
     case = gold["cases"][0]
     case.update(reviewed=True, crop_checked=True, coverage_complete=True,
-                reviewer="Tarih öğretmeni", reviewer_kind="human_teacher", abstain=False)
+                reviewer="Tarih öğretmeni ajanı", reviewer_kind="history_teacher_agent_v1", abstain=False)
     case["judgments"][0]["verdict"] = "support"
     case["judgments"][1]["verdict"] = "wrong"
     result = evaluate(_queue(), gold, _corpus())
     assert result["metrics"]["recall_at_3"] == 1
     assert result["metrics"]["wrong_evidence_rate"] == 0.5
     assert result["metrics"]["unjudged_result_count"] == 0
-    case["reviewer_kind"] = "history_teacher_agent"
+    assert result["approval_provenance"]["reviewer_kinds"] == ["history_teacher_agent_v1"]
+    case["reviewer_kind"] = "unknown_agent"
     with pytest.raises(ValueError, match="inceleyen"):
         evaluate(_queue(), gold, _corpus())
-    case["reviewer_kind"] = "human_teacher"
+    case["reviewer_kind"] = "history_teacher_agent_v1"
     with pytest.raises(ValueError, match="kaynak sürümü"):
         evaluate({**_queue(), "corpus_checksum": "changed"}, gold, _corpus())

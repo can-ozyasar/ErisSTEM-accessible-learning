@@ -8,6 +8,7 @@ from pathlib import Path
 from ..history_rag_hybrid import evaluate_rankings
 
 SCHEMA = "ogm-ayt-retrieval-gold-v1"
+REVIEWER_KINDS = {"history_teacher_agent_v1", "human_teacher"}
 
 
 def source_key(item: dict) -> str:
@@ -52,7 +53,7 @@ def evaluate(queue: dict, gold: dict, corpus: dict) -> dict:
         if not case.get("reviewed"):
             continue
         if (not case.get("crop_checked") or not case.get("coverage_complete")
-                or not case.get("reviewer") or case.get("reviewer_kind") != "human_teacher"):
+                or not case.get("reviewer") or case.get("reviewer_kind") not in REVIEWER_KINDS):
             raise ValueError("PDF kırpımı, kapsam taraması ve inceleyen gerekli")
         judged = case.get("judgments", [])
         keys = [item.get("source_key") for item in judged]
@@ -77,7 +78,8 @@ def evaluate(queue: dict, gold: dict, corpus: dict) -> dict:
     return {"schema": "ogm-ayt-retrieval-eval-v1", "reviewed_count": len(labels),
             "pending_count": len(cases) - len(labels), "metrics": metrics,
             "runtime_enabled": False,
-            "notice": "Private development review; no source approval or model acceptance implied."}
+            "approval_provenance": {"reviewer_kinds": sorted({case["reviewer_kind"] for case in cases if case.get("reviewed")})},
+            "notice": "Private development review; source approval provenance is recorded separately from model acceptance."}
 
 
 def main() -> None:

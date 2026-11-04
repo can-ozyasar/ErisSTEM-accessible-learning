@@ -1,6 +1,9 @@
 # Kanıt demeti ve ilişki grafiği
 
-Bir öğrenci oturumunda en çok dört farklı rol kullanılabilir: `primary`, `relation`, `context`, `contrast`. Her rol farklı bir onaylı MEB parçasına ve birebir kısa alıntıya bağlıdır. `primary` zorunludur; aynı kaynak veya rol ikinci kez kullanılamaz.
+Bir öğrenci oturumunda en çok dört onaylı MEB parçası kullanılabilir. Roller
+`primary`, `relation`, `context`, `contrast` olarak kalır; aynı role birden
+fazla parça atanabilir. `primary` zorunludur; aynı kaynak ikinci kez
+kullanılamaz. Her parça birebir kısa alıntı taşır.
 
 Grafik düğümleri kişi, olay, tarih/dönem, yer ve kavramdır. İlişki ancak iki düğüm, tür, kaynak kimliği ve kaynaktaki birebir alıntı ile öğretmen tarafından onaylandığında öğrenciye açılır. Öneri üretimi grafik kaydı oluşturmaz.
 

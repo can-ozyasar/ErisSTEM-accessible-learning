@@ -4,11 +4,12 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import time
 from pathlib import Path
 
-from ..history_rag import rank_chunks, terms
+from ..history_rag import PreparedBM25, terms
 
-SCHEMA = "ogm-ayt-evidence-review-queue-v2"
+SCHEMA = "ogm-ayt-evidence-review-queue-v3"
 # These words occur in a question form far more often than they identify a
 # historical claim.  They are excluded only from the *literal claim coverage*
 # check below.  BM25 continues to see the complete question and choices.
@@ -50,7 +51,7 @@ def _topic_pool(pool: list[tuple[dict, dict]], topic: str) -> list[tuple[dict, d
 def _eligible(corpus: dict) -> list[tuple[dict, dict]]:
     rows = []
     for book in corpus.get("books", []):
-        if book.get("grade") != 12:
+        if book.get("grade") not in {10, 11, 12}:
             continue
         for chunk in book["index"].get("chunks", []):
             if chunk.get("pre_review", {}).get("decision") == "review_for_approval" and not chunk.get("quality", {}).get("warnings"):
@@ -97,8 +98,8 @@ def _claim_coverage(row: dict, text: str) -> dict:
     anchors = _anchor_terms(row)
     covered_anchors = sorted(term for term in anchors if term in covered)
     required = 1 if len(claim_terms) <= 3 else 2
-    # A long/date-like token blocks generic topic prose from passing merely by
-    # repeating common historical words such as "Türkiye" or "dönem".
+    # A lexical overlap is a review signal. It does not prove a historical
+    # relation or authorize a passage, especially with Turkish OCR noise.
     direct_gate = (len(covered) >= required
                    and len(covered) / max(1, len(claim_terms)) >= 0.4
                    and (not distinctive or bool(covered_distinctive))
@@ -111,8 +112,16 @@ def _claim_coverage(row: dict, text: str) -> dict:
         "covered_distinctive_term_count": len(covered_distinctive),
         "anchor_term_count": len(anchors),
         "covered_anchor_term_count": len(covered_anchors),
-        "literal_claim_gate": direct_gate,
+        "lexical_overlap_hint": direct_gate,
     }
+
+
+def _global_index(pool: list[tuple[dict, dict]]) -> PreparedBM25:
+    """One indexed corpus for all eligible books, preserving source IDs."""
+    items = [{**chunk, "id": f'{book["source_checksum"]}:{chunk["id"]}',
+              "_chunk_id": chunk["id"], "_book": book}
+             for book, chunk in pool]
+    return PreparedBM25(items)
 
 
 def build(transcriptions: dict, corpus: dict, limit: int = 6) -> dict:
@@ -123,41 +132,48 @@ def build(transcriptions: dict, corpus: dict, limit: int = 6) -> dict:
     if limit < 1:
         raise ValueError("Kanıt aday sınırı pozitif olmalı")
     pool = _eligible(corpus)
+    index = _global_index(pool)
     proposals = []
     for row in transcriptions.get("rows", []):
+        started = time.perf_counter()
         if row.get("transcription_status") != "private_teacher_review_required":
             proposals.append({"candidate_id": row["candidate_id"], "status": "blocked_transcription_quality", "suggestions": []})
             continue
         suggestions = []
         scoped_pool = _topic_pool(pool, row["topic"])
-        for book, chunk in scoped_pool:
-            ranked = rank_chunks([chunk], _query(row), limit=1)
-            if not ranked:
-                continue
-            item = ranked[0]
+        scoped_ids = {(book["source_checksum"], chunk["id"]) for book, chunk in scoped_pool}
+        # Rank *once* across the corpus. Single-document BM25 has no useful
+        # collection IDF and makes scores between books incomparable.
+        ranked = index.rank(_query(row), limit=len(pool))
+        local_ranked = [item for item in ranked
+                        if (item["_book"]["source_checksum"], item["_chunk_id"]) in scoped_ids][:limit]
+        expanded_ranked = [item for item in ranked
+                           if (item["_book"]["source_checksum"], item["_chunk_id"]) not in scoped_ids]
+        selected_ranked = local_ranked + expanded_ranked[:limit - len(local_ranked)]
+        for item in selected_ranked:
+            book = item["_book"]
+            in_topic = (book["source_checksum"], item["_chunk_id"]) in scoped_ids
             coverage = _claim_coverage(row, item["text"])
             suggestions.append({
-                "chunk_id": item["id"], "source_name": book["source_name"], "source_checksum": book["source_checksum"],
+                "chunk_id": item["_chunk_id"], "source_name": book["source_name"],
+                "source_checksum": book["source_checksum"], "grade": book["grade"],
                 "page": item["page"], "bbox": item["bbox"], "section_title": item["section_title"],
-                "score": item["score"], "claim_coverage": coverage,
+                "score": item["score"], "claim_coverage": coverage, "in_topic_section": in_topic,
                 "text": item["text"],
-                "review_status": "candidate" if coverage["literal_claim_gate"] else "reretrieve_required",
+                "review_status": "candidate_unverified",
             })
-        # Direct coverage is an explicit gate, then BM25 breaks ties among
-        # candidates. This prevents a generic, high-frequency section from
-        # becoming a teacher-review lead ahead of a directly relevant passage.
-        suggestions.sort(key=lambda item: (-item["claim_coverage"]["literal_claim_gate"],
-                                            -item["claim_coverage"]["claim_coverage"],
-                                            -item["score"], item["page"], item["chunk_id"]))
-        direct = [item for item in suggestions if item["claim_coverage"]["literal_claim_gate"]]
+        # Calculate diagnostic coverage only for the selected review slate;
+        # it cannot promote a passage over the corpus-wide BM25 ordering.
         proposals.append({"candidate_id": row["candidate_id"], "topic": row["topic"],
-                          "status": ("teacher_agent_source_review_required" if direct else
-                                     "reretrieve_claim_coverage" if scoped_pool else "insufficient_evidence"),
-                          "section_scope_applied": True, "suggestions": suggestions[:limit]})
+                          "status": "teacher_agent_source_review_required" if suggestions else "insufficient_evidence",
+                          "section_scope_applied": bool(scoped_pool),
+                          "expanded_to_other_sections": len(selected_ranked) > len(local_ranked),
+                          "retrieval_ms": round((time.perf_counter() - started) * 1000, 2),
+                          "suggestions": suggestions})
     return {"schema": SCHEMA, "source_checksum": transcriptions["source_checksum"],
             "corpus_checksum": corpus["corpus_checksum"], "proposals": proposals,
-            "notice": ("Private review queue. Literal question-root coverage is a fail-closed review gate, "
-                       "not source approval; no answer or worked explanation was read.")}
+            "notice": ("Private review queue. Lexical coverage is diagnostic only. Suggestions require "
+                       "PDF-crop and relation review; no answer or worked explanation was read.")}
 
 
 def main() -> None:

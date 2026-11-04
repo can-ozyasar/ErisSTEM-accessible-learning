@@ -252,10 +252,7 @@ def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
     retrieval = {
         "active_method": "bm25_review_gated",
         "hybrid_status": "not_configured",
-        "acceptance_thresholds": {
-            "recall_at_3_gain": 0.05, "mrr_at_3_gain": 0.03,
-            "wrong_evidence_rate_increase": 0.0, "p95_ms_max": 1000,
-        },
+        "decision_policy": "v2_reviewed_nonregression_and_measured_benefit",
     }
     if hybrid_artifact:
         retrieval.update({

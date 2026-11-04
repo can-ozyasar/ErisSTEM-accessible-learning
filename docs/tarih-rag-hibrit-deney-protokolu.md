@@ -1,5 +1,12 @@
 # Tarih RAG: kanıt kalitesi ve hibrit getirme protokolü
 
+**Sürüm notu (4 Kasım 2026):** Aşağıdaki `+0,05 / +0,03 / ≤1 saniye`
+eşikleri v1 deney politikasına aittir. Yeni ürün kabulü
+[AYT kaynak arama planındaki](ayt-kaynak-arama-grafi-deney-plani.md) ve
+`history-rag-hybrid-v2` sözleşmesindeki gerçek Recall@3, Hit@3, tam kanıt
+kapsamı, yanlış kanıt, süre ve insan incelemesiyle değerlendirilir. Eski
+raporların `recall_at_3` alanı yeni anlamıyla kullanılamaz.
+
 ## Sınır
 
 PDF, tam MEB metni, soru bankası, cevap anahtarı, öğrenci verisi ve kapalı test Kaggle'a yüklenmez. Kaggle girdisi yalnız kısa öğretmen-onaylı kanıt, bölüm, parça kimliği ve altın kanıt kimliğidir. Girdi denetleyicisi cevap anahtarı alanlarını reddeder.
@@ -7,13 +14,18 @@ PDF, tam MEB metni, soru bankası, cevap anahtarı, öğrenci verisi ve kapalı 
 ## Akış
 
 1. Öğretmen PDF kırpımını inceleyerek genel kaynak onayı verir. Checksum, sayfa, koordinat, bölüm ve OCR/görsel/yönerge uyarıları saklanır.
-2. Öğretmen soru için en çok iki doğrudan, görsele bağımlı olmayan onaylı parçayı seçer. Bu kayıt olmadan öğrenci koçu ve QLoRA dışa aktarımı kaynak alamaz.
+2. Öğretmen soru için gerekli rollerdeki onaylı parçaları ve bunların sırasını seçer. Çalışma anındaki demet en çok dört parça taşıyabilir; QLoRA dışa aktarımında en çok iki kısa alıntı kullanılır. Bu kayıt olmadan öğrenci koçu ve QLoRA dışa aktarımı kaynak alamaz.
 3. Kaggle'da aynı geliştirme sorularında BM25, BGE-M3 dense ve `k=60` RRF ölçülür. Qwen3-Reranker-0.6B yalnız RRF top-k üzerinde, RRF ilk kapıyı geçerse denenir.
 4. Yerel hibrit yapıt PDF checksum'ı veya onay kümesi değiştiğinde geçersizdir; kabul kararı olmadan etkinleşmez.
 
 ## Kabul kapısı
 
-BM25'e göre Recall@3 en az +0,05, MRR@3 en az +0,03 artmalı; yanlış kanıt oranı yükselmemeli ve yerel retrieval p95 1 saniyeyi geçmemelidir. Geçemeyen model raporda kalır, ürün yoluna girmez.
+v2 kabulü, aynı geliştirme soruları ve kaynak sürümünde gerçek Recall@3,
+MRR@3 ve tam kanıt kapsamında gerileme olmamasını; yanlış kanıt sayısı/oranı
+ile gereksiz cevap verme oranında artış olmamasını ister. Adayın ölçülmüş
+yararı ve yerel gecikme maliyeti öğretmen incelemesiyle kaydedilir. Gecikme
+artıyorsa ürün bütçesi açıkça belirtilir. Bu koşullar otomatik öğretmen
+onayı yerine geçmez.
 
 Rapor: Recall@1/@3, MRR@3, nDCG@3, kanıt kapsamı, yanlış kanıt oranı, doğru yanıtsız kalma, p50/p95, GPU/model/sürüm/seed ve hata örnekleri.
 

@@ -30,8 +30,8 @@ class EvidenceBundle(StrictModel):
     @field_validator("cards")
     @classmethod
     def unique_roles_and_sources(cls, value: list[EvidenceCard]):
-        if len({card.role for card in value}) != len(value) or len({card.source_id for card in value}) != len(value):
-            raise ValueError("Her kanıt rolü ve kaynak parçası yalnız bir kez kullanılabilir")
+        if len({card.source_id for card in value}) != len(value):
+            raise ValueError("Her kaynak parçası yalnız bir kez kullanılabilir")
         if not any(card.role == "primary" for card in value):
             raise ValueError("Kanıt demetinde primary rolü gerekli")
         return value

@@ -394,25 +394,37 @@ def matching_sections(index: dict, topic: str | None) -> list[str]:
     return list(dict.fromkeys(result))
 
 
+class PreparedBM25:
+    """Index one authorized corpus once; reuse its IDF for every question."""
+
+    def __init__(self, chunks: list[dict]):
+        self.chunks = chunks
+        self.documents = [Counter(terms(item["text"])) for item in chunks]
+        self.frequencies = Counter(word for doc in self.documents for word in doc)
+        self.lengths = [sum(doc.values()) for doc in self.documents]
+        self.average = sum(self.lengths) / len(chunks) if chunks else 0
+
+    def rank(self, query: str, limit: int = 3) -> list[dict]:
+        if not self.chunks or limit < 1 or not self.average:
+            return []
+        query_terms = set(terms(query))
+        ranked = []
+        for item, doc, length in zip(self.chunks, self.documents, self.lengths):
+            score = 0.0
+            for word in query_terms & doc.keys():
+                idf = math.log(1 + (len(self.chunks) - self.frequencies[word] + 0.5)
+                               / (self.frequencies[word] + 0.5))
+                score += idf * doc[word] * 2.2 / (
+                    doc[word] + 1.2 * (0.25 + 0.75 * length / self.average))
+            if score > 0:
+                ranked.append((score, item))
+        ranked.sort(key=lambda pair: (-pair[0], pair[1]["page"], pair[1]["id"]))
+        return [{**item, "score": round(score, 3)} for score, item in ranked[:limit]]
+
+
 def rank_chunks(chunks: list[dict], query: str, limit: int = 3) -> list[dict]:
     """BM25 ranking over an explicitly supplied, already-authorized corpus."""
-    if not chunks or limit < 1:
-        return []
-    query_terms = set(terms(query))
-    documents = [Counter(terms(item["text"])) for item in chunks]
-    frequencies = Counter(word for doc in documents for word in doc)
-    average = sum(sum(doc.values()) for doc in documents) / len(documents)
-    ranked = []
-    for item, doc in zip(chunks, documents):
-        length = sum(doc.values())
-        score = 0.0
-        for word in query_terms & doc.keys():
-            idf = math.log(1 + (len(chunks) - frequencies[word] + 0.5) / (frequencies[word] + 0.5))
-            score += idf * doc[word] * 2.2 / (doc[word] + 1.2 * (0.25 + 0.75 * length / average))
-        if score > 0:
-            ranked.append((score, item))
-    ranked.sort(key=lambda pair: (-pair[0], pair[1]["page"], pair[1]["id"]))
-    return [{**item, "score": round(score, 3)} for score, item in ranked[:limit]]
+    return PreparedBM25(chunks).rank(query, limit)
 
 
 def retrieve(index: dict, approved_ids: set[str], topic: str | None, query: str,

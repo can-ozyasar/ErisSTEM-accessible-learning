@@ -32,7 +32,7 @@ kesitli köprü öneriyor; bu henüz insan tarafından doğrulanmış ilişki de
 | Her düğüme ağırlık | Sabit bir “tarihsel önem” sayısı verilmez. Soruya göre kişi/olay/tarih eşleşmesi, kaynak kalitesi, ilişki türü ve onay ayrı özelliklerdir. Bunların ağırlıkları yalnız geliştirme sorularında ayarlanır ve hata analiziyle açıklanır. |
 | Beyindeki bilgi bağlantıları | Öğrencinin hatırlama ve ilişki kurmasına uygun kısa ilişki kartları tasarlanır. Grafiğin insan beyninin çalışma biçimini temsil ettiği iddia edilmez; pedagojik etki ayrı kullanıcı ölçümü gerektirir. |
 | Aranacak yerin belirgin olması | Soru kökü ve şık iddiaları kişi, olay, tarih, yer, sıralama, neden ve karşıtlık ihtiyaçlarına ayrılır. Sistem önce bölüm/varlık/zaman adaylarını toplar, eksik iddia varsa diğer bölüm ve sınıf kitaplarına genişler; neden genişlediğini kaydeder. |
-| C++/Rust arama çekirdeği | Kullanıcının tercihine uygun olarak Rust ilk derlenmiş adaydır. Önce Python davranışı düzeltilip referans ve test vektörleri sabitlenir. Rust aynı indeks, aynı sorgu ve aynı sonuç kimlikleriyle kıyaslanır. Kalite, p50/p95 süre, bellek, kurulum ve bakım maliyeti birlikte değerlendirilir; `%20` veya benzeri keyfî iyileşme şartı yoktur. |
+| C++/Rust arama çekirdeği | Yerel ortamda Rust araç zinciri bulunmadığı, C++ derleyicisi bulunduğu için ilk derlenmiş aday C++ oldu. Python ile aynı indeks, sorgu ve sonuç kimliklerinde karşılaştırılır. Kalite, p50/p95 süre, bellek, kurulum ve bakım maliyeti birlikte değerlendirilir; `%20` veya benzeri keyfî iyileşme şartı yoktur. Rust için aynı sözleşme daha sonra kullanılabilir. |
 | Sınıflar, nesneler, JSON ve veri temsili | Python veri modelleri ve sürümlü JSON şeması insan incelemesi/manifest için korunur. Üretim indeksinde metin, ters indeks, vektör dizileri ve grafik komşulukları ihtiyacına uygun ayrı yapılar olabilir. Nesne veya JSON biçimi tek başına LLM doğruluğunu artırmaz. |
 | Bilgiyi embedding ile, token token saklamak | Paragraf embedding'i aday getirme; token düzeyinde geç etkileşim, yeniden sıralama adayıdır. 1.920 adaylık havuzda BM25, dense ve token düzeyi yöntemler aynı sorularda kıyaslanır. Depolama, indeksleme ve yerel p95 dahil edilmeden yöntem seçilmez. |
 | NotebookLM gibi kaynakla çalışma | Kaynağa geri dönme, alıntıyı açma ve farklı belgeler arasında gezinme deneyimi incelenir. Kamuya açık belgeler ürün davranışını anlatır; iç mimariyi bildiğimiz varsayılmaz. Açık kaynak GraphRAG yalnız deney fikri sağlar, doğruluk garantisi vermez. |
@@ -71,9 +71,10 @@ RAM/VRAM, indeks boyutu ve bakım maliyeti birlikte değerlendirilir. Örneğin
 Rust ile ölçülen `%10` p95 iyileşme, gerçek kullanımda ilk ses gecikmesine
 katkı sağlıyor ve bakım maliyeti makulse değerli olabilir. `%20` artış bile
 sonuç sırası değişmiş veya kaynak hatası artmışsa yeterli değildir. Mevcut
-`+0,05 / +0,03 / ≤1 s` hibrit eşikleri eski sözleşmede kaldığı sürece ürün
-etkinleştirmesini engeller; eşik/politika değişikliği sürümlü rapor ve testle
-ayrıca yapılır, eşik sessizce gevşetilmez.
+Eski `+0,05 / +0,03 / ≤1 s` hibrit eşikleri v2 sözleşmesinde kaldırıldı.
+Yeni kapı, yanlış kanıt ve çekimserlikte gerilememeyi, ölçülmüş yararı,
+yerel gecikme incelemesini ve açık öğretmen kararını ister. Bir adayın
+tek bir yüzdede üstün olması otomatik ürün kabulü değildir.
 
 Özel sonuçlar private alanda kalır. Mimari ekranı aday, ajan incelemesi ve
 insan onayını ayrı gösterir. Öğrencinin ilişki kartları klavye, ekran okuyucu
@@ -96,3 +97,48 @@ Yöntemleri incelemek için birincil kaynaklar: [ColBERT token düzeyinde geç
 etkileşim](https://arxiv.org/abs/2004.12832), [Microsoft GraphRAG yerel
 arama belgeleri](https://github.com/microsoft/graphrag/blob/main/docs/query/local_search.md)
 ve [Google'ın NotebookLM kaynak deneyimi açıklaması](https://blog.google/innovation-and-ai/models-and-research/google-labs/notebooklm-discover-sources/).
+
+## 4 Kasım uygulama ve ölçüm kaydı
+
+- OGM özel arama v3, uygun 10–12. sınıf parçalarını tek BM25 corpus'unda
+  puanlıyor; kitap ve bölüm önceliği sonrası gerektiğinde genişliyor. Beş
+  harf/%40 örtüşme artık onay veya eleme kapısı değil, inceleme sinyali.
+- 70 temiz OCR sorusunun hepsinde öneri var; 14'ü bölüm dışına genişledi.
+  Bu, 70 soruya doğru kanıt bulunduğu anlamına gelmiyor. Önceki 18 sorunun
+  bağımsız ajan denetiminde doğrudan Hit@3 sayısı 2'den 3'e çıktı; 54 kartın
+  4'ü doğrudan, 20'si kısmi, 30'u ilgisiz. Sınıflar arası genişlemede bu
+  örneklem için doğrudan kazanım yok. Kaynak onayı sıfır.
+- Hazırlanmış Python BM25 indeksi ve yalnız seçilen kesitlerde tanı sinyali
+  hesaplama, aynı 70 sorguda ilk üç sıralamayı birebir korudu. Yerel kuyruk
+  p50/p95 süresi yaklaşık 121/223 ms'den 4,5/7,2 ms'ye indi. Bu ölçüm
+  yalnız aday önerme süresidir; PDF, LLM ve TTS dahil değildir.
+- Deneysel C++ puanlayıcı, 424 uygun parça ve 70 sorguda Python ilk üç
+  sırasıyla 70/70 eşleşti. Saf puanlama p95: hazırlanmış Python yaklaşık
+  1,17 ms, C++ yaklaşık 0,83 ms. C++ derleme, aktarım ve işletim
+  maliyetleri bu saf süreye dahil değil; bu sonuç ürün kullanım kararı değil.
+- 70 soru için private PDF kesit paketi ve insanın dolduracağı Gold şablonu
+  hazır. Gold incelemesi 0/70 olduğundan değerlendirme aracı bilinçli olarak
+  bir doğruluk yüzdesi üretmiyor. Kısa cümlede kişi/ilişki ipucu için yapılan
+  basit deneme 54 denetlenen kartta doğrudanı ayıramadı; sıralamaya alınmadı.
+- Hibrit metrik sözleşmesi v2'de Hit@3 ile gerçek Recall@3 ayrıldı.
+  Aynı role birden fazla öğretmen onaylı kaynak bağlanabilir; koç onaylı
+  demetteki kaynak sırasını korur. Hibrit/QLoRA öğrenci yoluna açılmadı.
+
+İnceleme paketi yalnız yerelde
+`data/private/ogm-ayt-tarih-v1/teacher-review-pack-global-v3/index.html`
+adresindedir. Altın şablon
+`data/private/ogm-ayt-tarih-v1/pilot-retrieval-gold-template-v1.json`
+dosyasında soru başına PDF kesiti kontrolü, kaynak kararı, kapsam taraması ve
+inceleyen kişi bekler. Agent ön incelemesi bu alanları otomatik onaylamaz.
+Şablon gerçekten doldurulduğunda sürüm ve kanıt kontrolleri şu komutla yapılır:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.ogm_ayt_retrieval_gold evaluate \
+  --queue data/private/ogm-ayt-tarih-v1/pilot-evidence-queue-global-v3.json \
+  --gold data/private/ogm-ayt-tarih-v1/pilot-retrieval-gold-template-v1.json \
+  --corpus data/private/yks-ayt-source-v1/multi-history-rag-v2.json \
+  --output data/private/ogm-ayt-tarih-v1/pilot-retrieval-eval-reviewed-v1.json
+```
+
+Bu yalnız private değerlendirme üretir; kaynak onayı, öğrenciye açma veya
+QLoRA eğitimi başlatma işlemi değildir.

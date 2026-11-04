@@ -2,8 +2,8 @@
 
 Heavy BGE-M3 and Qwen reranking run in a private Kaggle experiment.  This
 module deliberately contains no model download: it validates the exported
-artifact, fuses ranked lists predictably and enforces the measured acceptance
-threshold before a local runtime can opt in.
+artifact, fuses ranked lists predictably and enforces the reviewed acceptance
+policy before a local runtime can opt in.
 """
 from __future__ import annotations
 
@@ -12,8 +12,7 @@ import math
 from collections.abc import Iterable
 from statistics import median
 
-SCHEMA = "history-rag-hybrid-v1"
-ACCEPTANCE = {"recall_at_3": 0.05, "mrr_at_3": 0.03, "p95_ms": 1000}
+SCHEMA = "history-rag-hybrid-v2"
 
 
 def approval_checksum(source_checksum: str, approved_ids: Iterable[str]) -> str:
@@ -52,11 +51,10 @@ def validate_artifact(artifact: dict, source_checksum: str, approved_ids: Iterab
         raise ValueError("Hibrit yapıt geliştirme kabul kapısını geçmedi")
     metrics = artifact.get("metrics", {})
     delta = artifact.get("delta_vs_bm25", {})
-    if (delta.get("recall_at_3", -1) < ACCEPTANCE["recall_at_3"] or
-            delta.get("mrr_at_3", -1) < ACCEPTANCE["mrr_at_3"] or
-            delta.get("wrong_evidence_rate", 1) > 0 or
-            metrics.get("p95_ms", math.inf) > ACCEPTANCE["p95_ms"]):
-        raise ValueError("Hibrit yapıt ölçülmüş kabul eşiğini karşılamıyor")
+    baseline = artifact.get("baseline_metrics", {})
+    decision = acceptance_decision(baseline, metrics, reviewer=artifact.get("reviewed_by"))
+    if not decision["accepted"] or not artifact.get("decision_reason") or delta != decision["delta_vs_bm25"]:
+        raise ValueError("Hibrit yapıt sürümlü değerlendirme ve inceleme kapısını geçmedi")
     return artifact
 
 
@@ -76,43 +74,80 @@ def evaluate_rankings(queries: list[dict], rankings: dict[str, list[str]], laten
         forbidden = {"answer", "answer_key", "answer_label", "correct_choice"} & set(query)
         if forbidden:
             raise ValueError("Cevap anahtarı retrieval değerlendirmesine giremez")
-    recall_1 = recall_3 = mrr_3 = ndcg_3 = coverage = abstain_ok = 0.0
-    wrong = considered = 0
+    recall_1 = recall_3 = hit_1 = hit_3 = mrr_3 = ndcg_3 = coverage = abstain_ok = 0.0
+    wrong = judged = unjudged = considered = 0
     for query in queries:
         result = rankings.get(query["id"], [])[:3]
         gold = set(query.get("gold_source_ids", []))
         if query.get("abstain"):
+            if gold:
+                raise ValueError("Çekimser soru altın kanıt taşıyamaz")
             abstain_ok += float(not result)
             continue
+        if not gold:
+            raise ValueError("Yanıtlanabilir soru altın kanıt taşımalı")
         considered += 1
         hits = [item in gold for item in result]
-        recall_1 += float(bool(hits[:1] and hits[0]))
-        recall_3 += float(any(hits))
+        hit_1 += float(bool(hits[:1] and hits[0]))
+        hit_3 += float(any(hits))
+        recall_1 += len(gold & set(result[:1])) / len(gold)
+        recall_3 += len(gold & set(result)) / len(gold)
         coverage += float(gold.issubset(set(result)))
         rank = next((i + 1 for i, hit in enumerate(hits) if hit), None)
         mrr_3 += 1 / rank if rank else 0
         ideal = [1] * min(3, len(gold))
         ndcg_3 += _dcg([int(hit) for hit in hits]) / _dcg(ideal) if ideal else 0
         judged_wrong = set(query.get("wrong_source_ids", []))
+        if gold & judged_wrong:
+            raise ValueError("Doğru ve yanlış kanıt etiketleri çakışamaz")
         wrong += sum(item in judged_wrong for item in result)
+        judged += sum(item in gold or item in judged_wrong for item in result)
+        unjudged += sum(item not in gold and item not in judged_wrong for item in result)
     normalizer = max(1, considered)
     ordered_latency = sorted(latencies_ms)
     p95 = ordered_latency[max(0, math.ceil(len(ordered_latency) * .95) - 1)] if ordered_latency else 0
-    return {"query_count": len(queries), "answerable_count": considered,
+    return {"metric_schema": "history-rag-retrieval-metrics-v2", "query_count": len(queries),
+            "answerable_count": considered, "judged_result_count": judged,
+            "unjudged_result_count": unjudged, "wrong_evidence_count": wrong,
+            "hit_at_1": round(hit_1 / normalizer, 4),
+            "hit_at_3": round(hit_3 / normalizer, 4),
             "recall_at_1": round(recall_1 / normalizer, 4), "recall_at_3": round(recall_3 / normalizer, 4),
             "mrr_at_3": round(mrr_3 / normalizer, 4), "ndcg_at_3": round(ndcg_3 / normalizer, 4),
             "evidence_coverage_at_3": round(coverage / normalizer, 4),
-            "wrong_evidence_rate": round(wrong / max(1, len(queries) * 3), 4),
+            "wrong_evidence_rate": round(wrong / max(1, judged), 4),
             "correct_abstention": round(abstain_ok / max(1, sum(bool(q.get("abstain")) for q in queries)), 4),
             "p50_ms": round(median(latencies_ms), 2) if latencies_ms else 0,
             "p95_ms": round(p95, 2)}
 
 
-def acceptance_decision(baseline: dict, candidate: dict) -> dict:
+def acceptance_decision(baseline: dict, candidate: dict, reviewer: str | None = None) -> dict:
+    """Require measured non-regression and explicit review, not a made-up gain %."""
     delta = {key: round(candidate.get(key, 0) - baseline.get(key, 0), 4)
-             for key in ("recall_at_3", "mrr_at_3", "wrong_evidence_rate")}
-    accepted = (delta["recall_at_3"] >= ACCEPTANCE["recall_at_3"] and
-                delta["mrr_at_3"] >= ACCEPTANCE["mrr_at_3"] and
-                delta["wrong_evidence_rate"] <= 0 and
-                candidate.get("p95_ms", math.inf) <= ACCEPTANCE["p95_ms"])
-    return {"accepted": accepted, "delta_vs_bm25": delta, "thresholds": ACCEPTANCE}
+             for key in ("recall_at_3", "mrr_at_3", "evidence_coverage_at_3",
+                         "wrong_evidence_rate", "wrong_evidence_count", "correct_abstention")}
+    required = ("metric_schema", "query_count", "answerable_count", "judged_result_count",
+                "unjudged_result_count", "recall_at_3", "mrr_at_3", "evidence_coverage_at_3",
+                "wrong_evidence_rate", "wrong_evidence_count", "correct_abstention", "p95_ms")
+    comparable = (all(key in baseline and key in candidate for key in required)
+                  and baseline.get("metric_schema") == candidate.get("metric_schema")
+                  == "history-rag-retrieval-metrics-v2"
+                  and baseline.get("query_count") == candidate.get("query_count")
+                  and baseline.get("answerable_count") == candidate.get("answerable_count") > 0)
+    safe = (comparable and candidate["judged_result_count"] > 0
+            and candidate["unjudged_result_count"] == 0
+            and delta["recall_at_3"] >= 0 and delta["mrr_at_3"] >= 0
+            and delta["evidence_coverage_at_3"] >= 0
+            and delta["wrong_evidence_rate"] <= 0
+            and delta["wrong_evidence_count"] <= 0
+            and delta["correct_abstention"] >= 0)
+    measured_benefit = (any(delta[key] > 0 for key in ("recall_at_3", "mrr_at_3", "evidence_coverage_at_3"))
+                        or candidate.get("p95_ms", math.inf) < baseline.get("p95_ms", 0))
+    # A slower model needs a product latency budget recorded for the review;
+    # without one it remains a candidate, not an automatically approved path.
+    latency_ok = (candidate.get("p95_ms", math.inf) <= baseline.get("p95_ms", -1)
+                  or (isinstance(candidate.get("latency_budget_ms"), (int, float))
+                      and candidate["p95_ms"] <= candidate["latency_budget_ms"]))
+    eligible = bool(safe and measured_benefit and latency_ok)
+    return {"accepted": bool(eligible and reviewer and reviewer.strip()),
+            "eligible_for_review": eligible, "delta_vs_bm25": delta,
+            "review_required": not bool(reviewer and reviewer.strip())}

@@ -57,10 +57,13 @@ fakat kaynaksız tarih bilgisi üretmez.
 
 ## Retrieval kabulü
 
-Etkin taban çizgisi öğretmen onaylı kaynaklar üzerinde BM25’tir. Dense, RRF ve
-reranker yalnız aynı geliştirme kümesinde BM25’e göre Recall@3 `+0,05`, MRR@3
-`+0,03` artış; yanlış kanıt oranında artış olmaması ve p95 `≤1 saniye`
-koşullarını sağlarsa etkinleşir. Panel kabul durumunu ve ölçülen özeti gösterir.
+Etkin taban çizgisi öğretmen onaylı kaynaklar üzerinde BM25’tir. Yeni v2
+deneyinde Hit@3 ile gerçek Recall@3 ayrı ölçülür. Dense, RRF ve reranker aynı
+geliştirme kümesinde tam kanıt kapsamı, yanlış kanıt, incelenmemiş kaynak ve
+p95 süreyle karşılaştırılır. Sabit bir kazanım yüzdesi yoktur; doğrulukta
+gerilemeyen, ölçülmüş yarar sağlayan adayın ürün kullanımı için ayrı insan
+kararı gerekir. Eski v1 hibrit değerlendirme yapıtları yeni metrik sözleşmesiyle
+kabul edilmez.
 
 Üç boyutlu veya Gaussian-splatting benzeri görünüm metin retrieval kararında
 kullanılmaz. Erişilebilir çekirdek; klavyeyle gezilebilen ağaç, zaman

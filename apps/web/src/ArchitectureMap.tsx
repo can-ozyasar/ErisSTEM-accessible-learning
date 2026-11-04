@@ -6,7 +6,7 @@ type Manifest = {
   schema: string; source_checksum: string; source_policy_version: string; books: Book[];
   evidence_atoms: { candidate_count: number; approved_count: number; pending_count: number; excluded_by_type: Record<string, number> };
   knowledge_graph: { approved_question_graphs: number; approved_bundle_count: number; node_kinds: Record<string, number>; relation_kinds: Record<string, number>; temporal_precision: Record<string, number>; review_policy: string };
-  retrieval: { active_method: string; hybrid_status: string; acceptance_thresholds: { recall_at_3_gain: number; mrr_at_3_gain: number; wrong_evidence_rate_increase: number; p95_ms_max: number }; hybrid_metrics?: Record<string, number>; hybrid_delta_vs_bm25?: Record<string, number> };
+  retrieval: { active_method: string; hybrid_status: string; decision_policy: string; hybrid_metrics?: Record<string, number>; hybrid_delta_vs_bm25?: Record<string, number> };
   stale_records: Record<string, number>; pipeline: string[]; privacy: Record<string, boolean>;
   ayt_pilot?: { corpus_checksum: string; books: Book[] };
   experiments: {
@@ -60,7 +60,7 @@ export function ArchitectureMap({ api }: { api: string }) {
       <section className="architecture-grid">
         <article className="architecture-panel"><h2>Kaynak ve sürüm</h2><dl className="architecture-details"><dt>Etkin kaynak checksum’ı</dt><dd><code>{shortChecksum(manifest.source_checksum)}</code></dd><dt>Parça politikası</dt><dd>{manifest.source_policy_version}</dd><dt>Hibrit retrieval</dt><dd>{manifest.retrieval.hybrid_status === "accepted" ? "Kabul edildi" : manifest.retrieval.hybrid_status === "not_configured" ? "Henüz yapılandırılmadı; BM25 taban çizgisi etkin" : "Kabul edilmedi veya deney bekliyor"}</dd></dl>
           {stale > 0 ? <p className="review-warning">{stale} eski sürüme bağlı kayıt öğrenci akışında kullanılamaz; kaynak sürümüyle yeniden incelenmelidir.</p> : <p className="review-clear">Eski kaynak sürümüne bağlı etkin kayıt bulunmuyor.</p>}</article>
-        <article className="architecture-panel"><h2>Arama kabul kapısı</h2><dl className="architecture-details"><dt>Recall@3 artışı</dt><dd>en az +{manifest.retrieval.acceptance_thresholds.recall_at_3_gain.toFixed(2)}</dd><dt>MRR@3 artışı</dt><dd>en az +{manifest.retrieval.acceptance_thresholds.mrr_at_3_gain.toFixed(2)}</dd><dt>p95 retrieval</dt><dd>en fazla {manifest.retrieval.acceptance_thresholds.p95_ms_max} ms</dd><dt>Yanlış kanıt oranı</dt><dd>artış kabul edilmez</dd></dl>
+        <article className="architecture-panel"><h2>Arama kabul kapısı</h2><p>Kaynak incelemesi tamamlanan aynı sorularda doğruluk, tam kanıt kapsamı ve süre karşılaştırılır. Yanlış kanıt artışı veya ölçülmemiş sonuç kabul edilmez. Yöntem değişikliğini öğretmen gerekçesiyle onaylar; sabit bir hız yüzdesi şartı yoktur.</p>
           {manifest.retrieval.hybrid_metrics && <Counts value={manifest.retrieval.hybrid_metrics} />}</article>
       </section>
       <section className="architecture-grid" aria-label="AYT pilot deneyleri">

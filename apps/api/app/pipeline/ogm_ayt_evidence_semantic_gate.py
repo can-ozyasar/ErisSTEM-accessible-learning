@@ -5,7 +5,8 @@ import argparse
 import json
 from pathlib import Path
 
-QUEUE_SCHEMAS = {"ogm-ayt-evidence-review-queue-v1", "ogm-ayt-evidence-review-queue-v2"}
+QUEUE_SCHEMAS = {"ogm-ayt-evidence-review-queue-v1", "ogm-ayt-evidence-review-queue-v2",
+                 "ogm-ayt-evidence-review-queue-v3"}
 AUDIT_SCHEMA = "ogm-ayt-claim-coverage-agent-audit-v1"
 OUT_SCHEMA = "ogm-ayt-evidence-human-review-queue-v1"
 OUTCOMES = {"plausibly_direct", "reretrieve", "abstain"}

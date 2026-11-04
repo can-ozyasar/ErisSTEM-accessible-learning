@@ -375,12 +375,12 @@ def question_bank_router(store: LearningOperationsStore):
         if bundle and bundle.get("approved") and bundle.get("source_checksum") == index["source_checksum"]:
             cards = bundle.get("cards", [])
             allowed_ids = {card["source_id"] for card in cards} & approved_ids
-            sources = [{**chunk, "evidence_role": next(card["role"] for card in cards if card["source_id"] == chunk["id"]),
-                        "evidence_quote": next(card["quote"] for card in cards if card["source_id"] == chunk["id"])}
-                       for chunk in index["chunks"] if chunk["id"] in allowed_ids]
+            indexed = {chunk["id"]: chunk for chunk in index["chunks"] if chunk["id"] in allowed_ids}
+            sources = [{**indexed[card["source_id"]], "evidence_role": card["role"],
+                        "evidence_quote": card["quote"]}
+                       for card in cards if card["source_id"] in indexed]
             if len(sources) == len(cards):
-                role_order = {"primary": 0, "relation": 1, "context": 2, "contrast": 3}
-                return index, sorted(sources, key=lambda item: (role_order[item["evidence_role"]], item["id"]))
+                return index, sources
         evidence_review = store.get(_evidence_review_id(question.id))
         if not evidence_review or not evidence_review.get("approved") or evidence_review.get("source_checksum") != index["source_checksum"]:
             raise HTTPException(422, "Bu soru için öğretmen onaylı doğrudan MEB kanıtı henüz seçilmedi")
@@ -765,7 +765,13 @@ def question_bank_router(store: LearningOperationsStore):
         # answer label stays below this boundary and is never used for retrieval.
         try:
             _, reviewed_sources = tutor_sources(question)
-            sources = rank_chunks(reviewed_sources, query, limit=4)
+            # A teacher-approved bundle has an intentional role and reading
+            # order. Lexical reranking can drop its primary card or a second
+            # source with the same role, so preserve the reviewed bundle.
+            bundle_record = store.get(_bundle_id(question.id)) or {}
+            sources = (reviewed_sources[:4] if bundle_record.get("approved")
+                       and bundle_record.get("source_checksum") == index["source_checksum"]
+                       else rank_chunks(reviewed_sources, query, limit=4))
         except HTTPException:
             sources = []
         retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
@@ -788,7 +794,9 @@ def question_bank_router(store: LearningOperationsStore):
                                      evidence=evidence["text"][:900] if evidence else "",
                                      error_type=infer_error_type(" ".join(part.text for part in question.parts), selected.text if selected else None),
                                      repeat_attempts=repeat_attempts,
-                                     evidence_by_role={item.get("evidence_role", "primary"): item.get("evidence_quote", item["text"]) for item in sources})
+                                     evidence_by_role={role: " ".join(item.get("evidence_quote", item["text"])
+                                                                          for item in sources if item.get("evidence_role", "primary") == role)
+                                                       for role in {item.get("evidence_role", "primary") for item in sources}})
         reply = coach(coach_context, previous_stage, turn.message, turn.submit_answer,
                       turn.selected_choice, question.answer_label if question.answer_source_checked else None,
                       answer_choice_text if question.answer_source_checked else None)

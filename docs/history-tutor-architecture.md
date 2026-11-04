@@ -24,7 +24,8 @@ döner. Kaynak yoksa sistem tahmin etmez.
 V1 etkin yol, konu filtresi içindeki öğretmence onaylı parçalarla BM25'tir.
 `app/pipeline/history_rag_dense_compare.py`, önceden üretilmiş BGE-M3 vektörleri
 ile dense ve RRF adaylarını değerlendirir. Bu aday, kapalı geliştirme setinde
-Recall@k, MRR ve yanlış kanıt oranını BM25'e karşı iyileştirmeden etkin yola
+gerçek Recall@k, Hit@k, MRR, tam kanıt kapsamı ve yanlış kanıtı BM25'e karşı
+ölçülmeden etkin yola
 alınmayacaktır. Bu nedenle şu anki ürün yanıtı `BM25` taban çizgisini dürüstçe
 korur.
 

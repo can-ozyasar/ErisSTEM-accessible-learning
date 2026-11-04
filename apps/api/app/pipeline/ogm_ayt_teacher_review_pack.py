@@ -21,6 +21,7 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
     if transcriptions.get("schema") != "ogm-ayt-private-transcription-v1":
         raise ValueError("Private OGM transkripsiyonu gerekli")
     if queue.get("schema") not in {"ogm-ayt-evidence-review-queue-v1", "ogm-ayt-evidence-review-queue-v2",
+                                   "ogm-ayt-evidence-review-queue-v3",
                                    "ogm-ayt-evidence-human-review-queue-v1"}:
         raise ValueError("OGM kanıt inceleme kuyruğu gerekli")
     if queue.get("source_checksum") != transcriptions.get("source_checksum"):
@@ -50,6 +51,9 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
                 name = f'{suggestion["source_checksum"][:12]}-{suggestion["chunk_id"]}.png'
                 _render_crop(document, suggestion["page"], suggestion["bbox"], output / "crops" / name)
                 cards.append({key: suggestion[key] for key in ("chunk_id", "source_name", "page", "section_title", "score")})
+                cards[-1]["grade"] = suggestion.get("grade")
+                cards[-1]["in_topic_section"] = suggestion.get("in_topic_section")
+                cards[-1]["lexical_overlap_hint"] = (suggestion.get("claim_coverage") or {}).get("lexical_overlap_hint")
                 cards[-1]["crop"] = f"crops/{name}"
                 crop_count += 1
             refs = [f"../pilot-worked-pages-v1/pages/{page:03d}.jpg" for page in reference_pages.get(question["topic"], [])
@@ -74,7 +78,16 @@ def _html(manifest: dict, target: Path) -> None:
     blocks = []
     for row in manifest["reviews"]:
         choices = "".join(f'<li>{html.escape(choice["label"])}. {html.escape(choice["text"])}</li>' for choice in row["question"]["choices"])
-        cards = "".join(f'<figure><figcaption>{html.escape(card["section_title"])} · s. {card["page"]}</figcaption><img src="{html.escape(card["crop"])}" alt="MEB kanıt kesiti"></figure>' for card in row["evidence_cards"])
+        cards = "".join(
+            '<figure><figcaption>'
+            + html.escape(card["section_title"])
+            + f' · s. {card["page"]}'
+            + (f' · {card["grade"]}. sınıf' if card.get("grade") else '')
+            + (' · konu bölümü' if card.get("in_topic_section") else ' · diğer bölüm' if card.get("grade") else '')
+            + '</figcaption><img src="' + html.escape(card["crop"])
+            + '" alt="MEB kanıt kesiti. Kaynak ilişkisi öğretmen onayı bekliyor."></figure>'
+            for card in row["evidence_cards"]
+        )
         refs = "".join(f'<a href="{html.escape(ref)}">Çözümlü açıklama sayfası</a> ' for ref in row["teacher_only_worked_reference_images"])
         blocks.append(f'<section><h2>{html.escape(row["topic"])} · {html.escape(row["candidate_id"])}</h2><p>{html.escape(row["question"]["stem"])}</p><ol>{choices}</ol><div>{cards}</div><p>{refs or "Çözümlü açıklama referansı yok."}</p></section>')
     target.write_text("<!doctype html><meta charset=utf-8><title>AYT öğretmen incelemesi</title><style>body{font:16px system-ui;max-width:1400px;margin:2rem auto}section{border:1px solid #9fb3c8;margin:1rem;padding:1rem;border-radius:10px}figure{display:inline-block;vertical-align:top;width:30%;margin:1%}img{max-width:100%}</style><h1>AYT öğretmen inceleme paketi</h1><p>Bu paket private’tır. Kanıt onayı ve eğitim dışa aktarımı ayrı işlemdir.</p>" + "".join(blocks), encoding="utf-8")

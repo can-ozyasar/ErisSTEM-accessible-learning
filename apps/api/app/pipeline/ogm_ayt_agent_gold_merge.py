@@ -5,11 +5,11 @@ import argparse
 import json
 from pathlib import Path
 
-from .ogm_ayt_retrieval_gold import REVIEWER_KINDS, SCHEMA, source_key
+from .ogm_ayt_retrieval_gold import QUEUE_SCHEMAS, REVIEWER_KINDS, SCHEMA, source_key
 
 
 def merge(queue: dict, batches: list[dict]) -> dict:
-    if queue.get("schema") != "ogm-ayt-evidence-review-queue-v3":
+    if queue.get("schema") not in QUEUE_SCHEMAS:
         raise ValueError("Sürümlü AYT kanıt kuyruğu gerekli")
     cases: list[dict] = []
     expected = {row["candidate_id"]: {source_key(item) for item in row.get("suggestions", [])}

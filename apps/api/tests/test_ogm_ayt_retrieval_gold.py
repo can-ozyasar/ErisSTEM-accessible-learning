@@ -44,3 +44,9 @@ def test_complete_history_teacher_agent_labels_score_both_correct_and_wrong_sour
     case["reviewer_kind"] = "history_teacher_agent_v1"
     with pytest.raises(ValueError, match="kaynak sürümü"):
         evaluate({**_queue(), "corpus_checksum": "changed"}, gold, _corpus())
+
+
+def test_manual_discovery_queue_uses_the_same_private_gold_contract():
+    queue = {**_queue(), "schema": "ogm-ayt-manual-source-discovery-v1"}
+    gold = build_template(queue)
+    assert gold["cases"][0]["candidate_id"] == "one"

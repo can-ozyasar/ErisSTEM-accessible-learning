@@ -9,6 +9,10 @@ from ..history_rag_hybrid import evaluate_rankings
 
 SCHEMA = "ogm-ayt-retrieval-gold-v1"
 REVIEWER_KINDS = {"history_teacher_agent_v1", "human_teacher"}
+QUEUE_SCHEMAS = {
+    "ogm-ayt-evidence-review-queue-v3",
+    "ogm-ayt-manual-source-discovery-v1",
+}
 
 
 def source_key(item: dict) -> str:
@@ -16,7 +20,7 @@ def source_key(item: dict) -> str:
 
 
 def build_template(queue: dict) -> dict:
-    if queue.get("schema") != "ogm-ayt-evidence-review-queue-v3":
+    if queue.get("schema") not in QUEUE_SCHEMAS:
         raise ValueError("Sürümlü OGM kanıt öneri kuyruğu gerekli")
     return {
         "schema": SCHEMA, "source_checksum": queue["source_checksum"],
@@ -36,7 +40,7 @@ def build_template(queue: dict) -> dict:
 
 
 def evaluate(queue: dict, gold: dict, corpus: dict) -> dict:
-    if queue.get("schema") != "ogm-ayt-evidence-review-queue-v3" or gold.get("schema") != SCHEMA:
+    if queue.get("schema") not in QUEUE_SCHEMAS or gold.get("schema") != SCHEMA:
         raise ValueError("Altın değerlendirme şeması geçersiz")
     if (gold.get("source_checksum") != queue.get("source_checksum")
             or gold.get("corpus_checksum") != queue.get("corpus_checksum")

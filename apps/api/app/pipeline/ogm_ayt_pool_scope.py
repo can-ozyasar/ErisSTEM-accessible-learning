@@ -35,7 +35,7 @@ def build(classification: dict, topics: tuple[str, ...] = DEFAULT_TOPICS) -> dic
 
     pages_by_topic: dict[str, list[int]] = defaultdict(list)
     for row in classification.get("pages", []):
-        if row.get("category") == "test_candidate" and row.get("topic") in topics:
+        if row.get("category") in {"test_candidate", "test_continuation"} and row.get("topic") in topics:
             pages_by_topic[row["topic"]].append(row["page"])
     missing = [topic for topic in topics if not pages_by_topic[topic]]
     if missing:

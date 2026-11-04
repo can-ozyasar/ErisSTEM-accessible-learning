@@ -35,7 +35,19 @@ def build(source: Path) -> dict:
         category = classify(page)
         rows.append({"page": number, "topic": topic, "category": category,
                      "question_marker_count": len(QUESTION_MARKER.findall(page)) if category == "test_candidate" else 0})
-    candidates = [row for row in rows if row["category"] == "test_candidate" and row["topic"]]
+    # A test heading appears only on the first page of a multi-page block.
+    # Continue that block through matching unheaded pages, then stop before a
+    # worked-explanation or answer page.  Otherwise valid question pages are
+    # silently treated as generic book content.
+    active_topic = None
+    for row in rows:
+        if row["category"] in {"solved_or_explained", "answer_key"}:
+            active_topic = None
+        elif row["category"] == "test_candidate":
+            active_topic = row["topic"]
+        elif row["category"] == "other" and active_topic and row["topic"] == active_topic:
+            row["category"] = "test_continuation"
+    candidates = [row for row in rows if row["category"] in {"test_candidate", "test_continuation"} and row["topic"]]
     return {"schema": SCHEMA, "source_checksum": hashlib.sha256(raw).hexdigest(), "page_count": len(rows), "pages": rows,
             "summary": {"categories": dict(sorted(Counter(row["category"] for row in rows).items())),
                         "test_candidate_page_count": len(candidates),

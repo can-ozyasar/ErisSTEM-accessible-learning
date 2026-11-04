@@ -196,3 +196,21 @@ kesitinin birebir eşleştiğini, sorudaki ilişkinin açıkça kurulduğunu
 dahi runtime, kanıt grafiği ve QLoRA dışında tutulur. Önce bu adayların
 PDF kesiti üzerinden insan incelemesi yapılır; ardından yalnız onaylanan
 iddialarla Recall@k, MRR ve yanlış kanıt oranı ölçülür.
+
+## QLoRA hazırlık durumu — private AYT havuzu
+
+İlk 120 görsel-düzen doğrulanmış soruda semantik OCR kapısı yalnız 70 temiz
+kayıt bıraktı. Aynı altı ünitedeki toplam 210 aday yeniden işlendi: 201'i
+temel OCR biçiminde eksiksiz, ikinci kalite denetiminde 113'ü temiz, 54'ü
+kırpımla onarılabilir ve 34'ü yeniden bölünmesi gereken kayıt olarak ayrıldı.
+Sekiz onarım PDF soru kesitinden, cevap ve çözüme erişmeden denetlendi;
+120 soruluk private **staging** havuzu 113 temiz + 7 kırpım onarımlı soru ile
+oluşturuldu. Sekizinci onarım yedek olarak tutulur.
+
+Bu havuz QLoRA eğitim verisi değildir. Her soru grubu şimdiden 84 eğitim,
+18 geliştirme ve 18 kapalı test olarak kilitlenir; ancak her grubun kanıt
+demeti öğretmen onayını ve altı koçluk örneğini geçmeden dışa aktarma kapısı
+kapalıdır. 120 soru için normal BM25 ve geniş keşif kuyruğu altışar kaynak
+adayıyla hazırlandı. Geniş keşif kuyruğundaki 720 PDF kesitinin checksum,
+sayfa, koordinat ve metin eşleşmesi doğrulandı; bu yalnız kaynak konumunun
+doğruluğunu gösterir, tarihsel kanıt onayı değildir.

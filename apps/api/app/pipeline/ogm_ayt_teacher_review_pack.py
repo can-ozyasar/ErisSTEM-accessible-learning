@@ -17,11 +17,13 @@ def _checksum(path: Path) -> str:
 
 
 def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
-          references: dict, worked_root: Path, output: Path, per_question: int = 3) -> dict:
+          references: dict, worked_root: Path, output: Path, per_question: int = 3,
+          include_worked_references: bool = True) -> dict:
     if transcriptions.get("schema") != "ogm-ayt-private-transcription-v1":
         raise ValueError("Private OGM transkripsiyonu gerekli")
     if queue.get("schema") not in {"ogm-ayt-evidence-review-queue-v1", "ogm-ayt-evidence-review-queue-v2",
                                    "ogm-ayt-evidence-review-queue-v3",
+                                   "ogm-ayt-manual-source-discovery-v1",
                                    "ogm-ayt-evidence-human-review-queue-v1"}:
         raise ValueError("OGM kanıt inceleme kuyruğu gerekli")
     if queue.get("source_checksum") != transcriptions.get("source_checksum"):
@@ -36,8 +38,9 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
     try:
         for proposal in queue.get("proposals", []):
             question = questions[proposal["candidate_id"]]
-            if proposal.get("status") not in {"teacher_agent_source_review_required",
-                                              "teacher_human_source_approval_required"}:
+            if (queue["schema"] != "ogm-ayt-manual-source-discovery-v1"
+                    and proposal.get("status") not in {"teacher_agent_source_review_required",
+                                                       "teacher_human_source_approval_required"}):
                 continue
             cards = []
             for suggestion in proposal["suggestions"][:per_question]:
@@ -50,14 +53,20 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
                 document = documents.setdefault(book["source_checksum"], pymupdf.open(pdf))
                 name = f'{suggestion["source_checksum"][:12]}-{suggestion["chunk_id"]}.png'
                 _render_crop(document, suggestion["page"], suggestion["bbox"], output / "crops" / name)
-                cards.append({key: suggestion[key] for key in ("chunk_id", "source_name", "page", "section_title", "score")})
+                cards.append({key: suggestion[key] for key in ("chunk_id", "source_name", "page", "section_title")})
+                cards[-1]["score"] = suggestion.get("score", suggestion.get("fusion_score"))
+                cards[-1]["source_checksum"] = suggestion["source_checksum"]
                 cards[-1]["grade"] = suggestion.get("grade")
                 cards[-1]["in_topic_section"] = suggestion.get("in_topic_section")
+                cards[-1]["pre_review_decision"] = suggestion.get("pre_review_decision")
+                cards[-1]["quality_warnings"] = suggestion.get("quality_warnings", [])
                 cards[-1]["lexical_overlap_hint"] = (suggestion.get("claim_coverage") or {}).get("lexical_overlap_hint")
                 cards[-1]["crop"] = f"crops/{name}"
                 crop_count += 1
-            refs = [f"../pilot-worked-pages-v1/pages/{page:03d}.jpg" for page in reference_pages.get(question["topic"], [])
-                    if (worked_root / "pages" / f"{page:03d}.jpg").is_file()]
+            refs = ([f"../pilot-worked-pages-v1/pages/{page:03d}.jpg"
+                     for page in reference_pages.get(question["topic"], [])
+                     if (worked_root / "pages" / f"{page:03d}.jpg").is_file()]
+                    if include_worked_references else [])
             reviews.append({"candidate_id": question["candidate_id"], "topic": question["topic"],
                             "question": question["question"], "evidence_cards": cards,
                             "teacher_only_worked_reference_images": refs,
@@ -84,6 +93,7 @@ def _html(manifest: dict, target: Path) -> None:
             + f' · s. {card["page"]}'
             + (f' · {card["grade"]}. sınıf' if card.get("grade") else '')
             + (' · konu bölümü' if card.get("in_topic_section") else ' · diğer bölüm' if card.get("grade") else '')
+            + (f' · {html.escape(card["pre_review_decision"])}' if card.get("pre_review_decision") else '')
             + '</figcaption><img src="' + html.escape(card["crop"])
             + '" alt="MEB kanıt kesiti. Kaynak ilişkisi öğretmen onayı bekliyor."></figure>'
             for card in row["evidence_cards"]
@@ -102,10 +112,14 @@ def main() -> None:
     parser.add_argument("--references", type=Path, required=True)
     parser.add_argument("--worked-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--per-question", type=int, default=3)
+    parser.add_argument("--hide-worked-references", action="store_true")
     args = parser.parse_args()
     build(json.loads(args.transcriptions.read_text(encoding="utf-8")), json.loads(args.queue.read_text(encoding="utf-8")),
           json.loads(args.corpus.read_text(encoding="utf-8")), args.source_root,
-          json.loads(args.references.read_text(encoding="utf-8")), args.worked_root, args.output)
+          json.loads(args.references.read_text(encoding="utf-8")), args.worked_root, args.output,
+          per_question=args.per_question,
+          include_worked_references=not args.hide_worked_references)
 
 
 if __name__ == "__main__":

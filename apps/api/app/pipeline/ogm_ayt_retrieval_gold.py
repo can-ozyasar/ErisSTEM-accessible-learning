@@ -23,7 +23,7 @@ def build_template(queue: dict) -> dict:
         "cases": [{
             "candidate_id": row["candidate_id"],
             "reviewed": False, "crop_checked": False, "coverage_complete": False,
-            "reviewer": None, "abstain": None,
+            "reviewer": None, "reviewer_kind": None, "abstain": None,
             # A teacher can add a source outside top-k after a PDF search.
             # Otherwise a missed gold source would be impossible to label.
             "judgments": [{"source_key": source_key(item), "verdict": "pending"}
@@ -51,7 +51,8 @@ def evaluate(queue: dict, gold: dict, corpus: dict) -> dict:
     for case in cases:
         if not case.get("reviewed"):
             continue
-        if not case.get("crop_checked") or not case.get("coverage_complete") or not case.get("reviewer"):
+        if (not case.get("crop_checked") or not case.get("coverage_complete")
+                or not case.get("reviewer") or case.get("reviewer_kind") != "human_teacher"):
             raise ValueError("PDF kırpımı, kapsam taraması ve inceleyen gerekli")
         judged = case.get("judgments", [])
         keys = [item.get("source_key") for item in judged]

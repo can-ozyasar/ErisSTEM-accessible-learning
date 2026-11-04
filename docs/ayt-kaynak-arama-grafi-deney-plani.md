@@ -142,3 +142,57 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.ogm_ayt_retrieval_
 
 Bu yalnız private değerlendirme üretir; kaynak onayı, öğrenciye açma veya
 QLoRA eğitimi başlatma işlemi değildir.
+
+## 4 Kasım kaynak etiketleme kalite denetimi
+
+İlk kuyruktaki 70 sorunun altı adayı için 420 MEB PDF kesiti üretildi.
+Checksum, koordinat ve kesit metni otomatik doğrulamasında düşük benzerlikli
+kesit yoktu. Bu, tarihsel kanıt doğruluğu anlamına gelmez. İlk ajan taraması
+5 `direct`, 345 `partial`, 69 `irrelevant`, 1 `uncertain` kaydetti. Ancak
+52 yeni soruda karar gerekçeleri büyük ölçüde kalıptı. Bağımsız kalite
+örneklemi ilk raporda kaçırılan doğrudan kaynak buldu; iki başka `direct`
+kararı da sorunun istediği ilişkiyi açıkça kurmadığı için geri çekildi.
+Katı rubrikle yeniden hesaplanan 12 soruluk örneklem 2 doğrudan, 17 kısmi,
+53 ilgisiz kesit taşıyor. Bu yüzden 420 kartın ilk etiket dağılımı **Gold
+veya retrieval doğruluk metriği değildir**. Ajan raporlarının sayımları
+kartlardan yeniden doğrulanır. [Etiketleme kılavuzu](ayt-kaynak-etiketleme-kilavuzu.md)
+doğrudan/bağlam/ilgisiz ayrımını açıklar.
+
+İlk arama, 1.920 corpus parçasının yalnız 424 `review_for_approval`
+parçasına bakıyordu. Dışarıda kalan 1.496 `manual_review` parçasının bir
+bölümü gerçek ders anlatımı içeriyor. Yeni private keşif kolu mevcut ilk
+altılı dışında 420 aday daha çıkardı: 359'u `manual_review`, 61'i
+`review_for_approval`. Bu adayların PDF konumu ve metni doğrulandı; soru
+ilişkisi ve ürün değeri henüz doğrulanmadı. Hiçbiri öğrenci RAG'ına veya
+QLoRA'ya açılmadı. Aynı sorularda iki kuyruk, katı ilişki rubriğiyle
+karşılaştırılmadan yöntem kabul edilmeyecek.
+
+Yeni keşfin altı konuya dağıtılmış 20 soruluk bağımsız ajan örnekleminde
+120 karttan 4'ü katı rubrikten sonra `direct` adayı, 44'ü `partial`, 72'si
+`irrelevant` kaldı. İlk ajan sürümündeki iki `direct` etiketi, biri yalnız
+siyasi öncül bilgisi verdiği, diğeri olumsuz şık dışlamasını kanıtlamadığı
+için geri çekildi. Kalan dört adayın soru–alıntı ilişkisi ayrıca okundu;
+PDF kesitleri ve birebir alıntılar doğrulandı. İlk altılıda doğrudan kaynak
+bulunamayan dört farklı soru için yeni doğrudan **aday** var. Bu, keşif
+yolunun değerli olabileceğini gösterir; 20 örneklemden 70 soru veya ürün
+başarımı çıkarılmaz. Özellikle 72 ilgisiz kart, yeni sıralamanın daha iyi
+olduğunu iddia etmeyi engeller. İnsan öğretmen Gold onayı hâlâ 0/70'tir.
+
+### Tam kapsama ön inceleme sonucu
+
+Kaynak konumu doğrulanmış 420 yeni keşif kartı, üç ayrı ajan partisi ve
+sıkı ikinci okuma üzerinden 70 soruda tamamlandı. Birleştirme aracı, parti
+ayrımını, kaynak checksum'larını, PDF kesit metniyle birebir alıntıları,
+kart sayımlarını ve ürün kapatma bayraklarını yeniden doğrular. Sonuç 11
+`direct` aday, 175 `partial`, 234 `irrelevant`; soru düzeyinde 11
+öğretmen-kesit incelemesi bekleyen aday, 53 yeniden getirme/çekimserlik ve
+6 yetersiz kanıt kararıdır. İlk sürümlerde fazla iyimser bulunan doğrudan
+etiketler geri çekilerek bu sonuç üretildi.
+
+Bu oran bir doğruluk, başarı veya retrieval metriği değildir: aynı soru
+için iki farklı aday kesit bulunabilir; ayrıca ajan yalnız metin ve PDF
+kesitinin birebir eşleştiğini, sorudaki ilişkinin açıkça kurulduğunu
+önermektedir. İnsan öğretmen Gold onayı **0/70**'tir. Bu nedenle 11 aday
+dahi runtime, kanıt grafiği ve QLoRA dışında tutulur. Önce bu adayların
+PDF kesiti üzerinden insan incelemesi yapılır; ardından yalnız onaylanan
+iddialarla Recall@k, MRR ve yanlış kanıt oranı ölçülür.

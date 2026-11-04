@@ -30,12 +30,16 @@ def test_complete_teacher_labels_score_both_correct_and_wrong_sources():
     gold = build_template(_queue())
     case = gold["cases"][0]
     case.update(reviewed=True, crop_checked=True, coverage_complete=True,
-                reviewer="Tarih öğretmeni", abstain=False)
+                reviewer="Tarih öğretmeni", reviewer_kind="human_teacher", abstain=False)
     case["judgments"][0]["verdict"] = "support"
     case["judgments"][1]["verdict"] = "wrong"
     result = evaluate(_queue(), gold, _corpus())
     assert result["metrics"]["recall_at_3"] == 1
     assert result["metrics"]["wrong_evidence_rate"] == 0.5
     assert result["metrics"]["unjudged_result_count"] == 0
+    case["reviewer_kind"] = "history_teacher_agent"
+    with pytest.raises(ValueError, match="inceleyen"):
+        evaluate(_queue(), gold, _corpus())
+    case["reviewer_kind"] = "human_teacher"
     with pytest.raises(ValueError, match="kaynak sürümü"):
         evaluate({**_queue(), "corpus_checksum": "changed"}, gold, _corpus())

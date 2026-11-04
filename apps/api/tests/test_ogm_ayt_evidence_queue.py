@@ -1,4 +1,4 @@
-from app.pipeline.ogm_ayt_evidence_queue import build
+from app.pipeline.ogm_ayt_evidence_queue import _topic_pool, build
 
 
 def test_evidence_queue_blocks_failed_transcription_without_querying_source():
@@ -8,3 +8,11 @@ def test_evidence_queue_blocks_failed_transcription_without_querying_source():
     result = build(transcriptions, corpus)
     assert result["proposals"][0]["status"] == "blocked_transcription_quality"
     assert result["proposals"][0]["suggestions"] == []
+
+
+def test_topic_pool_rejects_cross_period_section():
+    pool = [({"grade": 12}, {"section_title": "MİLLÎ MÜCADELE’YE HAZIRLIK DÖNEMİ"}),
+            ({"grade": 12}, {"section_title": "1990 SONRASINDA TÜRKİYE"})]
+    result = _topic_pool(pool, "Millî Mücadele")
+    assert len(result) == 1
+    assert "MÜCADELE" in result[0][1]["section_title"]

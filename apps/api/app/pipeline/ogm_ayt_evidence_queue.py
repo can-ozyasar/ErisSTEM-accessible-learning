@@ -8,6 +8,27 @@ from pathlib import Path
 from ..history_rag import rank_chunks
 
 SCHEMA = "ogm-ayt-evidence-review-queue-v1"
+TOPIC_SECTION_HINTS = {
+    "Millî Mücadele": ("MİLLÎ MÜCADELE", "BÜYÜK MİLLET MECLİSİ", "SEVR", "CEPHELER", "LOZAN"),
+    "Atatürkçülük ve Türk İnkılabı": ("ATATÜRK İLKELERİ", "İNKILAP", "ATATÜRK DÖNEMİ", "ATATÜRKÇÜ DÜŞÜNCE"),
+    "İki Savaş Arasındaki Dönemde Türkiye ve Dünya": ("İKİ DÜNYA SAVAŞI ARASINDAKİ",),
+    "II. Dünya Savaşı Sürecinde Türkiye ve Dünya": ("II. DÜNYA SAVAŞI",),
+    "II. Dünya Savaşı Sonrasında Türkiye ve Dünya": ("II. DÜNYA SAVAŞI SONRASI", "1950’LERDE TÜRKİYE"),
+    "21. Yüzyılın Eşiğinde Türkiye ve Dünya": ("1960 SONRASI", "1990 SONRASI"),
+}
+
+
+def _normalise(value: str) -> str:
+    return " ".join(value.replace("İ", "I").replace("ı", "i").upper().split())
+
+
+def _topic_pool(pool: list[tuple[dict, dict]], topic: str) -> list[tuple[dict, dict]]:
+    hints = TOPIC_SECTION_HINTS.get(topic)
+    if not hints:
+        return []
+    normalized_hints = tuple(_normalise(hint) for hint in hints)
+    return [(book, chunk) for book, chunk in pool
+            if any(hint in _normalise(chunk.get("section_title", "")) for hint in normalized_hints)]
 
 
 def _eligible(corpus: dict) -> list[tuple[dict, dict]]:
@@ -39,7 +60,8 @@ def build(transcriptions: dict, corpus: dict, limit: int = 6) -> dict:
             proposals.append({"candidate_id": row["candidate_id"], "status": "blocked_transcription_quality", "suggestions": []})
             continue
         suggestions = []
-        for book, chunk in pool:
+        scoped_pool = _topic_pool(pool, row["topic"])
+        for book, chunk in scoped_pool:
             ranked = rank_chunks([chunk], _query(row), limit=1)
             if not ranked:
                 continue
@@ -52,7 +74,7 @@ def build(transcriptions: dict, corpus: dict, limit: int = 6) -> dict:
         suggestions.sort(key=lambda item: (-item["score"], item["page"], item["chunk_id"]))
         proposals.append({"candidate_id": row["candidate_id"], "topic": row["topic"],
                           "status": "teacher_agent_source_review_required" if suggestions else "insufficient_evidence",
-                          "suggestions": suggestions[:limit]})
+                          "section_scope_applied": True, "suggestions": suggestions[:limit]})
     return {"schema": SCHEMA, "source_checksum": transcriptions["source_checksum"],
             "corpus_checksum": corpus["corpus_checksum"], "proposals": proposals,
             "notice": "Private review queue. Suggestions are not source approvals; no answer or worked explanation was read."}

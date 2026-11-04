@@ -72,3 +72,17 @@ parafraz ve terim farkı için uygun ilk adaydır; yine de kabul, yalnız bu
 kalibrasyon kümesinde ölçülen faydaya bağlıdır. Ayrıntı için
 [BGE-M3 belgeleri](https://bge-model.com/bge/bge_m3) ve
 [BGE-M3 makalesi](https://arxiv.org/abs/2402.03216) kullanılacaktır.
+
+## İlk semantic kalibrasyon sonucu (private, 24 soru)
+
+Kör PDF kesiti incelemesinde 288 kart değerlendirildi. 14 soru en az bir
+doğrudan veya birlikte kullanılabilir kanıt atomu taşıdı. BGE-M3 dense,
+aynı kaynak etiketlerinde BM25'e göre Recall@3'ü `0,5536`dan `0,8274`e,
+MRR@3'ü `0,7857`den `0,9643`e çıkardı; yanlış kanıt oranı `0,6667`den
+`0,5000`e indi. Sparse ve RRF, BM25'i geçti ancak dense'i geçemedi.
+
+Bu sonuç dense getirmeyi **bir sonraki bağımsız değerlendirme için aday** yapar;
+çalışma zamanına alınması için yeterli değildir. Kartlar yöntemlerin birleşik
+aday listesinden oluşturulduğu için seçim yanlılığı vardır. Sonraki kabul
+deneyinde daha önce görülmemiş soru grubu, aynı PDF-kırpımı incelemesi ve
+eşit aday bütçesi kullanılacaktır.

@@ -24,6 +24,7 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
     if queue.get("schema") not in {"ogm-ayt-evidence-review-queue-v1", "ogm-ayt-evidence-review-queue-v2",
                                    "ogm-ayt-evidence-review-queue-v3",
                                    "ogm-ayt-manual-source-discovery-v1",
+                                   "ogm-ayt-relation-discovery-review-queue-v1",
                                    "ogm-ayt-evidence-human-review-queue-v1"}:
         raise ValueError("OGM kanıt inceleme kuyruğu gerekli")
     if queue.get("source_checksum") != transcriptions.get("source_checksum"):

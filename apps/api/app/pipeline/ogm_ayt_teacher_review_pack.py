@@ -20,7 +20,8 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
           references: dict, worked_root: Path, output: Path, per_question: int = 3) -> dict:
     if transcriptions.get("schema") != "ogm-ayt-private-transcription-v1":
         raise ValueError("Private OGM transkripsiyonu gerekli")
-    if queue.get("schema") != "ogm-ayt-evidence-review-queue-v1":
+    if queue.get("schema") not in {"ogm-ayt-evidence-review-queue-v1", "ogm-ayt-evidence-review-queue-v2",
+                                   "ogm-ayt-evidence-human-review-queue-v1"}:
         raise ValueError("OGM kanıt inceleme kuyruğu gerekli")
     if queue.get("source_checksum") != transcriptions.get("source_checksum"):
         raise ValueError("Transkripsiyon ve kanıt kuyruğu kaynakları eşleşmiyor")
@@ -34,7 +35,8 @@ def build(transcriptions: dict, queue: dict, corpus: dict, source_root: Path,
     try:
         for proposal in queue.get("proposals", []):
             question = questions[proposal["candidate_id"]]
-            if proposal.get("status") != "teacher_agent_source_review_required":
+            if proposal.get("status") not in {"teacher_agent_source_review_required",
+                                              "teacher_human_source_approval_required"}:
                 continue
             cards = []
             for suggestion in proposal["suggestions"][:per_question]:

@@ -63,8 +63,15 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
         diagnosis = review.get("question_diagnosis")
         if diagnosis not in QUESTION_DIAGNOSES:
             raise ValueError("Soru tanısı geçersiz")
-        if bool(support) != (diagnosis == "direct_evidence_found"):
+        # A question can be grounded by one direct atom or by a pair of
+        # complementary atoms.  The latter is still answerable, but must stay
+        # distinct from a single-passage runtime bundle.
+        if diagnosis == "direct_evidence_found" and not support:
             raise ValueError("Soru tanısı doğrudan kanıt kararıyla çelişiyor")
+        if diagnosis in {"candidate_set_insufficient", "indirect_only"} and support:
+            raise ValueError("Soru tanısı doğrudan kanıt kararıyla çelişiyor")
+        if diagnosis == "multi_atom_required" and support and len(support) < 2:
+            raise ValueError("Çok parçalı tanı en az iki destekleyici atom gerektirir")
         by_question_diagnosis[diagnosis] += 1
         by_card_diagnostic.update(item["diagnostic"] for item in judgments)
         labels.append({"id": candidate_id, "gold_source_ids": sorted(support),

@@ -1,5 +1,10 @@
 # Kaynak bağlı tarih bilgi grafiği
 
+Not dosyasındaki ağaç, ağırlık, düğüm uzaklığı, Rust, token düzeyinde arama ve
+NotebookLM fikirlerinin mevcut AYT pilotuna göre değerlendirilmiş uygulama
+sırası [AYT kaynak arama ve grafik deney planında](ayt-kaynak-arama-grafi-deney-plani.md)
+bulunur. Bu plan, aşağıdaki mevcut ürün kapılarını otomatik olarak değiştirmez.
+
 Bu belge, öğretmen/yönetici panelindeki **Mimari Haritası** ekranının teknik
 eşidir. Ham MEB metni, ÖSYM/deneme soruları, cevap anahtarı ve öğrenci verisi
 burada ya da Git'te yer almaz.

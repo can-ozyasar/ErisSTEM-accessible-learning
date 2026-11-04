@@ -21,7 +21,11 @@ import time
 from pathlib import Path
 
 DATASET_HANDLE = "muhammedcanozyasar/eristem-ayt-relation-discovery-calibration-v1"
-INPUT = Path(os.environ.get("AYT_DISCOVERY_INPUT", "/kaggle/input/eristem-ayt-relation-discovery-calibration-v1/qlora-relation-discovery-calibration-v1.json"))
+INPUT = Path(os.environ.get(
+    "AYT_DISCOVERY_INPUT",
+    "/kaggle/input/datasets/muhammedcanozyasar/eristem-ayt-relation-discovery-calibration-v1/"
+    "qlora-relation-discovery-calibration-v1.json",
+))
 OUTPUT = Path(os.environ.get("AYT_DISCOVERY_OUTPUT", "/kaggle/working/ayt-relation-retrieval-rankings-v1.json"))
 MODEL_ID = os.environ.get("BGE_M3_MODEL", "BAAI/bge-m3")
 TOP_K = int(os.environ.get("TOP_K", "24"))

@@ -31,8 +31,12 @@ def _corpus():
     ]}
 
 
+def _split():
+    return {"schema": "ogm-ayt-qlora-staging-split-v1", "splits": {"one": "dev", "two": "sealed_test"}}
+
+
 def test_calibration_uses_only_prior_abstentions_and_keeps_manual_review_documents():
-    result = build(_transcriptions(), _gold(), _corpus())
+    result = build(_transcriptions(), _gold(), _corpus(), _split())
     assert [query["id"] for query in result["queries"]] == ["one"]
     assert [document["chunk_id"] for document in result["documents"]] == ["kept"]
     assert "answer" not in result
@@ -42,4 +46,11 @@ def test_calibration_rejects_answer_bearing_input():
     transcriptions = _transcriptions()
     transcriptions["answer_key"] = "A"
     with pytest.raises(ValueError, match="cevap anahtarı"):
-        build(transcriptions, _gold(), _corpus())
+        build(transcriptions, _gold(), _corpus(), _split())
+
+
+def test_calibration_never_exports_a_sealed_test_question():
+    gold = _gold()
+    gold["cases"][1]["abstain"] = True
+    result = build(_transcriptions(), gold, _corpus(), _split())
+    assert [query["id"] for query in result["queries"]] == ["one"]

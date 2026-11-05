@@ -19,6 +19,7 @@ from .history_source import BOOK
 
 INDEX_PATH = Path(os.getenv("HISTORY_RAG_INDEX", "/private/derived/history-rag-v1.json"))
 SECTION = re.compile(r"^(\d)\.(\d)\.\s+(.+?)\s*\.{3,}\s*(\d{1,3})\s*$")
+NUMBERED_SUMMARY_SECTION = re.compile(r"^(\d{1,3})\.\s+(.+?)\s*\.{3,}\s*(\d{1,3})\s*$")
 SECTION_WITH_SUBPAGE = re.compile(r"^(\d)\.(\d)\.\d+\.\s+.+?\.{3,}\s*(\d{1,3})\s*$")
 SECTION_WITHOUT_PAGE = re.compile(r"^(\d)\.(\d)\.\s+(.+?)\s*$")
 # Some current MEB TOCs prefix this with ``1. Ünite`` and suffix it with
@@ -150,6 +151,53 @@ def sections(pdf) -> list[dict]:
     # Geometry recovery augments ordinary text parsing for rows whose page
     # number was split into a separate PDF block.
     result.extend(_word_toc_sections(pdf))
+    # MEBİ konu özetleri use a flat, numbered table of contents (``1. Başlık``)
+    # rather than the textbook's hierarchical ``1.2. Başlık`` form.  These
+    # rows retain dotted leaders and an in-range page number, so accepting
+    # them here remains tied to the front-matter TOC rather than lesson prose.
+    summary_candidates = []
+    for line in toc:
+        normalized = re.sub(r"\s+", " ", line).strip()
+        match = NUMBERED_SUMMARY_SECTION.match(normalized)
+        if match and not re.match(r"^\d+\.", match[2]):
+            summary_candidates.append({"id": f"summary.{match[1]}", "title": match[2].strip(),
+                                       "start": int(match[3])})
+    # On some tagged summary PDFs a row's number is emitted as a separate
+    # line, while the title and its page number remain in the same visual
+    # block.  Reassemble that *single block* only; joining neighbouring lines
+    # would risk inventing a section boundary in ordinary textbook prose.
+    for page_number in range(min(15, pdf.page_count)):
+        for block in pdf[page_number].get_text("blocks"):
+            if len(block) < 5:
+                continue
+            normalized = re.sub(r"\s+", " ", block[4]).strip()
+            match = NUMBERED_SUMMARY_SECTION.match(normalized)
+            if match and not re.match(r"^\d+\.", match[2]):
+                summary_candidates.append({"id": f"summary.{match[1]}", "title": match[2].strip(),
+                                           "start": int(match[3])})
+    # A textbook can have isolated flat entries such as ``1. Ünite Ölçme``.
+    # A true MEBİ summary has a long flat TOC.  Require that structural signal
+    # before treating the pattern as a separate source format.
+    if len({item["id"] for item in summary_candidates}) >= 10:
+        result.extend(summary_candidates)
+    summary_sections = [item for item in result if item["id"].startswith("summary.")]
+    if summary_sections:
+        # The printed page number in this source starts after its front matter.
+        # Locate the first real heading (rather than assuming an offset) and
+        # convert all TOC page numbers to physical PDF pages.  Without this,
+        # the first topic would silently index the table of contents itself.
+        first_summary = min(summary_sections, key=lambda item: item["start"])
+        needle = fold(first_summary["title"])
+        physical_start = next(
+            (page_number + 1 for page_number in range(min(10, pdf.page_count), pdf.page_count)
+             if needle in fold(pdf[page_number].get_text())),
+            None,
+        )
+        if physical_start is None:
+            raise ValueError("Konu özeti sayfa eşlemesi doğrulanamadı")
+        offset = physical_start - first_summary["start"]
+        for item in summary_sections:
+            item["start"] += offset
     if len(result) < 3:
         # Last-resort recovery for a short or unusually formatted textbook.
         # A valid book can have fewer than ten sections, so the former pilot

@@ -27,6 +27,9 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
             raise ValueError("Kuyruk ve Kaggle ranking kaynak sürümleri eşleşmiyor")
     expected = {row["candidate_id"]: {_key(item) for item in row["suggestions"]}
                 for row in queue.get("proposals", [])}
+    methods = tuple(queue.get("ranking_methods", METHODS))
+    if not methods or len(methods) != len(set(methods)):
+        raise ValueError("İnceleme kuyruğunda retrieval yöntem listesi geçersiz")
     reviews = []
     for batch in batches:
         if batch.get("schema") != "relation-agent-review-v1":
@@ -83,7 +86,9 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
                        "wrong_source_ids": [item["source_key"] for item in judgments if item["verdict"] == "wrong"],
                        "abstain": not bool(support)})
     method_metrics = {}
-    for method in METHODS:
+    for method in methods:
+        if any(method not in values for values in rankings["rankings"].values()):
+            raise ValueError("Kaggle ranking beklenen retrieval yöntemini içermiyor")
         candidate_rankings = {candidate_id: values[method] for candidate_id, values in rankings["rankings"].items()}
         method_metrics[method] = evaluate_rankings(labels, candidate_rankings, latencies_ms=[])
     return {

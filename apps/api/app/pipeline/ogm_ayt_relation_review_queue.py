@@ -11,12 +11,12 @@ SCHEMA = "ogm-ayt-relation-discovery-review-queue-v1"
 METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
 
 
-def _balanced_ids(rankings: dict[str, list[str]], limit: int) -> list[str]:
+def _balanced_ids(rankings: dict[str, list[str]], limit: int, methods: tuple[str, ...]) -> list[str]:
     """Round-robin top ranks so a lexical method cannot crowd out semantic ones."""
     chosen: list[str] = []
-    maximum = max((len(rankings.get(method, [])) for method in METHODS), default=0)
+    maximum = max((len(rankings.get(method, [])) for method in methods), default=0)
     for position in range(maximum):
-        for method in METHODS:
+        for method in methods:
             candidates = rankings.get(method, [])
             if position < len(candidates) and candidates[position] not in chosen:
                 chosen.append(candidates[position])
@@ -26,7 +26,10 @@ def _balanced_ids(rankings: dict[str, list[str]], limit: int) -> list[str]:
 
 
 def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> dict:
-    if limit < len(METHODS):
+    methods = tuple(rankings.get("ranking_methods", METHODS))
+    if not methods or len(methods) != len(set(methods)) or any(not isinstance(method, str) for method in methods):
+        raise ValueError("Retrieval yöntem listesi geçersiz")
+    if limit < len(methods):
         raise ValueError("Her retrieval yöntemi için dengeli inceleme alanı gerekli")
     if (calibration.get("schema") != CALIBRATION_SCHEMA
             or rankings.get("schema") != RANKING_SCHEMA
@@ -46,9 +49,9 @@ def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> d
     for query in calibration["queries"]:
         candidate_id = query["id"]
         ranked = rankings["rankings"][candidate_id]
-        if any(method not in ranked for method in METHODS):
-            raise ValueError("Her sorguda dört retrieval yöntemi gerekli")
-        chosen = _balanced_ids(ranked, limit)
+        if any(method not in ranked for method in methods):
+            raise ValueError("Her sorguda beklenen retrieval yöntemi gerekli")
+        chosen = _balanced_ids(ranked, limit, methods)
         suggestions = []
         for item_id in chosen:
             document = documents.get(item_id)
@@ -72,7 +75,7 @@ def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> d
     return {
         "schema": SCHEMA, "source_checksum": calibration["source_checksum"],
         "corpus_checksum": calibration["corpus_checksum"], "proposals": queue,
-        "ranking_methods": list(METHODS), "runtime_enabled": False, "qlora_enabled": False,
+        "ranking_methods": list(methods), "runtime_enabled": False, "qlora_enabled": False,
         "notice": "Blind private PDF-review queue. Retrieval method ranks are audit metadata, never evidence approval.",
     }
 

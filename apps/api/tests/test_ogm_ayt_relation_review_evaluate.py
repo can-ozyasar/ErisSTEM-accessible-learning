@@ -42,3 +42,12 @@ def test_relation_review_accepts_a_grounded_multi_atom_bundle():
     review["judgments"][1] = {"source_key": "book:b", "verdict": "support", "diagnostic": "multi_atom_candidate"}
     result = merge_and_evaluate(_queue(), _rankings(), [batch])
     assert result["question_diagnoses"] == {"multi_atom_required": 1}
+
+
+def test_relation_review_uses_the_queue_declared_method_set():
+    queue = _queue()
+    queue["ranking_methods"] = ["qwen_dense"]
+    rankings = _rankings()
+    rankings["rankings"]["one"]["qwen_dense"] = ["book:a", "book:b"]
+    result = merge_and_evaluate(queue, rankings, [_batch()])
+    assert set(result["method_metrics"]) == {"qwen_dense"}

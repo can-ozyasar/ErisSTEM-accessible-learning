@@ -39,3 +39,15 @@ def test_relation_queue_rejects_out_of_corpus_result():
     rankings["rankings"]["question"]["rrf"][0] = "unknown:source"
     with pytest.raises(ValueError, match="dışında"):
         build(_calibration(), rankings, _corpus(), limit=10)
+
+
+def test_relation_queue_accepts_a_declared_qwen_method_set():
+    rankings = _rankings()
+    rankings["ranking_methods"] = ["bm25", "qwen_dense", "qwen_dense_rerank"]
+    values = rankings["rankings"]["question"]
+    values["qwen_dense"] = values.pop("bge_dense")
+    values["qwen_dense_rerank"] = values.pop("bge_dense_rerank")
+    values.pop("bge_sparse")
+    values.pop("rrf")
+    result = build(_calibration(), rankings, _corpus(), limit=6)
+    assert result["ranking_methods"] == ["bm25", "qwen_dense", "qwen_dense_rerank"]

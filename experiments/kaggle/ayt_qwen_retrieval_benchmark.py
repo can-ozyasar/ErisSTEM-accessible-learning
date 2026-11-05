@@ -116,10 +116,23 @@ def main() -> None:
     dense_documents = embedding.encode(
         corpus_text, batch_size=2, show_progress_bar=True, normalize_embeddings=True,
     )
-    dense_queries = embedding.encode(
-        [f"Instruct: {QUERY_INSTRUCTION}\nQuery: {item['query']}" for item in queries],
-        batch_size=1, show_progress_bar=True, normalize_embeddings=True,
-    )
+    rankings, dense_candidate_windows = {}, {}
+    timings = {name: [] for name in ("bm25", "qwen_dense", "qwen_dense_rerank")}
+    for query in queries:
+        text = query["query"]
+        started = time.perf_counter()
+        lexical = _rank_ids(bm25.get_scores(tokens(text)), documents)
+        timings["bm25"].append((time.perf_counter() - started) * 1000)
+
+        started = time.perf_counter()
+        query_vector = embedding.encode(
+            [f"Instruct: {QUERY_INSTRUCTION}\nQuery: {text}"],
+            batch_size=1, show_progress_bar=False, normalize_embeddings=True,
+        )
+        dense = _rank_ids(np.asarray(dense_documents) @ np.asarray(query_vector)[0], documents)
+        timings["qwen_dense"].append((time.perf_counter() - started) * 1000)
+        dense_candidate_windows[query["id"]] = dense[:RERANK_CANDIDATES]
+        rankings[query["id"]] = {"bm25": lexical[:TOP_K], "qwen_dense": dense[:TOP_K]}
     embedding.cpu()
     del embedding
     gc.collect()
@@ -127,19 +140,10 @@ def main() -> None:
         torch.cuda.empty_cache()
 
     reranker = _load_reranker(RERANKER_MODEL_ID, torch)
-    rankings, timings = {}, {name: [] for name in ("bm25", "qwen_dense", "qwen_dense_rerank")}
-    for query_index, query in enumerate(queries):
+    for query in queries:
         text = query["query"]
         started = time.perf_counter()
-        lexical = _rank_ids(bm25.get_scores(tokens(text)), documents)
-        timings["bm25"].append((time.perf_counter() - started) * 1000)
-
-        started = time.perf_counter()
-        dense = _rank_ids(np.asarray(dense_documents) @ np.asarray(dense_queries)[query_index], documents)
-        timings["qwen_dense"].append((time.perf_counter() - started) * 1000)
-
-        started = time.perf_counter()
-        candidate_ids = dense[:RERANK_CANDIDATES]
+        candidate_ids = dense_candidate_windows[query["id"]]
         pair_scores = reranker.predict(
             [(text, documents_by_id[candidate_id]["search_text"]) for candidate_id in candidate_ids],
             batch_size=1,
@@ -151,9 +155,7 @@ def main() -> None:
             zip(pair_scores, candidate_ids, strict=True), key=lambda pair: (-float(pair[0]), pair[1])
         )]
         timings["qwen_dense_rerank"].append((time.perf_counter() - started) * 1000)
-        rankings[query["id"]] = {
-            "bm25": lexical[:TOP_K], "qwen_dense": dense[:TOP_K], "qwen_dense_rerank": reranked[:TOP_K],
-        }
+        rankings[query["id"]]["qwen_dense_rerank"] = reranked[:TOP_K]
 
     OUTPUT.write_text(json.dumps({
         "schema": "ogm-ayt-relation-retrieval-rankings-v1",

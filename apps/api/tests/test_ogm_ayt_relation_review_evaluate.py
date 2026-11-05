@@ -9,7 +9,9 @@ def _queue():
 
 
 def _rankings():
-    rows = {method: ["book:a", "book:b"] for method in ("bm25", "bge_dense", "bge_sparse", "rrf")}
+    rows = {method: ["book:a", "book:b"] for method in (
+        "bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank",
+    )}
     return {"schema": "ogm-ayt-relation-retrieval-rankings-v1", "source_checksum": "q", "corpus_checksum": "c",
             "rankings": {"one": rows}}
 

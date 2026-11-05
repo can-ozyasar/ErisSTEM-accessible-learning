@@ -16,7 +16,8 @@ def _rankings():
     values = [f"book:{key}" for key in "abcdefghijkl"]
     return {"schema": "ogm-ayt-relation-retrieval-rankings-v1", "source_checksum": "q", "corpus_checksum": "c",
             "rankings": {"question": {"bm25": values, "bge_dense": values[::-1],
-                                        "bge_sparse": values[2:] + values[:2], "rrf": values[1:] + values[:1]}}}
+                                        "bge_sparse": values[2:] + values[:2], "rrf": values[1:] + values[:1],
+                                        "bge_dense_rerank": values[3:] + values[:3]}}}
 
 
 def _corpus():
@@ -25,15 +26,16 @@ def _corpus():
 
 
 def test_relation_queue_balances_methods_and_preserves_source_coordinates():
-    result = build(_calibration(), _rankings(), _corpus(), limit=8)
+    result = build(_calibration(), _rankings(), _corpus(), limit=10)
     cards = result["proposals"][0]["suggestions"]
-    assert len(cards) == 8
+    assert len(cards) == 10
     assert cards[0]["source_name"] == "kitap.pdf"
     assert any("bge_dense" in card["method_ranks"] for card in cards)
+    assert any("bge_dense_rerank" in card["method_ranks"] for card in cards)
 
 
 def test_relation_queue_rejects_out_of_corpus_result():
     rankings = _rankings()
     rankings["rankings"]["question"]["rrf"][0] = "unknown:source"
     with pytest.raises(ValueError, match="dışında"):
-        build(_calibration(), rankings, _corpus(), limit=8)
+        build(_calibration(), rankings, _corpus(), limit=10)

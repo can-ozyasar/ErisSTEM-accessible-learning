@@ -8,7 +8,7 @@ from pathlib import Path
 CALIBRATION_SCHEMA = "ogm-ayt-discovery-calibration-v1"
 RANKING_SCHEMA = "ogm-ayt-relation-retrieval-rankings-v1"
 SCHEMA = "ogm-ayt-relation-discovery-review-queue-v1"
-METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf")
+METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
 
 
 def _balanced_ids(rankings: dict[str, list[str]], limit: int) -> list[str]:

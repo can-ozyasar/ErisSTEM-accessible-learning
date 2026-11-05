@@ -28,7 +28,9 @@ INPUT = Path(os.environ.get(
 ))
 OUTPUT = Path(os.environ.get("AYT_DISCOVERY_OUTPUT", "/kaggle/working/ayt-relation-retrieval-rankings-v1.json"))
 MODEL_ID = os.environ.get("BGE_M3_MODEL", "BAAI/bge-m3")
+RERANKER_MODEL_ID = os.environ.get("BGE_RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
 TOP_K = int(os.environ.get("TOP_K", "24"))
+RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "32"))
 FORBIDDEN = {"answer", "answer_key", "answer_label", "correct_choice", "worked_explanation", "pdf_path", "raw_pdf"}
 TOKENS = re.compile(r"[a-zçğıöşü0-9]+", re.IGNORECASE)
 
@@ -69,6 +71,27 @@ def _rank_ids(scores, documents: list[dict]) -> list[str]:
         range(len(documents)), key=lambda index: (-float(scores[index]), documents[index]["id"]))]
 
 
+def _rerank_dense_candidates(
+    query: str,
+    dense_ranking: list[str],
+    documents_by_id: dict[str, dict],
+    reranker,
+) -> list[str]:
+    """Rerank a fixed dense-only candidate window with a cross encoder.
+
+    The cross encoder is deliberately never applied to every book chunk.  Its
+    candidate set comes only from the frozen dense retrieval ranking, which
+    makes both the accuracy comparison and the latency budget interpretable.
+    """
+    candidate_ids = dense_ranking[:RERANK_CANDIDATES]
+    pairs = [[query, documents_by_id[item_id]["search_text"]] for item_id in candidate_ids]
+    scores = reranker.compute_score(pairs, batch_size=4, max_length=2048, normalize=True)
+    if not isinstance(scores, list):
+        scores = [scores]
+    return [item_id for _, item_id in sorted(
+        zip(scores, candidate_ids, strict=True), key=lambda pair: (-float(pair[0]), pair[1]))]
+
+
 def _ensure_dependencies() -> None:
     """Install only the two packages absent from standard Kaggle images."""
     try:
@@ -84,18 +107,22 @@ def main() -> None:
     _ensure_dependencies()
     import numpy as np
     import torch
-    from FlagEmbedding import BGEM3FlagModel
+    from FlagEmbedding import BGEM3FlagModel, FlagReranker
     from rank_bm25 import BM25Okapi
 
     documents, queries = data["documents"], data["queries"]
     corpus_text = [item["search_text"] for item in documents]
     bm25 = BM25Okapi([tokens(text) for text in corpus_text])
     model = BGEM3FlagModel(MODEL_ID, use_fp16=torch.cuda.is_available())
+    reranker = FlagReranker(RERANKER_MODEL_ID, use_fp16=torch.cuda.is_available())
     document_vectors = model.encode(corpus_text, batch_size=8, max_length=2048,
                                     return_dense=True, return_sparse=True, return_colbert_vecs=False)
     dense_documents = np.asarray(document_vectors["dense_vecs"])
     sparse_documents = document_vectors["lexical_weights"]
-    rankings, timings = {}, {name: [] for name in ("bm25", "bge_dense", "bge_sparse", "rrf")}
+    documents_by_id = {item["id"]: item for item in documents}
+    rankings, timings = {}, {name: [] for name in (
+        "bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank",
+    )}
     for query in queries:
         text = query["query"]
         started = time.perf_counter()
@@ -118,14 +145,21 @@ def main() -> None:
         started = time.perf_counter()
         rrf = _rrf(lexical, dense, sparse)
         timings["rrf"].append((time.perf_counter() - started) * 1000)
+
+        started = time.perf_counter()
+        dense_rerank = _rerank_dense_candidates(text, dense, documents_by_id, reranker)
+        timings["bge_dense_rerank"].append((time.perf_counter() - started) * 1000)
         rankings[query["id"]] = {
             "bm25": lexical[:TOP_K], "bge_dense": dense[:TOP_K],
             "bge_sparse": sparse[:TOP_K], "rrf": rrf[:TOP_K],
+            "bge_dense_rerank": dense_rerank[:TOP_K],
         }
     OUTPUT.write_text(json.dumps({
         "schema": "ogm-ayt-relation-retrieval-rankings-v1",
         "source_checksum": data["source_checksum"], "corpus_checksum": data["corpus_checksum"],
-        "model": MODEL_ID, "document_count": len(documents), "query_count": len(queries),
+        "model": MODEL_ID, "reranker_model": RERANKER_MODEL_ID,
+        "rerank_candidates": RERANK_CANDIDATES,
+        "document_count": len(documents), "query_count": len(queries),
         "top_k": TOP_K, "rankings": rankings, "latencies_by_method_ms": timings,
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
         "runtime_enabled": False, "qlora_enabled": False,

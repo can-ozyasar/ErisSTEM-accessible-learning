@@ -10,7 +10,7 @@ from ..history_rag_hybrid import evaluate_rankings
 
 QUEUE_SCHEMA = "ogm-ayt-relation-discovery-review-queue-v1"
 RANKING_SCHEMA = "ogm-ayt-relation-retrieval-rankings-v1"
-METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf")
+METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
 DIAGNOSTICS = {"direct_support", "multi_atom_candidate", "indirect_only", "irrelevant"}
 QUESTION_DIAGNOSES = {"direct_evidence_found", "multi_atom_required", "candidate_set_insufficient", "indirect_only"}
 

@@ -90,6 +90,12 @@ protokolle sınanması için kaydedildi.
   reranker yüklemeye çalıştığı için OOM ile durdu; çıktı üretmedi ve karar
   verisinde kullanılmadı. Düzeltmede `embedding.cpu()`, çöp toplayıcı ve CUDA
   önbellek temizliği eklendi; koşum yeniden başlatıldı.
+- Düzeltilmiş Qwen koşumu tamamlandı: 1.920 aday parçası ve 24 geliştirme
+  sorgusu. Qwen reranker top-32 p95 süresi `8.957,76 ms` oldu. Bu nedenle
+  kalite kör incelemesi tamamlanmadan da `<=1 saniye` runtime kabul kapısını
+  geçemediği bilinmektedir. Qwen dense için ilk kayıttaki süre yalnız vektör
+  skorlama süresiydi; sonraki koşumda sorgu embedding'i ile birlikte ölçmek
+  üzere runner düzeltildi.
 
 ## Kaynaklar
 

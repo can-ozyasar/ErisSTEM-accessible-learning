@@ -26,6 +26,22 @@ ALLOWED_CLAIM_TYPES = {
     "cause_effect", "scope", "institutional_decision", "military_strategy",
     "constitutional_principle",
 }
+# Teacher agents naturally describe some historical relations more narrowly
+# than the stable product taxonomy.  These aliases preserve that distinction
+# in the private plan while mapping it to a reviewed, supported retrieval
+# category.  Unknown labels still fail closed.
+CLAIM_TYPE_ALIASES = {
+    "event_origin": "cause_effect",
+    "event_relation": "cause_effect",
+    "chronology_scope": "chronology",
+    "institution_principle": "constitutional_principle",
+    "principle_boundary": "constitutional_principle",
+    "event_participants": "person_event",
+    "definition_and_function": "definition",
+    "person_place_event": "place_event",
+    "resource_and_scope": "scope",
+    "event_outcome": "cause_effect",
+}
 ALLOWED_STAGES = {"question_analysis", "recall", "evidence_link", "choice_check"}
 ALLOWED_OUTCOMES = {"reretrieve", "insufficient", "blocked"}
 
@@ -33,6 +49,10 @@ ALLOWED_OUTCOMES = {"reretrieve", "insufficient", "blocked"}
 def _case_claims(case: dict) -> list[dict]:
     """Accept the early ``claims`` draft name and the reviewed schema name."""
     return case["evidence_claims"] if "evidence_claims" in case else case.get("claims", [])
+
+
+def _canonical_claim_type(value: str | None) -> str | None:
+    return CLAIM_TYPE_ALIASES.get(value, value)
 
 
 def _plan_cases(plan: dict) -> list[dict]:
@@ -276,7 +296,8 @@ def _validate_plan(question_candidates: dict, corpus: dict, plan: dict, per_clai
             seen_claims.add(claim["id"])
             if claim.get("role") not in ALLOWED_ROLES:
                 raise ValueError("Kanıt iddiası rolü geçersiz")
-            if claim.get("claim_type") and claim["claim_type"] not in ALLOWED_CLAIM_TYPES:
+            if (_canonical_claim_type(claim.get("claim_type"))
+                    and _canonical_claim_type(claim.get("claim_type")) not in ALLOWED_CLAIM_TYPES):
                 raise ValueError("Kanıt iddiası türü geçersiz")
             stage = claim.get("stage_min", claim.get("stage"))
             if stage and stage not in ALLOWED_STAGES:

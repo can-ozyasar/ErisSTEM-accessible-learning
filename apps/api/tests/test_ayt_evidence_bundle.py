@@ -101,6 +101,15 @@ def test_bundle_interprets_nested_agent_groups_as_separate_required_groups():
     assert row["status"] == "teacher_review_required"
 
 
+def test_bundle_accepts_only_explicit_teacher_claim_type_aliases():
+    questions, corpus, plan = _inputs()
+    plan["cases"][0]["claims"][0]["claim_type"] = "event_origin"
+    assert build(questions, corpus, plan)["proposals"][0]["status"] == "teacher_review_required"
+    plan["cases"][0]["claims"][0]["claim_type"] = "made_up_relation"
+    with pytest.raises(ValueError, match="iddiası türü"):
+        build(questions, corpus, plan)
+
+
 def test_bundle_uses_teacher_hard_section_filter_only_for_discovery():
     questions, corpus, plan = _inputs()
     corpus["books"][0]["index"]["chunks"].append(_chunk(

@@ -75,7 +75,9 @@ def _rerank_dense_candidates(
     query: str,
     dense_ranking: list[str],
     documents_by_id: dict[str, dict],
-    reranker,
+    reranker_tokenizer,
+    reranker_model,
+    torch,
 ) -> list[str]:
     """Rerank a fixed dense-only candidate window with a cross encoder.
 
@@ -84,10 +86,18 @@ def _rerank_dense_candidates(
     makes both the accuracy comparison and the latency budget interpretable.
     """
     candidate_ids = dense_ranking[:RERANK_CANDIDATES]
-    pairs = [[query, documents_by_id[item_id]["search_text"]] for item_id in candidate_ids]
-    scores = reranker.compute_score(pairs, batch_size=4, max_length=2048, normalize=True)
-    if not isinstance(scores, list):
-        scores = [scores]
+    scores = []
+    for offset in range(0, len(candidate_ids), 4):
+        batch_ids = candidate_ids[offset:offset + 4]
+        pairs = [[query, documents_by_id[item_id]["search_text"]] for item_id in batch_ids]
+        inputs = reranker_tokenizer(pairs, padding=True, truncation=True,
+                                    max_length=2048, return_tensors="pt")
+        inputs = {key: value.to(reranker_model.device) for key, value in inputs.items()}
+        with torch.inference_mode():
+            batch_scores = reranker_model(**inputs, return_dict=True).logits.view(-1).float()
+        scores.extend(batch_scores.cpu().tolist())
+    if len(scores) != len(candidate_ids):
+        raise RuntimeError("Reranker skor sayısı aday penceresiyle eşleşmiyor")
     return [item_id for _, item_id in sorted(
         zip(scores, candidate_ids, strict=True), key=lambda pair: (-float(pair[0]), pair[1]))]
 
@@ -107,14 +117,19 @@ def main() -> None:
     _ensure_dependencies()
     import numpy as np
     import torch
-    from FlagEmbedding import BGEM3FlagModel, FlagReranker
+    from FlagEmbedding import BGEM3FlagModel
     from rank_bm25 import BM25Okapi
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     documents, queries = data["documents"], data["queries"]
     corpus_text = [item["search_text"] for item in documents]
     bm25 = BM25Okapi([tokens(text) for text in corpus_text])
     model = BGEM3FlagModel(MODEL_ID, use_fp16=torch.cuda.is_available())
-    reranker = FlagReranker(RERANKER_MODEL_ID, use_fp16=torch.cuda.is_available())
+    reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_ID)
+    reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_ID)
+    reranker_model = reranker_model.to("cuda" if torch.cuda.is_available() else "cpu").eval()
+    if torch.cuda.is_available():
+        reranker_model = reranker_model.half()
     document_vectors = model.encode(corpus_text, batch_size=8, max_length=2048,
                                     return_dense=True, return_sparse=True, return_colbert_vecs=False)
     dense_documents = np.asarray(document_vectors["dense_vecs"])
@@ -147,7 +162,9 @@ def main() -> None:
         timings["rrf"].append((time.perf_counter() - started) * 1000)
 
         started = time.perf_counter()
-        dense_rerank = _rerank_dense_candidates(text, dense, documents_by_id, reranker)
+        dense_rerank = _rerank_dense_candidates(
+            text, dense, documents_by_id, reranker_tokenizer, reranker_model, torch,
+        )
         timings["bge_dense_rerank"].append((time.perf_counter() - started) * 1000)
         rankings[query["id"]] = {
             "bm25": lexical[:TOP_K], "bge_dense": dense[:TOP_K],

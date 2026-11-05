@@ -1,4 +1,10 @@
-from app.pipeline.ogm_ayt_relation_review_evaluate import merge_and_evaluate
+from app.pipeline.ogm_ayt_relation_review_evaluate import _ranking_key, merge_and_evaluate
+
+
+def test_atom_ranking_key_matches_the_reviewed_source_crop():
+    assert _ranking_key("book:atom:piece") == "book:piece"
+    assert _ranking_key("book:context:piece") == "book:piece"
+    assert _ranking_key("book:piece") == "book:piece"
 
 
 def _queue():

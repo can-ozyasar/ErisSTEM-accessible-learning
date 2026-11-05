@@ -23,6 +23,19 @@ def _key(item: dict) -> str:
     return f'{item["source_checksum"]}:{item["chunk_id"]}'
 
 
+def _ranking_key(item_id: str) -> str:
+    """Match review keys to rank IDs while retaining atom/context provenance.
+
+    Kaggle ranking IDs include the retrieval granularity (`source:atom:chunk`),
+    whereas a crop review identifies the same source crop as `source:chunk`.
+    The normalisation is deliberately limited to the two known granularities.
+    """
+    parts = item_id.split(":", 2)
+    if len(parts) == 3 and parts[1] in {"atom", "context"}:
+        return f"{parts[0]}:{parts[2]}"
+    return item_id
+
+
 def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict:
     output_schema = SCHEMA_PAIRS.get((queue.get("schema"), rankings.get("schema")))
     if output_schema is None:
@@ -98,7 +111,10 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
     for method in methods:
         if any(method not in values for values in rankings["rankings"].values()):
             raise ValueError("Kaggle ranking beklenen retrieval yöntemini içermiyor")
-        candidate_rankings = {candidate_id: values[method] for candidate_id, values in rankings["rankings"].items()}
+        candidate_rankings = {
+            candidate_id: [_ranking_key(item_id) for item_id in values[method]]
+            for candidate_id, values in rankings["rankings"].items()
+        }
         latency_samples = (reported_latencies or {}).get(method)
         if latency_samples is None:
             latency_samples = []

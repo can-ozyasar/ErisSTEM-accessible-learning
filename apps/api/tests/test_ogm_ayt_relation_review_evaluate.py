@@ -51,3 +51,18 @@ def test_relation_review_uses_the_queue_declared_method_set():
     rankings["rankings"]["one"]["qwen_dense"] = ["book:a", "book:b"]
     result = merge_and_evaluate(queue, rankings, [_batch()])
     assert set(result["method_metrics"]) == {"qwen_dense"}
+
+
+def test_relation_review_uses_only_complete_reported_query_latencies():
+    rankings = _rankings()
+    rankings["latencies_by_method_ms"] = {method: [12.5] for method in rankings["rankings"]["one"]}
+    result = merge_and_evaluate(_queue(), rankings, [_batch()])
+    assert result["method_metrics"]["bge_dense"]["p95_ms"] == 12.5
+    assert result["latency_status"]["bge_dense"] == "measured_end_to_end"
+    rankings["latencies_by_method_ms"]["bge_dense"] = []
+    try:
+        merge_and_evaluate(_queue(), rankings, [_batch()])
+    except ValueError as error:
+        assert "gecikme" in str(error)
+    else:
+        raise AssertionError("Eksik gecikme ölçümü reddedilmeliydi")

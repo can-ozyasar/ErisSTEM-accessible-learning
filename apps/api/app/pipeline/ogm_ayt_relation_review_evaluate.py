@@ -86,15 +86,30 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
                        "wrong_source_ids": [item["source_key"] for item in judgments if item["verdict"] == "wrong"],
                        "abstain": not bool(support)})
     method_metrics = {}
+    latency_status = {}
+    reported_latencies = rankings.get("latencies_by_method_ms", {})
+    if reported_latencies is not None and not isinstance(reported_latencies, dict):
+        raise ValueError("Kaggle gecikme kayıtları yöntem bazlı nesne olmalı")
     for method in methods:
         if any(method not in values for values in rankings["rankings"].values()):
             raise ValueError("Kaggle ranking beklenen retrieval yöntemini içermiyor")
         candidate_rankings = {candidate_id: values[method] for candidate_id, values in rankings["rankings"].items()}
-        method_metrics[method] = evaluate_rankings(labels, candidate_rankings, latencies_ms=[])
+        latency_samples = (reported_latencies or {}).get(method)
+        if latency_samples is None:
+            latency_samples = []
+            latency_status[method] = "not_reported"
+        else:
+            if (not isinstance(latency_samples, list)
+                    or len(latency_samples) != len(rankings["rankings"])
+                    or any(not isinstance(value, (int, float)) or value < 0 for value in latency_samples)):
+                raise ValueError("Kaggle gecikme örnekleri sorgu sayısı ve sayısal değerlerle eşleşmeli")
+            latency_status[method] = "measured_end_to_end"
+        method_metrics[method] = evaluate_rankings(labels, candidate_rankings, latencies_ms=latency_samples)
     return {
         "schema": "ogm-ayt-relation-retrieval-review-eval-v1",
         "source_checksum": queue["source_checksum"], "corpus_checksum": queue["corpus_checksum"],
         "reviewed_question_count": len(reviews), "method_metrics": method_metrics,
+        "latency_status": latency_status,
         "question_diagnoses": dict(sorted(by_question_diagnosis.items())),
         "card_diagnostics": dict(sorted(by_card_diagnostic.items())),
         "runtime_enabled": False, "qlora_enabled": False,

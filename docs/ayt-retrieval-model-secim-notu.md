@@ -124,16 +124,17 @@ adayıdır; hiçbir reranker runtime yoluna alınmaz.
 
 - Koşum: private Kaggle Tesla T4, sabit 1.920 MEB aday parçası ve 24
   geliştirme sorgusu. Doküman embedding'i bir kez üretildi; ölçüm her sorguda
-  instruction ile sorgu embedding'i ve cosine aramayı birlikte içerir.
+  instruction ile sorgu embedding'i ve cosine aramayı birlikte içerir. p95,
+  24 ham sorgu süresinin nearest-rank yüzdelik hesabıdır.
 - Kör inceleme: üç bağımsız agent, yöntemlerin top-12 birleşiminden oluşan
   24 soru × 12 PDF kesitini değerlendirdi. Cevap anahtarı ve çözümlü kaynak
   hiçbir inceleme paketine verilmedi.
 
 | Yöntem | Recall@3 | MRR@3 | nDCG@3 | Kanıt kapsamı@3 | Yanlış kanıt oranı | p95 |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| BM25 | 0,5245 | 0,7255 | 0,5685 | 0,3529 | 0,7059 | 35,04 ms |
-| Qwen dense, İngilizce instruction | **0,7500** | 0,8824 | 0,7749 | **0,5294** | **0,5294** | **153,37 ms** |
-| Qwen dense, Türkçe instruction | 0,7255 | **0,9118** | **0,7786** | 0,4706 | 0,5490 | 157,14 ms |
+| BM25 | 0,5245 | 0,7255 | 0,5685 | 0,3529 | 0,7059 | 41,58 ms |
+| Qwen dense, İngilizce instruction | **0,7500** | 0,8824 | 0,7749 | **0,5294** | **0,5294** | **171,97 ms** |
+| Qwen dense, Türkçe instruction | 0,7255 | **0,9118** | **0,7786** | 0,4706 | 0,5490 | 219,87 ms |
 
 Karar: İngilizce instruction seçildi. Türkçe instruction'ın MRR ve nDCG
 farkı çok küçüktür; buna karşılık İngilizce talimat Recall@3 ve kanıt

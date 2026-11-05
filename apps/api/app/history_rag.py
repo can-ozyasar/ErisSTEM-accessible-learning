@@ -250,6 +250,88 @@ def _candidate(text: str, bbox: list[float], page_height: float) -> bool:
     return len(re.findall(r"\b(?:Kaynak|Görsel|Tablo)\s+[A-Z0-9]", text)) <= 1
 
 
+def _atom_candidate(text: str, bbox: list[float], page_height: float) -> bool:
+    """Admit a short lesson fact only when it remains independently readable.
+
+    Context chunks retain the old long-prose policy.  Evidence atoms are a
+    separate, review-only index: an adjacent heading supplies the missing
+    subject for a short bullet such as the Albert Malche example.
+    """
+    if bbox[1] < 43 or bbox[3] > page_height - 42:
+        return False
+    if not 45 <= len(text) <= 700 or len(terms(text)) < 7:
+        return False
+    # A leading bullet is normal MEB lesson layout.  It is stripped only for
+    # document-type classification; the original text and coordinates remain
+    # in the atom for crop review.
+    classification_text = re.sub(r"^\s*[•·▪‣]\s*", "", text)
+    if EXCLUDE.match(classification_text) or classification_text.startswith("(") or ACTIVITY.search(classification_text):
+        return False
+    if text.count("?") or text.count("_") > 2 or text.count("...") > 1:
+        return False
+    return len(re.findall(r"\b(?:Kaynak|Görsel|Tablo)\s+[A-Z0-9]", text)) <= 1
+
+
+def _heading(text: str, layout: dict) -> bool:
+    """Recognise a compact PDF heading without interpreting its meaning."""
+    words = terms(text)
+    if not 1 <= len(words) <= 10 or len(text) > 140 or text.endswith((".", "?", "!")):
+        return False
+    letters = "".join(char for char in text if char.isalpha())
+    uppercase = bool(letters) and sum(char.isupper() for char in letters) / len(letters) >= .6
+    return uppercase or layout["first_line_is_title"] or bool(re.search(r"\(\d{3,4}\)", text))
+
+
+def _union_bbox(left: list[float], right: list[float]) -> list[float]:
+    return [round(min(left[0], right[0]), 2), round(min(left[1], right[1]), 2),
+            round(max(left[2], right[2]), 2), round(max(left[3], right[3]), 2)]
+
+
+def evidence_atoms(blocks: list[dict], *, checksum: str, page_number: int,
+                   page_height: float, section: dict) -> tuple[list[dict], Counter]:
+    """Create short, coordinate-backed evidence atoms from one PDF page.
+
+    A heading can only attach to the immediately following eligible fact in
+    the same visual column.  The narrow geometry rule prevents cross-column
+    and cross-page joins that would fabricate historical relationships.
+    """
+    atoms, exclusions = [], Counter()
+    previous_heading: dict | None = None
+    for item in sorted(blocks, key=lambda block: (block["bbox"][1], block["bbox"][0])):
+        text, bbox, layout = item["text"], item["bbox"], item["layout"]
+        if _heading(text, layout):
+            previous_heading = item
+            continue
+        if not _atom_candidate(text, bbox, page_height):
+            continue
+        heading = previous_heading
+        same_column = heading and abs(heading["bbox"][0] - bbox[0]) <= 24
+        vertically_adjacent = heading and 0 <= bbox[1] - heading["bbox"][3] <= 42
+        if same_column and vertically_adjacent:
+            atom_text = f'{heading["text"]} — {text}'
+            atom_bbox = _union_bbox(heading["bbox"], bbox)
+            method = "adjacent_heading_plus_fact"
+            heading_text = heading["text"]
+        else:
+            atom_text, atom_bbox, method, heading_text = text, bbox, "standalone_fact", None
+        layout_for_review = {**layout, "heading_attached": bool(heading_text)}
+        pre_review = source_review_recommendation(atom_text, layout_for_review)
+        if pre_review["decision"] == "do_not_use":
+            exclusions[pre_review["reasons"][0]] += 1
+            continue
+        key = f"atom:{checksum}:{page_number}:{atom_bbox}:{atom_text}:{method}"
+        atoms.append({
+            "id": hashlib.sha256(key.encode()).hexdigest()[:20],
+            "section_id": section["id"], "section_title": section["title"],
+            "page": page_number, "bbox": atom_bbox, "text": atom_text,
+            "heading": heading_text, "extraction_method": method,
+            "review_status": "candidate", "quality": chunk_quality(atom_text),
+            "layout": layout_for_review, "pre_review": pre_review,
+        })
+        previous_heading = None
+    return atoms, exclusions
+
+
 # These indicators are review aids, not a classifier or proof of factuality.
 # Leave existing source identities and teacher decisions intact.
 _REVIEW_INSTRUCTION = re.compile(
@@ -353,12 +435,14 @@ def source_review_recommendation(text: str, layout: dict | None = None) -> dict:
 def build_index(source: Path = BOOK) -> dict:
     checksum = hashlib.sha256(source.read_bytes()).hexdigest()
     chunks = []
+    atoms = []
     exclusions: dict[str, int] = {}
     with pymupdf.open(source) as pdf:
         chapter = sections(pdf)
         for section in chapter:
             for page_number in range(section["start"], min(section["end"], pdf.page_count) + 1):
                 page = pdf[page_number - 1]
+                page_blocks = []
                 for block in page.get_text("dict")["blocks"]:
                     if block["type"] != 0:
                         continue
@@ -367,6 +451,8 @@ def build_index(source: Path = BOOK) -> dict:
                     text = _clean(" ".join(raw_lines))
                     layout = block_layout(raw_lines)
                     box = [round(float(n), 2) for n in block["bbox"]]
+                    if text:
+                        page_blocks.append({"text": text, "bbox": box, "layout": layout})
                     if not _candidate(text, box, page.rect.height):
                         continue
                     pre_review = source_review_recommendation(text, layout)
@@ -381,8 +467,16 @@ def build_index(source: Path = BOOK) -> dict:
                                    "page": page_number, "bbox": box, "text": text,
                                    "review_status": "candidate", "quality": chunk_quality(text),
                                    "layout": layout, "pre_review": pre_review})
-    return {"schema": 1, "policy_version": "source-type-v3", "source_checksum": checksum, "source_name": source.name,
-            "sections": chapter, "chunks": chunks, "exclusions": exclusions}
+                page_atoms, atom_exclusions = evidence_atoms(
+                    page_blocks, checksum=checksum, page_number=page_number,
+                    page_height=page.rect.height, section=section,
+                )
+                atoms.extend(page_atoms)
+                for reason, count in atom_exclusions.items():
+                    exclusions[f"atom_{reason}"] = exclusions.get(f"atom_{reason}", 0) + count
+    return {"schema": 2, "policy_version": "source-type-v4", "source_checksum": checksum, "source_name": source.name,
+            "sections": chapter, "chunks": chunks, "context_chunks": chunks, "evidence_atoms": atoms,
+            "exclusions": exclusions}
 
 
 def write_index(source: Path = BOOK, destination: Path = INDEX_PATH) -> dict:

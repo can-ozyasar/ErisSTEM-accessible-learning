@@ -89,3 +89,26 @@ def test_source_quote_is_kept_for_manual_pdf_review_only():
     assert result["decision"] == "manual_review"
     assert result["reasons"] == ["kaynak_alintisi_baglam_kontrolu"]
     assert result["source_type"] == "quoted_source"
+
+
+def test_short_fact_atom_keeps_adjacent_heading_and_rejects_caption():
+    from app.history_rag import evidence_atoms
+
+    blocks = [
+        {"text": "ÜNİVERSİTE REFORMU (1933)", "bbox": [36, 649, 186, 663],
+         "layout": {"first_line_is_title": True}},
+        {"text": "İsviçreli bilim insanı Albert Malche’nin raporu doğrultusunda yükseköğretimde reform yapılmıştır.",
+         "bbox": [36, 667, 436, 681], "layout": {"first_line_is_title": False}},
+        {"text": "Görsel 4: Üniversite binası, Ankara", "bbox": [36, 690, 330, 704],
+         "layout": {"first_line_is_title": False}},
+    ]
+
+    atoms, _ = evidence_atoms(
+        blocks, checksum="source", page_number=205, page_height=780,
+        section={"id": "summary.63", "title": "Atatürk Dönemi’nde Yapılan İnkılaplar"},
+    )
+
+    assert len(atoms) == 1
+    assert atoms[0]["heading"] == "ÜNİVERSİTE REFORMU (1933)"
+    assert atoms[0]["extraction_method"] == "adjacent_heading_plus_fact"
+    assert "Albert Malche" in atoms[0]["text"]

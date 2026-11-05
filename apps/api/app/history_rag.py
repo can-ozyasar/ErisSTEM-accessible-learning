@@ -159,7 +159,11 @@ def sections(pdf) -> list[dict]:
     for line in toc:
         normalized = re.sub(r"\s+", " ", line).strip()
         match = NUMBERED_SUMMARY_SECTION.match(normalized)
-        if match and not re.match(r"^\d+\.", match[2]):
+        # A flat heading can legitimately begin with a period-bearing date,
+        # e.g. ``20. Yüzyıl Başlarında Osmanlı Devleti``.  Only a *nested*
+        # number such as ``1.2.`` is evidence that this is a textbook row,
+        # rather than a summary entry.
+        if match and not re.match(r"^\d+\.\d+\.", match[2]):
             summary_candidates.append({"id": f"summary.{match[1]}", "title": match[2].strip(),
                                        "start": int(match[3])})
     # On some tagged summary PDFs a row's number is emitted as a separate
@@ -172,7 +176,7 @@ def sections(pdf) -> list[dict]:
                 continue
             normalized = re.sub(r"\s+", " ", block[4]).strip()
             match = NUMBERED_SUMMARY_SECTION.match(normalized)
-            if match and not re.match(r"^\d+\.", match[2]):
+            if match and not re.match(r"^\d+\.\d+\.", match[2]):
                 summary_candidates.append({"id": f"summary.{match[1]}", "title": match[2].strip(),
                                            "start": int(match[3])})
     # A textbook can have isolated flat entries such as ``1. Ünite Ölçme``.
@@ -266,6 +270,12 @@ def _atom_candidate(text: str, bbox: list[float], page_height: float) -> bool:
     # in the atom for crop review.
     classification_text = re.sub(r"^\s*[•·▪‣]\s*", "", text)
     if EXCLUDE.match(classification_text) or classification_text.startswith("(") or ACTIVITY.search(classification_text):
+        return False
+    # Repeated short labels are page furniture, not a historical fact.  This
+    # catches rows such as ``TYT-AYT TYT-AYT ...`` without hard-coding a book
+    # name or discarding ordinary short lesson bullets.
+    document_terms = terms(classification_text)
+    if len(document_terms) >= 4 and len(set(document_terms)) <= 2:
         return False
     if text.count("?") or text.count("_") > 2 or text.count("...") > 1:
         return False

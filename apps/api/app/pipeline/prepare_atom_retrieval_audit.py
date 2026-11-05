@@ -64,6 +64,10 @@ def build(corpus: dict, questions: dict, failure_reviews: list[dict], comparator
     selected_ids = sorted(failure_ids | set(comparator_ids))
     if any(candidate_id not in questions_by_id for candidate_id in selected_ids):
         raise ValueError("Seçili soru transkripsiyonu bulunamadı")
+    selected_questions = [questions_by_id[candidate_id] for candidate_id in selected_ids]
+    if any(row.get("answer_key_accessed") is not False or row.get("worked_explanation_accessed") is not False
+           or row.get("transcription_status") != "private_teacher_review_required" for row in selected_questions):
+        raise ValueError("Audit soruları cevap anahtarı ve çözümden yalıtılmış özel transkripsiyon olmalı")
     source_checksum = supplementary[0]["source_checksum"]
     documents = []
     for granularity, records in (("atom", index["evidence_atoms"]), ("context", index["context_chunks"])):
@@ -78,8 +82,7 @@ def build(corpus: dict, questions: dict, failure_reviews: list[dict], comparator
                 "review_route": "supplementary_pdf_crop_required",
             })
     queries = []
-    for candidate_id in selected_ids:
-        row = questions_by_id[candidate_id]
+    for candidate_id, row in zip(selected_ids, selected_questions):
         stem = row["question"]["stem"]
         plan = need_plan(row["topic"], stem)
         queries.append({"id": candidate_id, "topic": row["topic"], "query": plan["retrieval_query"],

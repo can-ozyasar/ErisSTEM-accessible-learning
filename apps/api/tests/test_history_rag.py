@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.history_rag import build_index, matching_sections, retrieve, terms
+from app.history_rag import build_index, matching_sections, retrieve, sections, terms
 
 
 def test_topic_gate_and_approved_retrieval():
@@ -23,6 +23,7 @@ def test_topic_gate_and_approved_retrieval():
 
 BOOK = Path(__file__).parents[3] / "data/meb/tarih-9sinif-ders-kitabi_20261006.pdf"
 BOOK_12 = Path(__file__).parents[3] / "data/meb/inkilap-12-aday-eba.pdf"
+AYT_SUMMARY = Path(__file__).parents[3] / "data/private/ogm-supplementary-v1/ayt-konu-ozetleri.pdf"
 
 
 @pytest.mark.skipif(not BOOK.is_file(), reason="Local MEB source not installed")
@@ -44,6 +45,16 @@ def test_current_12th_grade_toc_recovers_wrapped_and_split_rows():
     assert sections["2.6"]["start"] == 94
     assert sections["8.2"]["start"] == 262
     assert sections["8.2"]["end"] == 270
+
+
+@pytest.mark.skipif(not AYT_SUMMARY.is_file(), reason="Local AYT summary source not installed")
+def test_summary_toc_keeps_date_leading_flat_heading():
+    """A flat summary title may begin with a date such as ``20. Yüzyıl``."""
+    import pymupdf
+
+    source_sections = {item["id"]: item for item in sections(pymupdf.open(AYT_SUMMARY))}
+    assert source_sections["summary.54"]["title"] == "20. Yüzyıl Başlarında Osmanlı Devleti"
+    assert source_sections["summary.54"]["start"] < source_sections["summary.55"]["start"]
 
 
 def test_review_flags_activity_fragments_and_captions_without_changing_approval():
@@ -112,3 +123,9 @@ def test_short_fact_atom_keeps_adjacent_heading_and_rejects_caption():
     assert atoms[0]["heading"] == "ÜNİVERSİTE REFORMU (1933)"
     assert atoms[0]["extraction_method"] == "adjacent_heading_plus_fact"
     assert "Albert Malche" in atoms[0]["text"]
+
+
+def test_atom_rejects_repeated_page_furniture():
+    from app.history_rag import _atom_candidate
+
+    assert not _atom_candidate("TYT-AYT TYT-AYT TYT-AYT", [36, 120, 220, 140], 780)

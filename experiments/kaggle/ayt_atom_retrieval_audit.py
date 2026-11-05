@@ -8,7 +8,7 @@ import sys
 import time
 from pathlib import Path
 
-INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-ayt-atom-retrieval-audit-v1/input.json")
+INPUT = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-ayt-atom-retrieval-input-v3/input.json")
 OUTPUT = Path("/kaggle/working/ayt-atom-retrieval-audit-rankings-v1.json")
 MODEL = "Qwen/Qwen3-Embedding-4B"
 INSTRUCTION = "Given a Turkish high-school history information need, retrieve source passages that directly support the needed relation."

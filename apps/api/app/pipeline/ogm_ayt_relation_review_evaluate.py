@@ -8,8 +8,12 @@ from pathlib import Path
 
 from ..history_rag_hybrid import evaluate_rankings
 
-QUEUE_SCHEMA = "ogm-ayt-relation-discovery-review-queue-v1"
-RANKING_SCHEMA = "ogm-ayt-relation-retrieval-rankings-v1"
+SCHEMA_PAIRS = {
+    ("ogm-ayt-relation-discovery-review-queue-v1", "ogm-ayt-relation-retrieval-rankings-v1"):
+        "ogm-ayt-relation-retrieval-review-eval-v1",
+    ("ogm-ayt-atom-retrieval-review-queue-v1", "ogm-ayt-atom-retrieval-rankings-v1"):
+        "ogm-ayt-atom-retrieval-review-eval-v1",
+}
 METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
 DIAGNOSTICS = {"direct_support", "multi_atom_candidate", "indirect_only", "irrelevant"}
 QUESTION_DIAGNOSES = {"direct_evidence_found", "multi_atom_required", "candidate_set_insufficient", "indirect_only"}
@@ -20,7 +24,8 @@ def _key(item: dict) -> str:
 
 
 def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict:
-    if queue.get("schema") != QUEUE_SCHEMA or rankings.get("schema") != RANKING_SCHEMA:
+    output_schema = SCHEMA_PAIRS.get((queue.get("schema"), rankings.get("schema")))
+    if output_schema is None:
         raise ValueError("İlişki inceleme kuyruğu ve Kaggle ranking gerekli")
     for key in ("source_checksum", "corpus_checksum"):
         if rankings.get(key) != queue.get(key):
@@ -106,7 +111,7 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
             latency_status[method] = "measured_end_to_end"
         method_metrics[method] = evaluate_rankings(labels, candidate_rankings, latencies_ms=latency_samples)
     return {
-        "schema": "ogm-ayt-relation-retrieval-review-eval-v1",
+        "schema": output_schema,
         "source_checksum": queue["source_checksum"], "corpus_checksum": queue["corpus_checksum"],
         "reviewed_question_count": len(reviews), "method_metrics": method_metrics,
         "latency_status": latency_status,

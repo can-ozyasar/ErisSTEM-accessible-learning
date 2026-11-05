@@ -11,6 +11,8 @@ sonra verilir.
 | --- | --- | --- |
 | `BAAI/bge-m3` | Taban çizgisi ve ilk-aşama adayı | Çok dilli dense ve sparse getirmeyi aynı modelle sağlar; temiz V4 kalibrasyonunda BM25'ten iyi aday sonuç vermiştir. Henüz runtime kabulü yoktur. |
 | `BAAI/bge-reranker-v2-m3` | İlk ikinci-aşama deneyi | Çok dilli cross-encoder'dır. Yalnız dense'in ilk 32 adayını yeniden sıralar; tüm kitapta çalışmaz. |
+| `Qwen/Qwen3-Embedding-4B` | Seçilen kalite adayı | T4'te uçtan uca sorgu getirme p95'i hedefin altında kaldı ve kör PDF-kesiti incelemesinde BGE dense'i geçti. İngilizce görev talimatı bu corpus için seçildi; bağımsız holdout ve insan onayı olmadan runtime'a açılmaz. |
+| `Qwen/Qwen3-Reranker-4B` | Runtime dışında | Top-32 ikinci aşama sıralama, bu geliştirme kümesinde kanıt kapsamını ve MRR'yi düşürdü; T4 p95'i yaklaşık dokuz saniyedir. |
 | `Qwen/Qwen3-Embedding-8B` | Büyük GPU'da ayrı embedding ablasyonu | 100'den fazla dili, 32k bağlamı ve instruction-aware embedding'i destekler. Yüksek çok dilli MTEB puanı, Türkçe tarih kanıtı için kanıt değildir; aynı private geliştirme protokolünde ölçülmelidir. |
 | `Alibaba-NLP/gte-Qwen2-7B-instruct` | Daha büyük GPU varsa ikinci embedding ablasyonu | Çok dilli bir adaydır; model kartındaki fp32 yük boyutu ve önerilen donanım koşulları T4 üzerinde rahat bir ilk deney için uygun değildir. |
 | `microsoft/harrier-oss-v1-27b` | Şimdilik dışarıda | 27B model, T4'ün çalışma ve p95 hedefiyle uyumlu değildir. Büyük GPU ve ayrı maliyet/gecikme bütçesi olmadan adil ölçüm yapılamaz. |
@@ -117,6 +119,30 @@ artış ve yanlış kanıt oranında `-0,0588` fark gösterdi. Reranker iki mode
 de kapsamı ve MRR'yi düşürdü; Qwen reranker ayrıca T4'te top-32 için yaklaşık
 9 saniye p95 sürdü. Karar: Qwen dense sonraki holdout ve instruction ablation
 adayıdır; hiçbir reranker runtime yoluna alınmaz.
+
+### V1 — Qwen3-Embedding-4B instruction ablation
+
+- Koşum: private Kaggle Tesla T4, sabit 1.920 MEB aday parçası ve 24
+  geliştirme sorgusu. Doküman embedding'i bir kez üretildi; ölçüm her sorguda
+  instruction ile sorgu embedding'i ve cosine aramayı birlikte içerir.
+- Kör inceleme: üç bağımsız agent, yöntemlerin top-12 birleşiminden oluşan
+  24 soru × 12 PDF kesitini değerlendirdi. Cevap anahtarı ve çözümlü kaynak
+  hiçbir inceleme paketine verilmedi.
+
+| Yöntem | Recall@3 | MRR@3 | nDCG@3 | Kanıt kapsamı@3 | Yanlış kanıt oranı | p95 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| BM25 | 0,5245 | 0,7255 | 0,5685 | 0,3529 | 0,7059 | 35,04 ms |
+| Qwen dense, İngilizce instruction | **0,7500** | 0,8824 | 0,7749 | **0,5294** | **0,5294** | **153,37 ms** |
+| Qwen dense, Türkçe instruction | 0,7255 | **0,9118** | **0,7786** | 0,4706 | 0,5490 | 157,14 ms |
+
+Karar: İngilizce instruction seçildi. Türkçe instruction'ın MRR ve nDCG
+farkı çok küçüktür; buna karşılık İngilizce talimat Recall@3 ve kanıt
+kapsamında daha yüksek, yanlış kanıt oranında daha düşüktür ve p95'i de
+biraz daha kısadır. Bu sonuç, 24 soruluk geliştirme kümesine özgüdür;
+istatistiksel kesinlik veya genel başarı iddiası değildir. Sonraki adım,
+aynı kararın daha önce görülmemiş private holdout'ta korunup korunmadığını
+ölçmek ve yalnız PDF kesitiyle insan onayı verilmiş parçalar için runtime
+allowlist oluşturmaktır.
 
 ## Kaynaklar
 

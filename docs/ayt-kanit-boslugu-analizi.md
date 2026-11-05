@@ -90,3 +90,22 @@ Kalibrasyon dışa aktarımı artık yalnız `train` ve `dev` bölümündeki sor
 kabul eder; bunu doğrulayan otomatik test eklenmiştir. Yeni kabul deneyinde
 hiç görülmemiş soru grubu, aynı PDF-kırpımı incelemesi ve eşit aday bütçesi
 kullanılacaktır.
+
+## Temiz V4 kalibrasyon sonucu (private, kapalı-test dışı)
+
+Kapalı test dışındaki 24 soru ve 288 PDF kesiti tekrar kör incelendi. 16 soru
+doğrudan veya iki kaynak atomuyla desteklenebildi; sekiz soruda aday havuzu
+yetersiz kaldı. Aynı inceleme etiketlerinde sonuçlar şöyledir:
+
+| Yöntem | Recall@3 | MRR@3 | Yanlış kanıt oranı |
+| --- | ---: | ---: | ---: |
+| BM25 | 0,5365 | 0,7083 | 0,7083 |
+| BGE-M3 dense | **0,7500** | **0,8125** | **0,5833** |
+| BGE-M3 sparse | **0,7500** | 0,7917 | 0,5833 |
+| RRF | 0,6250 | 0,7188 | 0,6250 |
+
+BGE-M3 dense, önceki temiz olmayan deneye dayanmadan da BM25'i geçmektedir;
+dense aday yoludur. Buna rağmen bu, runtime kabulü değildir: kartlar dört
+yöntemin dengeli birleşik aday listesinden geldiği için etiket seçimi bağımsız
+bir final test değildir. Dense yol ancak hiç görülmemiş geliştirme holdout'unda
+aynı yönlü fayda ve kabul edilmiş gecikme gösterirse öğrenci RAG'ına eklenir.

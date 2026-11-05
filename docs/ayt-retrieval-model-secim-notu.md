@@ -57,6 +57,24 @@ etki büyüklüğü, hata türleri, belirsizlik ve p95 birlikte değerlendirilir
 Ancak doğruluk artışı gecikme ya da yanlış kanıt maliyetini haklı çıkarmıyorsa
 ürün yolu değişmez.
 
+## Deney kaydı
+
+### V5 — BGE-M3 dense → BGE Reranker V2-M3
+
+- Koşum: private Kaggle Tesla T4, 1.920 MEB aday parçası, 24 geliştirme
+  sorgusu, dense ilk 32 adayın cross-encoder ile yeniden sıralanması.
+- Gecikme: BGE-M3 dense p95 `55,26 ms`; reranker aşaması p95 `447,42 ms`.
+- Kör PDF-kesiti incelemesi: üç bağımsız `history_teacher_agent_v1` kaydı,
+  24 soru ve 288 kart. Cevap anahtarı/çözümlü referans kullanılmadı.
+- Dense: Recall@3 `0,7353`, MRR@3 `0,8235`, yanlış kanıt oranı `0,5882`.
+- Dense + reranker: Recall@3 `0,7108`, MRR@3 `0,7647`, yanlış kanıt oranı
+  `0,5686`.
+
+Karar: reranker yanlış kanıt oranını küçük miktarda düşürmesine rağmen Recall
+ve MRR'yi düşürdü. Bu nedenle BGE reranker V2-M3 bu corpus için runtime
+adayına alınmadı. Deney sonucu, Qwen 4B + 4B kalite meydan okuyucusunun aynı
+protokolle sınanması için kaydedildi.
+
 ## Kaynaklar
 
 - [BGE Reranker V2 M3 model kartı](https://huggingface.co/BAAI/bge-reranker-v2-m3)

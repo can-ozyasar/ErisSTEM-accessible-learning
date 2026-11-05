@@ -56,8 +56,9 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
                for item in judgments):
             raise ValueError("Ajan kart kararı veya tanısı geçersiz")
         support = {item["source_key"] for item in judgments if item["verdict"] == "support"}
-        if any(item["diagnostic"] != "direct_support" for item in judgments if item["verdict"] == "support"):
-            raise ValueError("Destekleyici kanıt doğrudan destek tanısı taşımalı")
+        if any(item["diagnostic"] not in {"direct_support", "multi_atom_candidate"}
+               for item in judgments if item["verdict"] == "support"):
+            raise ValueError("Destekleyici kanıt doğrudan veya çok parçalı destek tanısı taşımalı")
         if review.get("abstain") is not (not bool(support)):
             raise ValueError("Çekimserlik doğrudan kanıt kararıyla çelişiyor")
         diagnosis = review.get("question_diagnosis")
@@ -68,6 +69,10 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
         # distinct from a single-passage runtime bundle.
         if diagnosis == "direct_evidence_found" and not support:
             raise ValueError("Soru tanısı doğrudan kanıt kararıyla çelişiyor")
+        if diagnosis == "direct_evidence_found" and not any(
+            item["diagnostic"] == "direct_support" for item in judgments if item["verdict"] == "support"
+        ):
+            raise ValueError("Doğrudan kanıt tanısı doğrudan destek içermeli")
         if diagnosis in {"candidate_set_insufficient", "indirect_only"} and support:
             raise ValueError("Soru tanısı doğrudan kanıt kararıyla çelişiyor")
         if diagnosis == "multi_atom_required" and support and len(support) < 2:

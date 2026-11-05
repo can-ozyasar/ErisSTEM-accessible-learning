@@ -38,6 +38,7 @@ def test_relation_review_accepts_a_grounded_multi_atom_bundle():
     batch = _batch()
     review = batch["reviews"][0]
     review["question_diagnosis"] = "multi_atom_required"
-    review["judgments"][1] = {"source_key": "book:b", "verdict": "support", "diagnostic": "direct_support"}
+    review["judgments"][0]["diagnostic"] = "multi_atom_candidate"
+    review["judgments"][1] = {"source_key": "book:b", "verdict": "support", "diagnostic": "multi_atom_candidate"}
     result = merge_and_evaluate(_queue(), _rankings(), [batch])
     assert result["question_diagnoses"] == {"multi_atom_required": 1}

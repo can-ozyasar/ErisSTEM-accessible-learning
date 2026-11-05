@@ -75,6 +75,22 @@ ve MRR'yi düşürdü. Bu nedenle BGE reranker V2-M3 bu corpus için runtime
 adayına alınmadı. Deney sonucu, Qwen 4B + 4B kalite meydan okuyucusunun aynı
 protokolle sınanması için kaydedildi.
 
+### Qwen kalite koşumu hazırlığı
+
+- İlk aşama aday penceresi `32` olarak sabitlendi. Bu değer, top-3 değerlendirme
+  için 15–20 aday önerisinin üzerindedir; reranker yalnız bu pencerede çalışır.
+- T4 için `float16` kullanılır. T4'te BF16 Tensor Core yolu olmadığı için BF16
+  kalite veya hız avantajı varsayılmaz.
+- Qwen model kartı, özel instruction kullanımının çoğu retrieval görevinde
+  faydalı olabildiğini; çok dilli senaryoda İngilizce instruction önerdiğini
+  belirtir. İlk koşumda alan odaklı İngilizce instruction kullanılır. Türkçe
+  instruction, aynı model/seed/corpus üzerinde ayrı ablation olmadan kabul
+  edilmez.
+- İlk V1 yüklemesi embedding modelinin GPU belleğini serbest bırakmadan
+  reranker yüklemeye çalıştığı için OOM ile durdu; çıktı üretmedi ve karar
+  verisinde kullanılmadı. Düzeltmede `embedding.cpu()`, çöp toplayıcı ve CUDA
+  önbellek temizliği eklendi; koşum yeniden başlatıldı.
+
 ## Kaynaklar
 
 - [BGE Reranker V2 M3 model kartı](https://huggingface.co/BAAI/bge-reranker-v2-m3)

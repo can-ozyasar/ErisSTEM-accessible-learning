@@ -97,6 +97,27 @@ protokolle sınanması için kaydedildi.
   skorlama süresiydi; sonraki koşumda sorgu embedding'i ile birlikte ölçmek
   üzere runner düzeltildi.
 
+### Adil BGE–Qwen karşılaştırması
+
+İki ayrı aday havuzunun etiketini karşılaştırmak yerine, tüm yöntemlerin
+top-3 kaynaklarının birleşiminden 24 soru × 21 kartlık (504 kesit) tek kör
+inceleme paketi üretildi. Üç bağımsız agent dilimi, aynı PDF kesitleri üzerinde
+etiketlendi. Böylece her yöntem aynı altın destek/yanlış kaynak kümesinde
+skorlandı.
+
+| Yöntem | Recall@3 | MRR@3 | nDCG@3 | Yanlış kanıt oranı |
+| --- | ---: | ---: | ---: | ---: |
+| BGE-M3 dense | 0,6461 | 0,8235 | 0,6981 | 0,5882 |
+| BGE dense + reranker | 0,6431 | 0,7647 | 0,6885 | 0,5686 |
+| Qwen3-Embedding-4B dense | 0,6811 | 0,8824 | 0,7611 | 0,5294 |
+| Qwen dense + Qwen reranker | 0,6399 | 0,8137 | 0,7293 | 0,5098 |
+
+Qwen dense, BGE dense'e göre Recall@3'te `+0,0350`, MRR@3'te `+0,0589`
+artış ve yanlış kanıt oranında `-0,0588` fark gösterdi. Reranker iki modelde
+de kapsamı ve MRR'yi düşürdü; Qwen reranker ayrıca T4'te top-32 için yaklaşık
+9 saniye p95 sürdü. Karar: Qwen dense sonraki holdout ve instruction ablation
+adayıdır; hiçbir reranker runtime yoluna alınmaz.
+
 ## Kaynaklar
 
 - [BGE Reranker V2 M3 model kartı](https://huggingface.co/BAAI/bge-reranker-v2-m3)

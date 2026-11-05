@@ -7,6 +7,7 @@ the cross encoder loads.  The run exports candidate IDs only.
 """
 from __future__ import annotations
 
+import gc
 import json
 import os
 import re
@@ -32,6 +33,10 @@ TOKENS = re.compile(r"[a-zçğıöşü0-9]+", re.IGNORECASE)
 QUERY_INSTRUCTION = (
     "Given a Turkish high-school history exam question, retrieve textbook passages "
     "that directly support answering the question."
+)
+RERANK_INSTRUCTION = (
+    "Given a Turkish high-school history exam question, determine whether the textbook "
+    "passage directly supports answering the question."
 )
 
 
@@ -89,6 +94,8 @@ def _load_reranker(model_id: str, torch):
         device="cuda" if torch.cuda.is_available() else "cpu",
         model_kwargs={"torch_dtype": torch.float16} if torch.cuda.is_available() else {},
         max_length=MAX_LENGTH,
+        prompts={"history_evidence": RERANK_INSTRUCTION},
+        default_prompt_name="history_evidence",
     )
 
 
@@ -113,7 +120,9 @@ def main() -> None:
         [f"Instruct: {QUERY_INSTRUCTION}\nQuery: {item['query']}" for item in queries],
         batch_size=1, show_progress_bar=True, normalize_embeddings=True,
     )
+    embedding.cpu()
     del embedding
+    gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 

@@ -5,9 +5,12 @@ import argparse
 import json
 from pathlib import Path
 
-CALIBRATION_SCHEMA = "ogm-ayt-discovery-calibration-v1"
-RANKING_SCHEMA = "ogm-ayt-relation-retrieval-rankings-v1"
-SCHEMA = "ogm-ayt-relation-discovery-review-queue-v1"
+SCHEMA_PAIRS = {
+    ("ogm-ayt-discovery-calibration-v1", "ogm-ayt-relation-retrieval-rankings-v1"):
+        "ogm-ayt-relation-discovery-review-queue-v1",
+    ("ogm-ayt-atom-retrieval-audit-v1", "ogm-ayt-atom-retrieval-rankings-v1"):
+        "ogm-ayt-atom-retrieval-review-queue-v1",
+}
 METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
 
 
@@ -31,9 +34,8 @@ def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> d
         raise ValueError("Retrieval yöntem listesi geçersiz")
     if limit < len(methods):
         raise ValueError("Her retrieval yöntemi için dengeli inceleme alanı gerekli")
-    if (calibration.get("schema") != CALIBRATION_SCHEMA
-            or rankings.get("schema") != RANKING_SCHEMA
-            or corpus.get("schema") != "multi-history-rag-v1"):
+    queue_schema = SCHEMA_PAIRS.get((calibration.get("schema"), rankings.get("schema")))
+    if queue_schema is None or corpus.get("schema") != "multi-history-rag-v1":
         raise ValueError("Kalibrasyon, ranking ve corpus şemaları geçersiz")
     for key in ("source_checksum", "corpus_checksum"):
         if rankings.get(key) != calibration.get(key):
@@ -73,7 +75,7 @@ def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> d
         queue.append({"candidate_id": candidate_id, "topic": query["topic"],
                       "status": "teacher_agent_source_review_required", "suggestions": suggestions})
     return {
-        "schema": SCHEMA, "source_checksum": calibration["source_checksum"],
+        "schema": queue_schema, "source_checksum": calibration["source_checksum"],
         "corpus_checksum": calibration["corpus_checksum"], "proposals": queue,
         "ranking_methods": list(methods), "runtime_enabled": False, "qlora_enabled": False,
         "notice": "Blind private PDF-review queue. Retrieval method ranks are audit metadata, never evidence approval.",

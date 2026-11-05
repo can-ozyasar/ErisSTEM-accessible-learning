@@ -30,10 +30,10 @@ def _year_in_question_box(labels: list[tuple[int, tuple]], box: tuple | list) ->
     }
     return next(iter(matches)) if len(matches) == 1 else None
 
-def build(source: Path) -> dict:
+def build(source: Path, *, pages: range = PAGES, test: str = "Tarih-2", prefix: str = "ayt-soz-t2") -> dict:
     raw = source.read_bytes(); checksum = hashlib.sha256(raw).hexdigest(); rows=[]
     with pymupdf.open(stream=raw, filetype='pdf') as pdf:
-        for page_no in PAGES:
+        for page_no in pages:
             page = pdf[page_no-1]
             candidates = extract_page(page, page_no, checksum)
             labels=[]
@@ -49,14 +49,16 @@ def build(source: Path) -> dict:
                     year_status, extra_issues = 'review_required', ['exam_year_review_required']
                 else:
                     year_status, extra_issues = 'out_of_scope', ['outside_2022_2026_scope']
-                rows.append({'candidate_id':f'ayt-soz-t2:{checksum[:12]}:{page_no}:{q["number"]}:{len(rows)}',
+                rows.append({'candidate_id':f'{prefix}:{checksum[:12]}:{page_no}:{q["number"]}:{len(rows)}',
                   'source_kind':'official_exam_private','source_checksum':checksum,'page':page_no,'bbox':box,
-                  'test':'Tarih-2','exam_year':year,'year_status':year_status,
+                  'test':test,'exam_year':year,'year_status':year_status,
                   'issues': sorted(set(candidate['issues'] + extra_issues)),
                   'question':q})
-    return {'schema':'ayt-tarih2-candidates-v1','source_checksum':checksum,'page_allowlist':list(PAGES),
+    return {'schema':'ayt-tarih2-candidates-v1','source_checksum':checksum,'page_allowlist':list(pages),
       'candidate_count':len(rows),'candidates':rows,
       'notice':'Private teacher review only. Answers and solution pages are not parsed or exported.'}
 def main():
- p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--output',type=Path,required=True);a=p.parse_args();a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(build(a.source),ensure_ascii=False),encoding='utf-8')
+ p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--start-page',type=int,default=PAGES.start);p.add_argument('--end-page',type=int,default=PAGES.stop-1);p.add_argument('--test',default='Tarih-2');p.add_argument('--prefix',default='ayt-soz-t2');a=p.parse_args()
+ if a.start_page < 1 or a.end_page < a.start_page: raise ValueError('Sayfa aralığı geçersiz')
+ a.output.parent.mkdir(parents=True,exist_ok=True);a.output.write_text(json.dumps(build(a.source,pages=range(a.start_page,a.end_page+1),test=a.test,prefix=a.prefix),ensure_ascii=False),encoding='utf-8')
 if __name__=='__main__': main()

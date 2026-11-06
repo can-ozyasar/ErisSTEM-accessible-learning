@@ -69,7 +69,7 @@ def build(corpus: dict, source_root: Path, output: Path, *, limit: int | None = 
             '<label>PDF kesiti kontrol edildi <input class="crop" type="checkbox"></label>'
             '<label>Kalite kontrol edildi <input class="quality" type="checkbox"></label>'
             '<label>Birebir alıntı <textarea class="quote" rows="3"></textarea></label></section>')
-    rows_json = json.dumps(rows, ensure_ascii=False).replace("</", "<\\/")
+    rows_json = json.dumps(rows, ensure_ascii=True).replace("</", "<\\/")
     (output / "index.html").write_text(
         "<!doctype html><meta charset=utf-8><title>AYT grafik onay paketi</title>"
         "<style>body{font:16px system-ui;max-width:1200px;margin:2rem auto}section{border:1px solid #9fb3c8;padding:1rem;margin:1rem 0;border-radius:10px}img{max-width:100%;border:1px solid #bcccdc}label{display:block;margin:.6rem 0}textarea{display:block;width:100%;min-height:4rem}</style>"

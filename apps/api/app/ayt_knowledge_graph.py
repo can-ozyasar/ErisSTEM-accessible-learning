@@ -681,6 +681,24 @@ class SocraticTutorOrchestrator:
         return compact if len(compact) <= limit else compact[:limit].rsplit(" ", 1)[0] + "…"
 
     @staticmethod
+    def _extract_choice(learner_message: str) -> str | None:
+        """Extract only an explicit A–E choice, never infer correctness."""
+        compact = " ".join(learner_message.split())
+        if not compact:
+            return None
+        match = re.search(
+            r"(?:^|\s)(?:şık|cevap|seçim|tercihim)\s*[:：-]?\s*([A-E])(?:\s*ş(?:ı|i)kk(?:ı|i))?(?:\b|$)",
+            compact,
+            re.IGNORECASE,
+        )
+        if match:
+            return match.group(1).upper()
+        # A one-letter response is common for keyboard and screen-reader use.
+        if re.fullmatch(r"[A-E](?:\s*ş(?:ı|i)kk(?:ı|i))?", compact, re.IGNORECASE):
+            return compact[0].upper()
+        return None
+
+    @staticmethod
     def _next_stage(stage: DialogueStage, learner_message: str) -> DialogueStage:
         """Advance one bounded turn; a learner message unlocks the final check."""
         if stage == DialogueStage.GEREKCELI_ACIKLAMA:
@@ -713,6 +731,7 @@ class SocraticTutorOrchestrator:
         if current.question_id != question.id:
             raise ValueError("Diyalog başka soruya taşınamaz")
         response_stage = current.stage
+        selected_choice = self._extract_choice(learner_message) or current.selected_choice
         retrieval_started = time.monotonic()
         result = self.search.search(question, top_k=3)
         retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
@@ -722,6 +741,7 @@ class SocraticTutorOrchestrator:
             text = "Bu soru için öğretmen onaylı kaynak düğümü bulunamadı. " + self._safe_fallback(response_stage)
             next_state = current.model_copy(update={"learner_turns": current.learner_turns + 1,
                                                      "stage": self._next_stage(response_stage, learner_message),
+                                                     "selected_choice": selected_choice,
                                                      "source_ids": [], "retrieved_node_ids": [], "retrieved_edge_ids": []})
         else:
             stem = self._clip(question.stem, 900)
@@ -746,6 +766,7 @@ class SocraticTutorOrchestrator:
             next_state = current.model_copy(update={
                 "stage": self._next_stage(response_stage, learner_message),
                 "learner_turns": current.learner_turns + 1,
+                "selected_choice": selected_choice,
                 "retrieved_node_ids": list(dict.fromkeys(hit.node_id for hit in all_hits))[:12],
                 "retrieved_edge_ids": list(dict.fromkeys(edge for hit in all_hits for edge in hit.supporting_edge_ids))[:12],
                 "source_ids": list(dict.fromkeys(source for hit in all_hits for source in hit.source_ids))[:12],

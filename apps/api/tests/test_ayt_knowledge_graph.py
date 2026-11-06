@@ -235,6 +235,21 @@ def test_student_answer_stage_cannot_skip_without_learner_message(tmp_path: Path
     assert next_state.can_reveal_explanation is False
 
 
+def test_orchestrator_records_explicit_student_choice_without_evaluating_it(tmp_path: Path):
+    class QuestionLLM:
+        def generate(self, *_args, **_kwargs):
+            return "Bu seçeneği hangi kaynak ayrıntısıyla desteklersin?"
+
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), QuestionLLM(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    state = TutorDialogueState(session_id="session-1", question_id="q-1",
+                               stage=DialogueStage.OGRENCI_YANITI)
+    next_state, _text, _ = orchestrator.start(question(), state, learner_message="B şıkkı")
+    assert next_state.selected_choice == "B"
+    assert next_state.stage == DialogueStage.GEREKCELI_ACIKLAMA
+    assert next_state.can_reveal_explanation is False
+
+
 def test_final_stage_without_verified_text_is_returned_to_answer_gate(tmp_path: Path):
     class MustNotRun:
         def generate(self, *_args, **_kwargs):

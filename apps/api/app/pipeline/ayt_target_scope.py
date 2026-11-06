@@ -41,7 +41,7 @@ def _grade12_book(corpus: dict) -> dict:
     books = [
         book
         for book in corpus.get("books", [])
-        if book.get("grade") == 12 and book.get("source_name") == "inkilap-12-aday-eba.pdf"
+        if book.get("grade") == 12 and book.get("source_role", "primary_candidate") == "primary_candidate"
     ]
     if len(books) != 1:
         raise ValueError("Hedef 12. sınıf MEB kitabı corpus içinde tek olmalı")

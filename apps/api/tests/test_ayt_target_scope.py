@@ -16,6 +16,7 @@ def _corpus():
                 "source_name": "inkilap-12-aday-eba.pdf",
                 "source_checksum": "source",
                 "index_checksum": "index",
+                "source_role": "primary_candidate",
                 "index": {"sections": sections, "chunks": chunks},
             }
         ],

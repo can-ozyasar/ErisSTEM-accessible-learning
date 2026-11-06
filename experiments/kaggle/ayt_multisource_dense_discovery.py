@@ -14,7 +14,8 @@ def rrf(*rs,limit):
 inputs=list(ROOT.rglob('input.json'))
 if len(inputs)!=1: raise ValueError(f'Tek private girdi gerekli: {inputs}')
 data=json.loads(inputs[0].read_text())
-if data.get('schema')!='ayt-multisource-dense-discovery-v1' or FORBIDDEN & set(data) or data.get('runtime_enabled') or data.get('qlora_enabled'): raise ValueError('Answer-free discovery girdi sözleşmesi geçersiz')
+INPUT_SCHEMAS={'ayt-multisource-dense-discovery-v1','ayt-full-multisource-dense-discovery-v1'}
+if data.get('schema') not in INPUT_SCHEMAS or FORBIDDEN & set(data) or data.get('runtime_enabled') or data.get('qlora_enabled'): raise ValueError('Answer-free discovery girdi sözleşmesi geçersiz')
 subprocess.run([sys.executable,'-m','pip','install','-q','sentence-transformers>=5','rank-bm25'],check=True)
 import numpy as np, torch
 from rank_bm25 import BM25Okapi
@@ -24,4 +25,4 @@ model=SentenceTransformer(MODEL,device='cuda',model_kwargs={'torch_dtype':torch.
 vectors=model.encode(texts,batch_size=2,normalize_embeddings=True,show_progress_bar=True); rankings={}; timing=[]
 for q in queries:
  start=time.perf_counter(); lex=rank(bm.get_scores(tokens(q['query'])),docs); v=model.encode([f'Instruct: {INSTRUCTION}\nQuery: {q["query"]}'],normalize_embeddings=True,show_progress_bar=False)[0]; dense=rank(np.asarray(vectors)@np.asarray(v),docs); fusion=rrf(lex[:20],dense[:20],limit=20); timing.append((time.perf_counter()-start)*1000); rankings[q['id']]={'bm25':lex[:20],'qwen_dense_tr':dense[:20],'rrf':fusion}
-OUT.write_text(json.dumps({'schema':'official-ayt-multisource-dense-discovery-rankings-v1','corpus_checksum':data['corpus_checksum'],'source_bindings':data['source_bindings'],'embedding_model':MODEL,'instruction':INSTRUCTION,'document_count':len(docs),'query_count':len(queries),'rankings':rankings,'latencies_ms':timing,'gpu':torch.cuda.get_device_name(0),'answer_key_accessed':False,'worked_explanation_accessed':False,'runtime_enabled':False,'qlora_enabled':False,'notice':'Candidate discovery only; every ranking requires separate teacher-agent PDF crop review.'},ensure_ascii=False,indent=2))
+OUT.write_text(json.dumps({'schema':'official-ayt-full-multisource-dense-discovery-rankings-v1' if data['schema']=='ayt-full-multisource-dense-discovery-v1' else 'official-ayt-multisource-dense-discovery-rankings-v1','corpus_checksum':data['corpus_checksum'],'source_bindings':data['source_bindings'],'embedding_model':MODEL,'instruction':INSTRUCTION,'document_count':len(docs),'query_count':len(queries),'rankings':rankings,'latencies_ms':timing,'gpu':torch.cuda.get_device_name(0),'answer_key_accessed':False,'worked_explanation_accessed':False,'runtime_enabled':False,'qlora_enabled':False,'notice':'Candidate discovery only; every ranking requires separate checksum-bound PDF crop review.'},ensure_ascii=False,indent=2))

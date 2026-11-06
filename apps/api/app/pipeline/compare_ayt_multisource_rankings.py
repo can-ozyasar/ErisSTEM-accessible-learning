@@ -16,14 +16,19 @@ def _top_overlap(left: list[str], right: list[str], k: int) -> float:
     return len(a & b) / max(1, len(a | b))
 
 
-def compare(discovery: dict, before: dict, after: dict, *, k: int = 20) -> dict:
+def compare(discovery: dict, before: dict, after: dict, *, k: int = 20, after_discovery: dict | None = None) -> dict:
     if k < 1:
         raise ValueError("k en az bir olmalı")
     before_report = validate(discovery, before)
-    after_report = validate(discovery, after)
+    after_discovery = after_discovery or discovery
+    after_report = validate(after_discovery, after)
     if before.get("embedding_model") != after.get("embedding_model"):
         raise ValueError("Karşılaştırılan embedding modelleri eşleşmiyor")
     rows = []
+    before_query_ids = {row["id"] for row in discovery["queries"]}
+    after_query_ids = {row["id"] for row in after_discovery["queries"]}
+    if before_query_ids != after_query_ids:
+        raise ValueError("Karşılaştırılan discovery sorguları eşleşmiyor")
     for query_id in discovery["queries"]:
         query_id = query_id["id"]
         b_row, a_row = before["rankings"][query_id], after["rankings"][query_id]
@@ -33,8 +38,8 @@ def compare(discovery: dict, before: dict, after: dict, *, k: int = 20) -> dict:
             "changed_at_k": {method: len(set(b_row[method][:k]) ^ set(a_row[method][:k])) // 2 for method in METHODS},
         })
 
-    def source_counts(rankings: dict) -> dict[str, int]:
-        by_id = {row["id"]: row for row in discovery["documents"]}
+    def source_counts(rankings: dict, manifest: dict) -> dict[str, int]:
+        by_id = {row["id"]: row for row in manifest["documents"]}
         return dict(Counter(
             by_id[document_id]["source_name"]
             for row in rankings["rankings"].values()
@@ -48,8 +53,8 @@ def compare(discovery: dict, before: dict, after: dict, *, k: int = 20) -> dict:
         "top_k": k,
         "before_validation": {"document_count": before_report["document_count"], "query_count": before_report["query_count"]},
         "after_validation": {"document_count": after_report["document_count"], "query_count": after_report["query_count"]},
-        "source_counts_before": source_counts(before),
-        "source_counts_after": source_counts(after),
+        "source_counts_before": source_counts(before, discovery),
+        "source_counts_after": source_counts(after, after_discovery),
         "queries": rows,
         "answer_key_accessed": False,
         "worked_explanation_accessed": False,
@@ -62,13 +67,15 @@ def compare(discovery: dict, before: dict, after: dict, *, k: int = 20) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--discovery", type=Path, required=True)
+    parser.add_argument("--after-discovery", type=Path)
     parser.add_argument("--before", type=Path, required=True)
     parser.add_argument("--after", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--k", type=int, default=20)
     args = parser.parse_args()
     load = lambda path: json.loads(path.read_text(encoding="utf-8"))
-    result = compare(load(args.discovery), load(args.before), load(args.after), k=args.k)
+    result = compare(load(args.discovery), load(args.before), load(args.after), k=args.k,
+                     after_discovery=load(args.after_discovery) if args.after_discovery else None)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"queries": len(result["queries"]), "k": result["top_k"]}, ensure_ascii=False))

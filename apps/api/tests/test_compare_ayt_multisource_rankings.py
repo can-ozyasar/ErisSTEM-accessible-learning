@@ -30,3 +30,12 @@ def test_reports_query_overlap_and_source_counts():
     assert len(result["queries"]) == 10
     assert result["queries"][0]["overlap_at_k"]["qwen_dense_tr"] == 0.6667
     assert result["runtime_enabled"] is False
+
+
+def test_compares_different_corpus_checksums_with_separate_manifest():
+    discovery, before, after = _data()
+    after_discovery = deepcopy(discovery)
+    after_discovery["corpus_checksum"] = "corrected-corpus"
+    after["corpus_checksum"] = "corrected-corpus"
+    result = compare(discovery, before, after, k=5, after_discovery=after_discovery)
+    assert result["after_validation"]["document_count"] == result["before_validation"]["document_count"]

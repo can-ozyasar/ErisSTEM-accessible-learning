@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -81,3 +82,11 @@ def test_rejects_quote_outside_candidate_crop():
     audit["records"][0]["relation_edges"][0]["quote"] = "kaynakta olmayan ifade"
     with pytest.raises(ValueError, match="birebir"):
         build(queue, audit)
+
+
+def test_accepts_targeted_expansion_queue_schema():
+    queue = deepcopy(_queue())
+    queue["schema"] = "official-ayt-full-targeted-expansion-review-queue-v1"
+    audit = _audit(queue)
+    result = build(queue, audit)
+    assert result["question_count"] == 10

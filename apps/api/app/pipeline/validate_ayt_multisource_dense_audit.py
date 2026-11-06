@@ -10,6 +10,11 @@ DIAGNOSES = {"none", "extraction_gap", "retrieval_miss", "bundle_composition_mis
 QUEUE_SCHEMAS = {
     "official-ayt-multisource-dense-review-queue-v1",
     "official-ayt-full-multisource-dense-review-queue-v1",
+    "official-ayt-full-targeted-expansion-review-queue-v1",
+}
+AUDIT_SCHEMAS = {
+    "teacher-official-ayt-multisource-dense-audit-v1",
+    "teacher-official-ayt-full-targeted-expansion-audit-v1",
 }
 
 
@@ -27,7 +32,7 @@ def _assert_false(payload: dict) -> None:
 def build(queue: dict, audit: dict) -> dict:
     if queue.get("schema") not in QUEUE_SCHEMAS:
         raise ValueError("Çok kaynaklı PDF kesiti inceleme kuyruğu gerekli")
-    if audit.get("schema") != "teacher-official-ayt-multisource-dense-audit-v1":
+    if audit.get("schema") not in AUDIT_SCHEMAS:
         raise ValueError("Çok kaynaklı tarih öğretmeni ajan denetimi gerekli")
     _assert_false(queue)
     _assert_false(audit)

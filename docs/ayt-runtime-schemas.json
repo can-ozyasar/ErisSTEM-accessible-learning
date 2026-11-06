@@ -592,19 +592,6 @@
         "maxItems": 5,
         "title": "Choice Evidence",
         "type": "array"
-      },
-      "answer_key_ref": {
-        "anyOf": [
-          {
-            "maxLength": 120,
-            "type": "string"
-          },
-          {
-            "type": "null"
-          }
-        ],
-        "default": null,
-        "title": "Answer Key Ref"
       }
     },
     "required": [

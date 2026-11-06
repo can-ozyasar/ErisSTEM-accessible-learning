@@ -54,6 +54,15 @@ def test_graph_validates_and_serializes_example():
     assert payload["dialogue_state"]["can_reveal_explanation"] is False
 
 
+def test_runtime_question_schema_excludes_answer_key():
+    assert "answer_key_ref" not in QuestionItem.model_json_schema()["properties"]
+    with pytest.raises(ValueError):
+        QuestionItem(id="q-key", stem="Bir sorunun kökünü incele.",
+                     choices=[QuestionChoice(label="A", text="Bir"),
+                              QuestionChoice(label="B", text="İki")],
+                     answer_key_ref="private")
+
+
 def test_versioned_json_schema_artifact_covers_runtime_models():
     schema_path = Path(__file__).parents[3] / "docs" / "ayt-runtime-schemas.json"
     payload = json.loads(schema_path.read_text(encoding="utf-8"))

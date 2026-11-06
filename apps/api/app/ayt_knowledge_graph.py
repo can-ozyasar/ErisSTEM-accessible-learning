@@ -17,7 +17,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Protocol
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr, model_validator
 
 
 class StrictModel(BaseModel):
@@ -301,9 +301,14 @@ class QuestionItem(StrictModel):
     topic: str = Field(default="", max_length=180)
     question_terms: list[str] = Field(default_factory=list, max_length=40)
     choice_evidence: list[ChoiceEvidenceLink] = Field(default_factory=list, max_length=5)
-    # Gold answer is deliberately absent from the runtime object.  Private
-    # evaluation can store it outside this model.
-    answer_key_ref: str | None = Field(default=None, max_length=120)
+    # Gold answers are deliberately absent from the runtime schema.  The
+    # compatibility property below lets older boundary code ask whether a
+    # private key was attached, while extra input is rejected by StrictModel.
+    _answer_key_ref: str | None = PrivateAttr(default=None)
+
+    @property
+    def answer_key_ref(self) -> None:
+        return None
 
     @model_validator(mode="after")
     def unique_choices_and_links(self):

@@ -539,32 +539,67 @@ class SocraticTutorOrchestrator:
                 lines.append(f"Şık {hit.choice_label}: düğüm={hit.node_id}; kaynak={','.join(hit.source_ids)}; skor={hit.score}")
         return "\n".join(lines) or "Onaylı kanıt yok."
 
+    @staticmethod
+    def _next_stage(stage: DialogueStage, learner_message: str) -> DialogueStage:
+        """Advance one bounded turn; a learner message unlocks the final check."""
+        if stage == DialogueStage.GEREKCELI_ACIKLAMA:
+            return stage
+        if stage == DialogueStage.OGRENCI_YANITI and learner_message.strip():
+            return DialogueStage.GEREKCELI_ACIKLAMA
+        order = list(DialogueStage)
+        return order[min(order.index(stage) + 1, len(order) - 1)]
+
+    @staticmethod
+    def _safe_fallback(stage: DialogueStage) -> str:
+        prompts = {
+            DialogueStage.SORU_ANALIZI: "Soru kökünün senden istediği bilgiyi kendi sözlerinle anlatır mısın?",
+            DialogueStage.HATIRLAMAYI_ORTAYA_CIKARMA: "Bu konuyla ilgili aklına gelen ilk kişi, olay veya tarihi söyleyebilir misin?",
+            DialogueStage.KANITLA_BAG_KURMA: "Kaynakta geçen hangi ayrıntı sorudaki ifadeyle bağlantılı görünüyor?",
+            DialogueStage.SIK_ELEMESI: "Şıklardan birini kaynakta geçen bilgiyle karşılaştırıp elemek ister misin?",
+            DialogueStage.OGRENCI_YANITI: "Bir şık seçip gerekçeni kendi cümlenle söyler misin?",
+            DialogueStage.GEREKCELI_ACIKLAMA: "Yanıtını kaynakta geçen kanıtla karşılaştırıp aradaki bağı kendi cümlenle açıklar mısın?",
+        }
+        return prompts[stage]
+
     def start(self, question: QuestionItem, state: TutorDialogueState | None = None,
-              learner_message: str = "") -> tuple[TutorDialogueState, str, list[Path]]:
+              learner_message: str = "", verified_explanation: str | None = None) -> tuple[TutorDialogueState, str, list[Path]]:
         current = state or TutorDialogueState(session_id=hashlib.sha256(question.id.encode()).hexdigest()[:16], question_id=question.id)
         if current.question_id != question.id:
             raise ValueError("Diyalog başka soruya taşınamaz")
+        response_stage = current.stage
         result = self.search.search(question, top_k=3)
         all_hits = [hit for chain in result.chains for hit in chain.hits]
         if not all_hits:
-            text = "Bu soru için öğretmen onaylı kaynak düğümü bulunamadı. Önce sorunun senden ne istediğini kendi sözlerinle anlatır mısın?"
+            text = "Bu soru için öğretmen onaylı kaynak düğümü bulunamadı. " + self._safe_fallback(response_stage)
             next_state = current.model_copy(update={"learner_turns": current.learner_turns + 1,
+                                                     "stage": self._next_stage(response_stage, learner_message),
                                                      "source_ids": [], "retrieved_node_ids": [], "retrieved_edge_ids": []})
         else:
-            user_prompt = (f"Aşama: {current.stage.value}\nSoru: {question.stem}\n"
+            user_prompt = (f"Aşama: {response_stage.value}\nSoru: {question.stem}\n"
                            f"Şıklar: " + " | ".join(f"{c.label}: {c.text}" for c in question.choices)
                            + f"\nÖğrenci mesajı: {learner_message or 'Henüz yanıt vermedi.'}\n"
                            + "Kanıt bağlamı:\n" + self._context(result))
-            text = self.llm.generate(self._system_prompt(), user_prompt, max_tokens=72).strip()
-            if not text or (current.stage != DialogueStage.GEREKCELI_ACIKLAMA and _answer_leak(text)):
-                text = "Kaynakta geçen ayrıntılardan hangisi soru kökündeki isteği açıklıyor?"
+            # The final explanation is a server-side verified value.  It never
+            # goes through the model, which has no answer key or private key.
+            if response_stage == DialogueStage.GEREKCELI_ACIKLAMA:
+                text = (verified_explanation or self._safe_fallback(response_stage)).strip()
+            else:
+                try:
+                    text = self.llm.generate(self._system_prompt(), user_prompt, max_tokens=72).strip()
+                except (OSError, RuntimeError, ValueError):  # local failure must not break tutoring
+                    text = ""
+                if not text or _answer_leak(text):
+                    text = self._safe_fallback(response_stage)
             next_state = current.model_copy(update={
+                "stage": self._next_stage(response_stage, learner_message),
                 "learner_turns": current.learner_turns + 1,
                 "retrieved_node_ids": list(dict.fromkeys(hit.node_id for hit in all_hits))[:12],
                 "retrieved_edge_ids": list(dict.fromkeys(edge for hit in all_hits for edge in hit.supporting_edge_ids))[:12],
                 "source_ids": list(dict.fromkeys(source for hit in all_hits for source in hit.source_ids))[:12],
             })
         audio_paths = [self.audio_cache.get_or_create(chunk, self.tts) for chunk in sentence_chunks(text)]
+        if response_stage == DialogueStage.GEREKCELI_ACIKLAMA:
+            next_state = next_state.model_copy(update={"can_reveal_explanation": True})
         return next_state, text, audio_paths
 
 

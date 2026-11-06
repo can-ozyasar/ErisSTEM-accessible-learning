@@ -5,6 +5,7 @@ import pytest
 
 from app.ayt_knowledge_graph import (
     AudioCache,
+    DialogueStage,
     Edge,
     HistoricalNode,
     KnowledgeGraph,
@@ -118,6 +119,34 @@ def test_orchestrator_uses_content_addressed_audio_cache(tmp_path: Path):
     assert [path.name for path in audio] == [path.name for path in audio_again]
     prewarmed = orchestrator.audio_cache.prewarm(["Soru hazır.", "Soru hazır."], FakeTTS())
     assert list(prewarmed) == ["Soru hazır."]
+    assert next_state.stage == DialogueStage.HATIRLAMAYI_ORTAYA_CIKARMA
+
+
+def test_orchestrator_falls_back_when_local_llm_is_unavailable(tmp_path: Path):
+    class BrokenLLM:
+        def generate(self, *_args, **_kwargs):
+            raise RuntimeError("service down")
+
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), BrokenLLM(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    _, text, _ = orchestrator.start(question())
+    assert text.endswith("?")
+    assert "cevap" not in text.casefold()
+
+
+def test_final_stage_uses_only_verified_server_text(tmp_path: Path):
+    class MustNotRun:
+        def generate(self, *_args, **_kwargs):
+            raise AssertionError("final aşamada LLM çağrılmamalı")
+
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), MustNotRun(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    state = TutorDialogueState(session_id="session-1", question_id="q-1",
+                               stage=DialogueStage.GEREKCELI_ACIKLAMA)
+    next_state, text, _ = orchestrator.start(question(), state,
+                                              verified_explanation="Doğrulanmış açıklama.")
+    assert text == "Doğrulanmış açıklama."
+    assert next_state.can_reveal_explanation
 
 
 def test_local_llm_adapter_sends_bounded_prompt_and_parses_text(monkeypatch):

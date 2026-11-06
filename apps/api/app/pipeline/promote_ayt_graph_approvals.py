@@ -65,7 +65,9 @@ def promote(corpus: dict, manifest: dict) -> dict:
         raise ValueError("Corpus şeması geçersiz")
     if manifest.get("schema") != SCHEMA:
         raise ValueError("Öğretmen onay manifesti şeması geçersiz")
-    if not manifest.get("is_human_teacher_approval") or manifest.get("reviewer_kind") != "human_history_teacher":
+    if (not manifest.get("is_human_teacher_approval")
+            or manifest.get("reviewer_kind") != "human_history_teacher"
+            or not str(manifest.get("reviewer_id", "")).strip()):
         raise ValueError("Runtime grafi için insan tarih öğretmeni onayı gerekli")
     if manifest.get("corpus_checksum") != corpus.get("corpus_checksum"):
         raise ValueError("Corpus checksum eşleşmiyor")
@@ -106,6 +108,8 @@ def promote(corpus: dict, manifest: dict) -> dict:
             raise ValueError("Onay alıntısı checksum eşleşmiyor")
         if approval.get("pdf_crop_checked") is not True or approval.get("quality_checked") is not True:
             raise ValueError("PDF kırpımı ve kalite kontrolü zorunlu")
+        if approval.get("page") != chunk.get("page") or approval.get("bbox") != chunk.get("bbox"):
+            raise ValueError("PDF sayfa veya koordinatları corpus ile eşleşmiyor")
         quality = chunk.get("quality", {})
         if any(bool(quality.get(name)) for name in ("visual_or_caption_risk", "instruction_risk", "ocr_fragment_risk")):
             raise ValueError("Riskli parça runtime grafiğe alınamaz")

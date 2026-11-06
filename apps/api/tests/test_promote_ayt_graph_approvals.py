@@ -15,6 +15,7 @@ def corpus():
             "index": {"sections": [{"id": "1.1", "title": "Millî Mücadele"}], "chunks": [{
                 "id": "c1", "section_id": "1.1", "section_title": "Millî Mücadele",
                 "text": "1920 yılında TBMM açıldı ve ulusal egemenlik güçlendi.",
+                "page": 28, "bbox": [10.0, 20.0, 300.0, 100.0],
                 "quality": {"quality_checked": False, "visual_or_caption_risk": False,
                             "instruction_risk": False, "ocr_fragment_risk": False},
                 "pre_review": {"decision": "review_for_approval"},
@@ -32,6 +33,7 @@ def manifest(quote="1920 yılında TBMM açıldı"):
         "answer_key_accessed": False, "worked_explanation_accessed": False, "qlora_enabled": False,
         "approvals": [{
             "source_checksum": "abcdef0123456789abcdef0123456789", "chunk_id": "c1",
+            "page": 28, "bbox": [10.0, 20.0, 300.0, 100.0],
             "decision": "approved_for_runtime", "quote": quote,
             "quote_sha256": hashlib.sha256(" ".join(quote.split()).casefold().encode()).hexdigest(),
             "pdf_crop_checked": True, "quality_checked": True,
@@ -65,7 +67,7 @@ def test_quote_mismatch_cannot_promote_chunk():
 def test_template_contains_geometry_but_cannot_be_promoted_as_is():
     value = build_template(corpus())
     assert value["schema"] == "ayt-teacher-graph-approval-v1"
-    assert value["approvals"][0]["page"] is None
+    assert value["approvals"][0]["page"] == 28
     assert value["approvals"][0]["decision"] == "pending"
-    with pytest.raises(ValueError, match="approved_for_runtime"):
+    with pytest.raises(ValueError, match="insan"):
         promote(corpus(), value)

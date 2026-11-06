@@ -706,7 +706,7 @@ class SocraticTutorOrchestrator:
                 except (OSError, RuntimeError, ValueError):  # local failure must not break tutoring
                     text = ""
                 llm_ms = int((time.monotonic() - llm_started) * 1000)
-                if not text or _answer_leak(text):
+                if not text or not _safe_early_response(text):
                     text = self._safe_fallback(response_stage)
             next_state = current.model_copy(update={
                 "stage": self._next_stage(response_stage, learner_message),
@@ -716,6 +716,7 @@ class SocraticTutorOrchestrator:
                 "source_ids": list(dict.fromkeys(source for hit in all_hits for source in hit.source_ids))[:12],
             })
         tts_started = time.monotonic()
+        text = self._clip(text, 600)
         audio_paths = [self.audio_cache.get_or_create(chunk, self.tts) for chunk in sentence_chunks(text)]
         tts_ms = int((time.monotonic() - tts_started) * 1000)
         if response_stage == DialogueStage.GEREKCELI_ACIKLAMA:
@@ -732,6 +733,11 @@ class SocraticTutorOrchestrator:
 
 def _answer_leak(text: str) -> bool:
     return bool(re.search(r"(?:doğru cevap|doğru şık|cevap\s*[:：]|şık\s*[A-E]\b|[A-E]\s*şıkkı)", text, re.IGNORECASE))
+
+
+def _safe_early_response(text: str) -> bool:
+    compact = " ".join(text.split())
+    return bool(compact) and compact.endswith("?") and compact.count("?") == 1 and not _answer_leak(compact)
 
 
 def example_graph_payload() -> dict[str, Any]:

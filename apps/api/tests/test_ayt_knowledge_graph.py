@@ -168,6 +168,17 @@ def test_orchestrator_falls_back_when_local_llm_is_unavailable(tmp_path: Path):
     assert "cevap" not in text.casefold()
 
 
+def test_orchestrator_rejects_non_question_early_model_text(tmp_path: Path):
+    class StatementLLM:
+        def generate(self, *_args, **_kwargs):
+            return "Bu bilgi kaynakta açıklanıyor."
+
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), StatementLLM(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    _, text, _ = orchestrator.start(question())
+    assert text.endswith("?")
+
+
 def test_final_stage_uses_only_verified_server_text(tmp_path: Path):
     class MustNotRun:
         def generate(self, *_args, **_kwargs):

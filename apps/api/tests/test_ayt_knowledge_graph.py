@@ -186,6 +186,29 @@ def test_local_llm_adapter_sends_bounded_prompt_and_parses_text(monkeypatch):
     assert captured["timeout"] == 8
 
 
+def test_local_llm_adapter_bounds_service_payload(monkeypatch):
+    captured = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _limit):
+            return b'{"text":"Kisa soru?"}'
+
+    def fake_urlopen(request, timeout):
+        captured["size"] = len(request.data)
+        return Response()
+
+    monkeypatch.setattr("app.ayt_local_runtime.urlopen", fake_urlopen)
+    LocalHTTPLLM("http://tutor-llm:8001/generate").generate("kural " * 2000,
+                                                               "kanıt " * 3000, max_tokens=72)
+    assert captured["size"] < 9000
+
+
 def test_local_llm_requires_http_endpoint():
     with pytest.raises(ValueError):
         LocalHTTPLLM("https://hosted.example/generate")

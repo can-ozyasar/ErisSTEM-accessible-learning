@@ -37,7 +37,12 @@ class LocalHTTPLLM(LocalLLM):
             raise ValueError("max_tokens 1 ile 96 arasında olmalı")
         # The model container accepts one bounded prompt and has no source
         # mounts.  Delimit the two parts so system rules remain unambiguous.
-        prompt = f"[SİSTEM]\n{system_prompt}\n[/SİSTEM]\n[KULLANICI]\n{user_prompt}\n[/KULLANICI]"
+        # tutor-llm deliberately caps requests at 6000 chars.  Keep the
+        # beginning of each bounded section so a malformed long question
+        # cannot turn into a remote retry or a service-side 422.
+        system = " ".join(system_prompt.split())[:1800]
+        user = " ".join(user_prompt.split())[:4000]
+        prompt = f"[SİSTEM]\n{system}\n[/SİSTEM]\n[KULLANICI]\n{user}\n[/KULLANICI]"
         payload = {"prompt": prompt, "max_tokens": max_tokens, "temperature": 0.2,
                    "response_format": "text"}
         request = Request(self.endpoint, data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),

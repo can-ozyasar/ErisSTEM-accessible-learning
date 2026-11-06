@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import math
 import re
+import threading
 from collections import defaultdict, deque
 from enum import Enum
 from pathlib import Path
@@ -488,6 +489,7 @@ class AudioCache:
     def __init__(self, root: Path, voice_version: str):
         self.root = root
         self.voice_version = voice_version
+        self._locks = tuple(threading.Lock() for _ in range(64))
 
     def key(self, text: str) -> str:
         normalized = " ".join(text.split())
@@ -498,13 +500,15 @@ class AudioCache:
 
     def get_or_create(self, text: str, synthesizer: TTSSynthesizer) -> Path:
         target = self.path_for(text)
-        if not target.is_file():
-            target.parent.mkdir(parents=True, exist_ok=True)
-            # A crashed TTS process must never leave a half-written WAV that
-            # later requests mistake for a valid cache hit.
-            temporary = target.with_suffix(target.suffix + ".tmp")
-            synthesizer.synthesize(text, output_path=temporary)
-            temporary.replace(target)
+        lock = self._locks[int(self.key(text)[:8], 16) % len(self._locks)]
+        with lock:
+            if not target.is_file():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                # A crashed TTS process must never leave a half-written WAV
+                # that later requests mistake for a valid cache hit.
+                temporary = target.with_suffix(target.suffix + ".tmp")
+                synthesizer.synthesize(text, output_path=temporary)
+                temporary.replace(target)
         return target
 
     def prewarm(self, texts: list[str], synthesizer: TTSSynthesizer) -> dict[str, Path]:
@@ -576,6 +580,11 @@ class SocraticTutorOrchestrator:
         return "\n".join(lines) or "Onaylı kanıt yok."
 
     @staticmethod
+    def _clip(value: str, limit: int) -> str:
+        compact = " ".join(value.split())
+        return compact if len(compact) <= limit else compact[:limit].rsplit(" ", 1)[0] + "…"
+
+    @staticmethod
     def _next_stage(stage: DialogueStage, learner_message: str) -> DialogueStage:
         """Advance one bounded turn; a learner message unlocks the final check."""
         if stage == DialogueStage.GEREKCELI_ACIKLAMA:
@@ -611,10 +620,12 @@ class SocraticTutorOrchestrator:
                                                      "stage": self._next_stage(response_stage, learner_message),
                                                      "source_ids": [], "retrieved_node_ids": [], "retrieved_edge_ids": []})
         else:
-            user_prompt = (f"Aşama: {response_stage.value}\nSoru: {question.stem}\n"
-                           f"Şıklar: " + " | ".join(f"{c.label}: {c.text}" for c in question.choices)
-                           + f"\nÖğrenci mesajı: {learner_message or 'Henüz yanıt vermedi.'}\n"
-                           + "Kanıt bağlamı:\n" + self._context(result))
+            stem = self._clip(question.stem, 900)
+            choices = " | ".join(f"{c.label}: {self._clip(c.text, 240)}" for c in question.choices)
+            user_prompt = (f"Aşama: {response_stage.value}\nSoru: {stem}\n"
+                           f"Şıklar: {choices}\n"
+                           f"Öğrenci mesajı: {self._clip(learner_message or 'Henüz yanıt vermedi.', 300)}\n"
+                           + "Kanıt bağlamı:\n" + self._clip(self._context(result), 3200))
             # The final explanation is a server-side verified value.  It never
             # goes through the model, which has no answer key or private key.
             if response_stage == DialogueStage.GEREKCELI_ACIKLAMA:

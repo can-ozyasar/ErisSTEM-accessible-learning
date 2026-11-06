@@ -269,6 +269,13 @@ def _atom_candidate(text: str, bbox: list[float], page_height: float) -> bool:
     # document-type classification; the original text and coordinates remain
     # in the atom for crop review.
     classification_text = re.sub(r"^\s*[•·▪‣]\s*", "", text)
+    # Some tagged PDFs emit a chapter heading and its printed section number
+    # as one long uppercase block.  It is not an evidence atom even though it
+    # passes the short-text threshold.  Keep real facts that happen to mention
+    # a section title by requiring the structural pattern plus absence of a
+    # sentence predicate.
+    if _structural_heading_atom(classification_text):
+        return False
     if EXCLUDE.match(classification_text) or classification_text.startswith("(") or ACTIVITY.search(classification_text):
         return False
     # Repeated short labels are page furniture, not a historical fact.  This
@@ -280,6 +287,25 @@ def _atom_candidate(text: str, bbox: list[float], page_height: float) -> bool:
     if text.count("?") or text.count("_") > 2 or text.count("...") > 1:
         return False
     return len(re.findall(r"\b(?:Kaynak|Görsel|Tablo)\s+[A-Z0-9]", text)) <= 1
+
+
+def _structural_heading_atom(text: str) -> bool:
+    """Identify heading-only PDF blocks that leaked past compact heading rules."""
+    words = terms(text)
+    if not words or len(words) > 24:
+        return False
+    has_sentence_signal = bool(re.search(
+        r"(?:sonucunda|nedeniyle|sağladı|oluşturdu|kuruldu|değişti|etkiledi|olmuştur|edilmiştir)",
+        text, re.IGNORECASE,
+    ))
+    if has_sentence_signal:
+        return False
+    stripped = text.strip()
+    letters = "".join(char for char in stripped if char.isalpha())
+    uppercase = bool(letters) and sum(char.isupper() for char in letters) / len(letters) >= .78
+    numbered = bool(re.search(r"\b\d+\.\d+\.?\s*$", stripped))
+    unit_prefix = bool(re.match(r"^\d+\s*Ünite\s*[—-]", stripped, re.IGNORECASE))
+    return (uppercase and len(words) >= 5) or numbered or unit_prefix
 
 
 def _heading(text: str, layout: dict) -> bool:

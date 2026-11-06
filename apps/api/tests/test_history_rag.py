@@ -129,3 +129,10 @@ def test_atom_rejects_repeated_page_furniture():
     from app.history_rag import _atom_candidate
 
     assert not _atom_candidate("TYT-AYT TYT-AYT TYT-AYT", [36, 120, 220, 140], 780)
+
+
+def test_atom_rejects_long_uppercase_section_heading():
+    from app.history_rag import _atom_candidate
+
+    heading = "TÜRKISTAN’DAN TÜRKIYE’YE UZANAN SÜREÇTE MEYDANA GELEN ÖNEMLI ASKERÎ MÜCADELELER 1.1."
+    assert not _atom_candidate(heading, [40, 120, 480, 170], 780)

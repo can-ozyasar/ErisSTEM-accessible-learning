@@ -130,8 +130,11 @@ def build(pool: dict, corpus: dict, *, candidate_limit: int = 12, first_stage_li
     section_ids = set(pool.get("candidate_section_ids", []))
     if len(section_ids) != 6:
         raise ValueError("Altı hedef bölüm gerekli")
+    # Older corpus manifests did not carry source_role on textbook books.
+    # Treat the single non-supplementary grade-12 book as primary while
+    # keeping explicit supplementary candidates out of the runtime queue.
     books = [book for book in corpus.get("books", []) if book.get("grade") == 12
-             and book.get("source_role") == "primary_candidate"]
+             and book.get("source_role") != "supplementary_candidate"]
     if len(books) != 1:
         raise ValueError("Tek, doğrulanabilir 12. sınıf birincil kaynak gerekli")
     book = books[0]

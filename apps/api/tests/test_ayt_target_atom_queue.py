@@ -40,3 +40,10 @@ def test_atom_context_queue_fails_closed_for_checksum_mismatch():
         assert "checksum" in str(error)
     else:
         raise AssertionError("mismatched corpus must fail closed")
+
+
+def test_atom_context_queue_accepts_legacy_textbook_without_source_role():
+    pool, corpus = _inputs()
+    corpus["books"][0].pop("source_role")
+    queue = build(pool, corpus, candidate_limit=2, first_stage_limit=2)
+    assert queue["source_binding"]["source_name"] == "inkilap.pdf"

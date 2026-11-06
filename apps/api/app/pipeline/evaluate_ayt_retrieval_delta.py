@@ -21,13 +21,18 @@ def _rows(payload: dict) -> list[dict]:
 
 
 def _summary(rows: list[dict]) -> dict:
-    assessments = Counter(row.get("assessment") for row in rows)
+    assessments = Counter(_assessment(row) for row in rows)
     diagnoses = Counter(row.get("failure_diagnosis") for row in rows)
     return {
         "query_count": len(rows), "support_count": sum(assessments[item] for item in SUPPORT),
         "support_rate": round(sum(assessments[item] for item in SUPPORT) / len(rows), 4),
         "assessment_counts": dict(sorted(assessments.items())), "failure_diagnosis_counts": dict(sorted(diagnoses.items())),
     }
+
+
+def _assessment(row: dict) -> str | None:
+    """Accept the common review field while retaining old audit compatibility."""
+    return row.get("decision", row.get("assessment"))
 
 
 def build(baseline: dict, candidate: dict) -> dict:
@@ -43,8 +48,8 @@ def build(baseline: dict, candidate: dict) -> dict:
     base, dense = _summary(base_rows), _summary(candidate_rows)
     changes = Counter()
     for candidate_id, baseline_row in by_base.items():
-        before = baseline_row.get("assessment") in SUPPORT
-        after = by_candidate[candidate_id].get("assessment") in SUPPORT
+        before = _assessment(baseline_row) in SUPPORT
+        after = _assessment(by_candidate[candidate_id]) in SUPPORT
         changes["improved" if not before and after else "regressed" if before and not after else "unchanged"] += 1
     return {
         "schema": "ayt-retrieval-agent-audit-delta-v1", "baseline": base, "candidate": dense,

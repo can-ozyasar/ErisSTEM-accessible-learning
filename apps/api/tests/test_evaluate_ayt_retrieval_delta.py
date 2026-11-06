@@ -15,3 +15,12 @@ def test_accepts_only_strictly_improved_agent_crop_audit_without_regression():
 def test_rejects_candidate_that_loses_prior_supported_evidence():
     result = build(_audit({"a": "direct"}), _audit({"a": "wrong"}))
     assert result["accepted_for_next_review_stage"] is False
+
+
+def test_accepts_the_decision_field_used_by_pdf_crop_audits():
+    baseline = _audit({"a": "wrong"})
+    candidate = _audit({"a": "direct"})
+    for payload in (baseline, candidate):
+        for row in payload["records"]:
+            row["decision"] = row.pop("assessment")
+    assert build(baseline, candidate)["delta"]["support_count"] == 1

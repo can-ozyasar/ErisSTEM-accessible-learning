@@ -20,6 +20,12 @@ services:
       # Set only with the gpu profile. Without this endpoint the API uses its
       # answer-key-isolated deterministic coaching fallback.
       LOCAL_TUTOR_LLM_URL: ${LOCAL_TUTOR_LLM_URL:-}
+      # Optional AYT graph runtime. Empty by default: the route fails closed
+      # until a teacher-approved private graph is mounted.
+      AYT_APPROVED_GRAPH_PATH: ${AYT_APPROVED_GRAPH_PATH:-}
+      AYT_GRAPH_CHECKSUM: ${AYT_GRAPH_CHECKSUM:-}
+      AYT_TTS_CACHE_ROOT: /private/tts-cache
+      AYT_TTS_VOICE_VERSION: ${AYT_TTS_VOICE_VERSION:-tts-v5}
     volumes:
       - ./data/derived:/private/derived:ro
       - ./data/meb:/private/meb:ro

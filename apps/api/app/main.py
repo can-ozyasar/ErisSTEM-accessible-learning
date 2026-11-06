@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from .auth import Role, require_roles
+from .ayt_tutor_routes import ayt_tutor_router
 from .demo_audio import resolve_demo_interface
 from .exam_practice import ExamStore
 from .history_source import router as history_router
@@ -451,6 +452,7 @@ exam_store = ExamStore(learning_operations_store)
 app.include_router(learning_router(learning_operations_store, exam_store))
 app.include_router(history_router)
 app.include_router(question_bank_router(learning_operations_store))
+app.include_router(ayt_tutor_router())
 
 
 def job_response(job: ProcessingJob, created: bool) -> QueueJobResponse:

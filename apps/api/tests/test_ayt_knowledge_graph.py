@@ -122,6 +122,33 @@ def test_builder_keeps_unreviewed_corpus_nodes_out_of_runtime():
     assert len(built.nodes) == 3 and len(built.edges) == 2
 
 
+def test_builder_preserves_pdf_provenance_on_atoms_and_edges():
+    checksum = "0123456789abcdef0123456789abcdef"
+    source_checksum = "abcdef0123456789abcdef0123456789"
+    corpus = {
+        "schema": "multi-history-rag-v1", "corpus_checksum": checksum,
+        "books": [{"source_name": "meb.pdf", "source_checksum": source_checksum,
+                   "index": {"sections": [{"id": "2.1", "title": "Millî Mücadele"}],
+                              "chunks": [{"id": "c1", "section_id": "2.1", "section_title": "Millî Mücadele",
+                                          "page": 14, "bbox": [10, 20, 300, 180],
+                                          "text": "1920 yılında TBMM açıldı.",
+                                          "review_status": "approved",
+                                          "quality": {"quality_checked": True, "warnings": []},
+                                          "pre_review": {"decision": "approved_for_runtime"}}]}}],
+    }
+    built = KnowledgeGraphBuilder(checksum).add_corpus(corpus).build()
+    atom = next(node for node in built.nodes if node.id.startswith("chunk:"))
+    edge = next(edge for edge in built.edges if edge.from_node == atom.id)
+    assert atom.metadata.source_checksum == source_checksum
+    assert atom.metadata.page == 14 and atom.metadata.bbox == [10, 20, 300, 180]
+    assert edge.source_checksum == source_checksum and edge.page == 14
+
+
+def test_provenance_rejects_negative_pdf_coordinates():
+    with pytest.raises(ValueError, match="koordinatları negatif"):
+        NodeMetadata(bbox=[0, -1, 10, 20])
+
+
 class FakeLLM:
     captured_prompt = ""
 

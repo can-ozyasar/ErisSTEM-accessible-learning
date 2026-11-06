@@ -82,6 +82,19 @@ class NodeMetadata(StrictModel):
     unit_title: str | None = Field(default=None, max_length=160)
     node_weight: float = Field(default=0.5, ge=0.0, le=1.0)
     source_ids: list[str] = Field(default_factory=list, max_length=12)
+    source_checksum: str | None = Field(default=None, min_length=16, max_length=128)
+    page: int | None = Field(default=None, ge=1)
+    bbox: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    quote: str = Field(default="", max_length=520)
+    extraction_method: str | None = Field(default=None, max_length=80)
+    review_status: str | None = Field(default=None, max_length=48)
+    quality_flags: list[str] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode="after")
+    def validate_bbox(self):
+        if self.bbox is not None and any(value < 0 for value in self.bbox):
+            raise ValueError("Kaynak koordinatları negatif olamaz")
+        return self
 
 
 class HistoricalNode(StrictModel):
@@ -109,6 +122,17 @@ class Edge(StrictModel):
     source_ids: list[str] = Field(min_length=1, max_length=4)
     confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     approved: bool = False
+    source_checksum: str | None = Field(default=None, min_length=16, max_length=128)
+    page: int | None = Field(default=None, ge=1)
+    bbox: list[float] | None = Field(default=None, min_length=4, max_length=4)
+    extraction_method: str | None = Field(default=None, max_length=80)
+    review_status: str | None = Field(default=None, max_length=48)
+
+    @model_validator(mode="after")
+    def validate_bbox(self):
+        if self.bbox is not None and any(value < 0 for value in self.bbox):
+            raise ValueError("Kenar kaynak koordinatları negatif olamaz")
+        return self
 
     @model_validator(mode="after")
     def no_self_edge(self):
@@ -217,13 +241,20 @@ class KnowledgeGraphBuilder:
                     id=node_id, node_type=NodeType.SUBTOPIC, label=str(chunk.get("section_title", section_id))[:180],
                     description=text[:1200], metadata=NodeMetadata(section_id=section_id,
                     unit_title=str(book.get("source_name", ""))[:160], years=self._years(text),
-                    node_weight=weight, source_ids=[source_id]), approved=approved))
+                    node_weight=weight, source_ids=[source_id],
+                    source_checksum=book["source_checksum"], page=chunk.get("page"),
+                    bbox=chunk.get("bbox"), quote=text[:520],
+                    extraction_method="pdf_index", review_status=chunk.get("review_status"),
+                    quality_flags=list(warnings)[:16]), approved=approved))
                 parent = section_nodes.get(section_id)
                 if parent:
                     self.edges.append(Edge(id=f"edge:{book['source_checksum'][:16]}:{chunk_id}:section",
                                            from_node=node_id, to_node=parent, relation=RelationType.ALT_KONUSUDUR,
                                            quote=text[:520] or "Kaynak parçası bu bölüm içinde yer alır.",
-                                           source_ids=[source_id], approved=approved))
+                                           source_ids=[source_id], approved=approved,
+                                           source_checksum=book["source_checksum"], page=chunk.get("page"),
+                                           bbox=chunk.get("bbox"), extraction_method="pdf_index",
+                                           review_status=chunk.get("review_status")))
             # A reviewed atom makes its containing section and book safe as
             # structural graph parents.  Without this propagation an approved
             # atom would have an approved edge to an unapproved parent and the

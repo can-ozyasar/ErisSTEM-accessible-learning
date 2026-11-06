@@ -49,6 +49,76 @@
             "default": false,
             "title": "Approved",
             "type": "boolean"
+          },
+          "source_checksum": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Checksum"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "extraction_method": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extraction Method"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "maxLength": 48,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Status"
           }
         },
         "required": [
@@ -229,6 +299,90 @@
             },
             "maxItems": 12,
             "title": "Source Ids",
+            "type": "array"
+          },
+          "source_checksum": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 16,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Source Checksum"
+          },
+          "page": {
+            "anyOf": [
+              {
+                "minimum": 1,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Page"
+          },
+          "bbox": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 4,
+                "minItems": 4,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Bbox"
+          },
+          "quote": {
+            "default": "",
+            "maxLength": 520,
+            "title": "Quote",
+            "type": "string"
+          },
+          "extraction_method": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Extraction Method"
+          },
+          "review_status": {
+            "anyOf": [
+              {
+                "maxLength": 48,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Review Status"
+          },
+          "quality_flags": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 16,
+            "title": "Quality Flags",
             "type": "array"
           }
         },

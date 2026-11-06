@@ -11,8 +11,11 @@
    antlaşma ve kavram etiketleri yalnız aday genişletme değil, puanlanmış
    metadata sinyalidir; alıntı ve kaynak kimliği olmadan kanıt oluşmaz.
 3. **Orkestrasyon:** `SocraticTutorOrchestrator` önce arama yapar, sonra yalnız
-   kaynak kimliklerini içeren kısa bağlamla yerel LLM'i çağırır, erken cevap
-   ifşasını engeller ve cümleleri içerik adresli WAV önbelleğine yollar.
+   onaylı düğüm açıklamaları, onaylı kenar alıntıları ve kaynak kimliklerinden
+   oluşan kısa bağlamla yerel LLM'i çağırır, erken cevap ifşasını engeller ve
+   cümleleri içerik adresli WAV önbelleğine yollar. İstem uzunluğu Qwen servis
+   sınırına göre kesilir; model veya TTS servisi yoksa deterministik geri dönüş
+   kullanılır.
 
 `KnowledgeGraphBuilder.add_corpus(...)` MEB corpus’unun kitap–bölüm–parça
 hiyerarşisini checksum’a bağlı aday düğümlere dönüştürür. `pre_review` ve
@@ -39,3 +42,12 @@ C --> T[Fine-tune TTS + SHA256 ses önbelleği]
 Örnek şema yükü [ayt-knowledge-graph-example.json](ayt-knowledge-graph-example.json)
 dosyasındadır. Bu örnek cevap anahtarı içermez. Cevap anahtarı yalnız private
 değerlendirme katmanında, ayrı bir dosyada tutulmalıdır.
+
+## Runtime ve onay kapısı
+
+`ayt_tutor_routes.py` içindeki `/v1/ayt-tutor/turn` yalnızca
+`AYT_APPROVED_GRAPH_PATH` ile gösterilen, öğretmen onayından geçirilmiş grafi
+yüklenebildiğinde çalışır. Aday corpus ve agent incelemeleri bu kapıyı açamaz.
+`promote_ayt_graph_approvals.py` checksum, PDF alıntısı, sayfa/bbox ve insan
+reviewer kimliğini doğrular; onay şablonu `build_ayt_graph_approval_template.py`
+ile üretilir.

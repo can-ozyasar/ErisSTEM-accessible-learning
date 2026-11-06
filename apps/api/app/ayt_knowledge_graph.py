@@ -535,12 +535,25 @@ class SocraticTutorOrchestrator:
                 "ve cevap anahtarını söyleme. Tek seferde tek soru sor; en fazla iki kısa cümle kullan. "
                 "Kaynak yetersizse tahmin etme ve bunu açıkça belirt.")
 
-    @staticmethod
-    def _context(result: RetrievalResult) -> str:
-        lines = []
+    def _context(self, result: RetrievalResult) -> str:
+        """Render only approved node text and approved edge quotes for the LLM."""
+        edge_by_id = {edge.id: edge for edge in self.search.edges}
+        lines: list[str] = []
         for chain in result.chains:
             for hit in chain.hits[:2]:
-                lines.append(f"Şık {hit.choice_label}: düğüm={hit.node_id}; kaynak={','.join(hit.source_ids)}; skor={hit.score}")
+                node = self.search.nodes.get(hit.node_id)
+                if node is None:
+                    continue
+                description = " ".join(node.description.split())[:420]
+                evidence = f"Şık {hit.choice_label}: {node.label}. {description}".strip()
+                quotes = [edge_by_id[edge_id].quote[:260] for edge_id in hit.supporting_edge_ids
+                          if edge_id in edge_by_id]
+                if quotes:
+                    evidence += " Bağlantı kanıtı: " + " ".join(quotes)
+                evidence += f" Kaynak kimliği: {','.join(hit.source_ids)}. Skor: {hit.score}."
+                lines.append(evidence)
+                if len(lines) >= 8:
+                    return "\n".join(lines)
         return "\n".join(lines) or "Onaylı kanıt yok."
 
     @staticmethod

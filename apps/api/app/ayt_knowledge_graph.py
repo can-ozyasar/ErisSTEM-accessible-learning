@@ -11,10 +11,9 @@ import hashlib
 import math
 import re
 from collections import defaultdict, deque
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -178,7 +177,7 @@ class KnowledgeGraphBuilder:
         return (review.get("decision") in {"approved", "approved_for_runtime"}
                 and bool(chunk.get("quality", {}).get("quality_checked", False)))
 
-    def add_corpus(self, corpus: dict) -> "KnowledgeGraphBuilder":
+    def add_corpus(self, corpus: dict) -> KnowledgeGraphBuilder:
         if corpus.get("schema") != "multi-history-rag-v1" or corpus.get("corpus_checksum") != self.corpus_checksum:
             raise ValueError("Corpus şeması veya checksum eşleşmiyor")
         for book in corpus.get("books", []):

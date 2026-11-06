@@ -18,7 +18,7 @@ from ..history_rag import PreparedBM25
 from .prepare_atom_retrieval_audit import need_plan
 
 SCHEMA = "ayt-target-atom-context-review-queue-v1"
-POOL_SCHEMA = "ayt-target-discovery-pool-v1"
+POOL_SCHEMAS = {"ayt-target-discovery-pool-v1", "official-ayt-target-discovery-pool-v1"}
 CORPUS_SCHEMA = "multi-history-rag-v1"
 
 
@@ -119,7 +119,7 @@ def _diverse(records: list[dict], limit: int) -> list[dict]:
 
 
 def build(pool: dict, corpus: dict, *, candidate_limit: int = 12, first_stage_limit: int = 20) -> dict:
-    if pool.get("schema") != POOL_SCHEMA:
+    if pool.get("schema") not in POOL_SCHEMAS:
         raise ValueError("AYT hedef keşif havuzu gerekli")
     if corpus.get("schema") != CORPUS_SCHEMA:
         raise ValueError("Sürümlü AYT corpus gerekli")

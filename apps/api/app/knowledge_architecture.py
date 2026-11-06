@@ -281,7 +281,7 @@ def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
             "approved_bundle_count": sum(bool(item.get("approved")) for item in bundles),
             "node_kinds": _count(node_kinds), "relation_kinds": _count(relation_kinds),
             "temporal_precision": _count(temporal_precision),
-            "review_policy": "automatic_proposal_human_pdf_crop_approval",
+            "review_policy": "automatic_proposal_history_teacher_agent_pdf_crop_review",
         },
         "experiments": {
             "graph_prefill": _graph_prefill_summary(graph_prefill_report),
@@ -292,7 +292,7 @@ def build_manifest(index: dict, store, pilot_snapshot: dict | None = None,
         "stale_records": stale,
         "pipeline": [
             "Belge ve başlık ağacı", "Kanıt atomu adayları", "Kalite uyarıları",
-            "İlişki önerisi", "Öğretmen PDF kesiti onayı", "Onaylı kanıt grafiği",
+            "İlişki önerisi", "Tarih öğretmeni ajanı PDF kesiti incelemesi", "Onaylı kanıt grafiği",
             "BM25 veya kabul edilmiş hibrit getirme", "Rol tabanlı kanıt demeti", "Yerel koç ve TTS",
         ],
         "privacy": {

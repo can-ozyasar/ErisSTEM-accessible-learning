@@ -681,6 +681,7 @@ class SocraticTutorOrchestrator:
         retrieval_started = time.monotonic()
         result = self.search.search(question, top_k=3)
         retrieval_ms = int((time.monotonic() - retrieval_started) * 1000)
+        llm_ms = 0
         all_hits = [hit for chain in result.chains for hit in chain.hits]
         if not all_hits:
             text = "Bu soru için öğretmen onaylı kaynak düğümü bulunamadı. " + self._safe_fallback(response_stage)
@@ -722,7 +723,7 @@ class SocraticTutorOrchestrator:
         self.last_timings = {
             "retrieval": retrieval_ms,
             "first_token": int(getattr(self.llm, "last_first_token_ms", 0) or 0),
-            "llm": locals().get("llm_ms", 0),
+            "llm": llm_ms,
             "tts": tts_ms,
             "total": int((time.monotonic() - started) * 1000),
         }

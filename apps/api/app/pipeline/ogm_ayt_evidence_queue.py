@@ -63,6 +63,20 @@ GENERIC_CLAIM_TERMS = {
 }
 CAPITALISED_TOKEN = re.compile(r"[A-ZÇĞİÖŞÜ][a-zçğıöşü]+|MÖ|MS|\d{3,4}")
 TOPIC_SECTION_HINTS = {
+    "I. Dünya Savaşı Sürecinde Osmanlı Devleti": (
+        "I. DÜNYA SAVAŞI SÜRECİNDE OSMANLI DEVLETİ", "I. DÜNYA SAVAŞI", "OSMANLI DEVLETİ",
+    ),
+    "Millî Mücadele’ye Hazırlık Dönemi": (
+        "MİLLÎ MÜCADELE’YE HAZIRLIK", "MİLLİ MÜCADELEYE HAZIRLIK", "HAZIRLIK DÖNEMİ",
+    ),
+    "Batı Cephesi ve Bu Cephede Öne Çıkan Şahsiyetler": (
+        "BATI CEPHESİ", "BATI CEPHESİNDE",
+    ),
+    "Doğu ve Güney Cepheleri ile Bu Cephelerde Öne Çıkan Şahsiyetler": (
+        "DOĞU VE GÜNEY CEPHELERİ", "DOĞU CEPHESİ", "GÜNEY CEPHESİ",
+    ),
+    "Atatürk İlkeleri": ("ATATÜRK İLKELERİ",),
+    "Siyasi Alandaki Gelişmeler": ("SİYASİ ALANDAKİ GELİŞMELER",),
     "Millî Mücadele": ("MİLLÎ MÜCADELE", "BÜYÜK MİLLET MECLİSİ", "SEVR", "CEPHELER", "LOZAN"),
     "Atatürkçülük ve Türk İnkılabı": (
         "ATATÜRK İLKELERİ",

@@ -484,6 +484,13 @@ class AudioCache:
             temporary.replace(target)
         return target
 
+    def prewarm(self, texts: list[str], synthesizer: TTSSynthesizer) -> dict[str, Path]:
+        """Batch-generate stable prompts/questions once (Kaggle or local GPU)."""
+        result: dict[str, Path] = {}
+        for text in dict.fromkeys(" ".join(item.split()) for item in texts if item.strip()):
+            result[text] = self.get_or_create(text, synthesizer)
+        return result
+
 
 def sentence_chunks(text: str, max_chars: int = 180) -> list[str]:
     if max_chars < 40:

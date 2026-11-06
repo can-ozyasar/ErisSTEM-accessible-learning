@@ -114,4 +114,6 @@ def test_orchestrator_uses_content_addressed_audio_cache(tmp_path: Path):
     assert audio and all(path.is_file() for path in audio)
     _, _, audio_again = orchestrator.start(question(), state)
     assert [path.name for path in audio] == [path.name for path in audio_again]
+    prewarmed = orchestrator.audio_cache.prewarm(["Soru hazır.", "Soru hazır."], FakeTTS())
+    assert list(prewarmed) == ["Soru hazır."]
 

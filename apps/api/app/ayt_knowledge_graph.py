@@ -222,6 +222,25 @@ class KnowledgeGraphBuilder:
                                            from_node=node_id, to_node=parent, relation=RelationType.ALT_KONUSUDUR,
                                            quote=text[:520] or "Kaynak parçası bu bölüm içinde yer alır.",
                                            source_ids=[source_id], approved=approved))
+            # A reviewed atom makes its containing section and book safe as
+            # structural graph parents.  Without this propagation an approved
+            # atom would have an approved edge to an unapproved parent and the
+            # graph validator would (correctly) reject the whole snapshot.
+            approved_chunks = {node.id for node in self.nodes
+                               if node.id.startswith(f"chunk:{book['source_checksum']}:" ) and node.approved}
+            approved_sections = {
+                edge.to_node for edge in self.edges
+                if edge.relation == RelationType.ALT_KONUSUDUR
+                and edge.from_node in approved_chunks
+                and edge.to_node in section_nodes.values()
+            }
+            for node in self.nodes:
+                if node.id in approved_sections or node.id == book_id and approved_sections:
+                    node.approved = True
+            approved_structural = approved_sections | ({book_id} if approved_sections else set())
+            for edge in self.edges:
+                if edge.from_node in approved_structural and edge.to_node in approved_structural:
+                    edge.approved = True
         return self
 
     def build(self) -> KnowledgeGraph:

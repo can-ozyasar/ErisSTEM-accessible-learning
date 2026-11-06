@@ -1,0 +1,26 @@
+# AYT bilgi grafiği insan onay akışı
+
+Graf adayları otomatik çıkarılır; öğrenciye yalnız PDF kesiti insan tarih öğretmeni tarafından doğrulanan parçalar açılır. Agent değerlendirmesi öneri olarak kalır.
+
+## Şablon üretme
+
+Private corpus’tan sayfa ve koordinat içeren boş şablon:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.build_ayt_graph_approval_template \
+  --corpus data/private/yks-ayt-source-v1/ayt-target-discovery-corpus-local12-v1.json \
+  --output data/private/yks-ayt-source-v1/ayt-graph-teacher-approval-template-v1.json
+```
+
+Öğretmen her satırda PDF kırpımını kontrol eder, `decision` alanını `approved_for_runtime` yapar, kısa birebir alıntıyı ve onun SHA-256 değerini doldurur; `pdf_crop_checked` ve `quality_checked` değerlerini `true` yapar. Görsel, yönerge veya OCR riski olan parça onaylanmaz.
+
+## Terfi ve graf üretimi
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.promote_ayt_graph_approvals \
+  --corpus data/private/yks-ayt-source-v1/ayt-target-discovery-corpus-local12-v1.json \
+  --manifest data/private/yks-ayt-source-v1/ayt-graph-teacher-approval-manifest-v1.json \
+  --output data/private/yks-ayt-source-v1/ayt-target-approved-corpus-v1.json
+```
+
+Komut checksum, alıntı, insan reviewer kimliği ve risk bayraklarını doğrular. Eksik veya agent kökenli onayda durur; otomatik olarak hiçbir adayı onaylamaz. Terfi edilmiş corpus `KnowledgeGraphBuilder` ile işlendiğinde onaylı parça, bölüm ve kitap hiyerarşisi birlikte geçerli olur.

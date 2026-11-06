@@ -25,6 +25,40 @@ def _quote_digest(value: str) -> str:
     return hashlib.sha256(_plain(value).encode("utf-8")).hexdigest()
 
 
+def build_template(corpus: dict) -> dict:
+    """Create a blank, private teacher-review manifest from corpus geometry."""
+    if corpus.get("schema") != CORPUS_SCHEMA:
+        raise ValueError("Corpus şeması geçersiz")
+    approvals = []
+    for book in corpus.get("books", []):
+        for chunk in book.get("index", {}).get("chunks", []):
+            approvals.append({
+                "source_checksum": book.get("source_checksum"),
+                "chunk_id": str(chunk.get("id", "")),
+                "section_id": chunk.get("section_id"),
+                "section_title": chunk.get("section_title"),
+                "page": chunk.get("page"),
+                "bbox": chunk.get("bbox"),
+                "decision": "pending",
+                "quote": "",
+                "quote_sha256": "",
+                "pdf_crop_checked": False,
+                "quality_checked": False,
+            })
+    return {
+        "schema": SCHEMA,
+        "corpus_checksum": corpus.get("corpus_checksum"),
+        "reviewer_id": "",
+        "reviewer_kind": "human_history_teacher",
+        "is_human_teacher_approval": True,
+        "answer_key_accessed": False,
+        "worked_explanation_accessed": False,
+        "qlora_enabled": False,
+        "approvals": approvals,
+        "notice": "Karar, alıntı ve işaretler öğretmen tarafından PDF kesiti üzerinden doldurulmadan terfi edilemez.",
+    }
+
+
 def promote(corpus: dict, manifest: dict) -> dict:
     """Return a copied corpus with only explicitly human-approved chunks promoted."""
     if corpus.get("schema") != CORPUS_SCHEMA:

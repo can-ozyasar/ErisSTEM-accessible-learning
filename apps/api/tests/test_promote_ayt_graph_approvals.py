@@ -3,7 +3,7 @@ import hashlib
 import pytest
 
 from app.ayt_knowledge_graph import KnowledgeGraphBuilder
-from app.pipeline.promote_ayt_graph_approvals import promote
+from app.pipeline.promote_ayt_graph_approvals import build_template, promote
 
 
 def corpus():
@@ -59,4 +59,13 @@ def test_agent_or_missing_human_provenance_is_rejected():
 def test_quote_mismatch_cannot_promote_chunk():
     value = manifest("1921 yılında başka olay oldu")
     with pytest.raises(ValueError, match="alıntısı"):
+        promote(corpus(), value)
+
+
+def test_template_contains_geometry_but_cannot_be_promoted_as_is():
+    value = build_template(corpus())
+    assert value["schema"] == "ayt-teacher-graph-approval-v1"
+    assert value["approvals"][0]["page"] is None
+    assert value["approvals"][0]["decision"] == "pending"
+    with pytest.raises(ValueError, match="approved_for_runtime"):
         promote(corpus(), value)

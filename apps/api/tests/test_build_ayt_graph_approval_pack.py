@@ -22,5 +22,8 @@ def test_build_graph_approval_pack_renders_private_crop(tmp_path: Path):
     output = tmp_path / "pack"
     manifest = build(corpus, tmp_path, output)
     assert manifest["review_count"] == 1
+    html = (output / "index.html").read_text(encoding="utf-8")
+    assert "Onay manifestini indir" in html
+    assert "approved_for_runtime" in html
     assert (output / "index.html").is_file()
     assert next((output / "crops").glob("*.png")).is_file()

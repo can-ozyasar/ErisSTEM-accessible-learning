@@ -64,6 +64,13 @@ def test_quote_mismatch_cannot_promote_chunk():
         promote(corpus(), value)
 
 
+def test_promotion_computes_missing_quote_digest():
+    value = manifest()
+    value["approvals"][0]["quote_sha256"] = ""
+    promoted = promote(corpus(), value)
+    assert len(promoted["promotion"]["approvals"][0]["quote_sha256"]) == 64
+
+
 def test_template_contains_geometry_but_cannot_be_promoted_as_is():
     value = build_template(corpus())
     assert value["schema"] == "ayt-teacher-graph-approval-v1"

@@ -104,7 +104,9 @@ def promote(corpus: dict, manifest: dict) -> dict:
             raise ValueError("Onay alıntısı çok kısa")
         if _plain(quote) not in _plain(chunk.get("text", "")):
             raise ValueError("Onay alıntısı aynı PDF parçasında bulunmuyor")
-        if approval.get("quote_sha256") != _quote_digest(quote):
+        expected_quote_digest = _quote_digest(quote)
+        supplied_quote_digest = approval.get("quote_sha256")
+        if supplied_quote_digest not in {None, ""} and supplied_quote_digest != expected_quote_digest:
             raise ValueError("Onay alıntısı checksum eşleşmiyor")
         if approval.get("pdf_crop_checked") is not True or approval.get("quality_checked") is not True:
             raise ValueError("PDF kırpımı ve kalite kontrolü zorunlu")
@@ -123,7 +125,7 @@ def promote(corpus: dict, manifest: dict) -> dict:
         }
         chunk["quality"] = {**quality, "quality_checked": True}
         promoted.append({"source_checksum": source_checksum, "chunk_id": chunk_id,
-                         "quote_sha256": approval["quote_sha256"]})
+                         "quote_sha256": expected_quote_digest})
     result["promotion"] = {"schema": "ayt-teacher-graph-promotion-v1", "count": len(promoted),
                            "reviewer_id": manifest.get("reviewer_id"), "approvals": promoted}
     return result

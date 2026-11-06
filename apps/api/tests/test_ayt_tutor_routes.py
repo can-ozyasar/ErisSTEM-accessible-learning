@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from app.ayt_knowledge_graph import DialogueStage, TutorDialogueState
 from app.ayt_tutor_routes import ayt_tutor_router
 
 
@@ -46,3 +47,28 @@ def test_audio_endpoint_only_accepts_content_digest(monkeypatch, tmp_path: Path)
     response = client().get(f"/v1/ayt-tutor/audio/{digest}", headers={"X-Role": "student"})
     assert response.status_code == 200
     assert client().get("/v1/ayt-tutor/audio/../secret", headers={"X-Role": "student"}).status_code in {404, 422}
+
+
+def test_route_returns_state_text_and_cache_id_with_local_runtime(monkeypatch, tmp_path: Path):
+    audio = tmp_path / ("b" * 64 + ".wav")
+    audio.write_bytes(b"RIFF" + b"0" * 20)
+
+    class FakeRuntime:
+        def start(self, question, state, learner_message):
+            assert question.answer_key_ref is None
+            assert learner_message == "Bir ipucu ver"
+            return (TutorDialogueState(session_id="route-session", question_id=question.id,
+                                       stage=DialogueStage.HATIRLAMAYI_ORTAYA_CIKARMA),
+                    "Kaynakta hangi ayrıntıyı hatırlıyorsun?", [audio])
+
+    monkeypatch.setenv("AYT_APPROVED_GRAPH_PATH", "/private/approved-graph.json")
+    monkeypatch.setenv("AYT_TTS_CACHE_ROOT", str(tmp_path))
+    monkeypatch.setattr("app.ayt_tutor_routes._configured_runtime", lambda *_args: FakeRuntime())
+    response = client().post("/v1/ayt-tutor/turn",
+                             json={"question": question_payload(), "learner_message": "Bir ipucu ver"},
+                             headers={"X-Role": "student"})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["text"].startswith("Kaynakta")
+    assert body["audio_ids"] == ["b" * 64]
+    assert body["state"]["stage"] == "hatirlamayi_ortaya_cikarma"

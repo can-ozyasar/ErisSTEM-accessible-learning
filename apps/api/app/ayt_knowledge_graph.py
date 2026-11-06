@@ -654,8 +654,12 @@ class SocraticTutorOrchestrator:
         """Advance one bounded turn; a learner message unlocks the final check."""
         if stage == DialogueStage.GEREKCELI_ACIKLAMA:
             return stage
-        if stage == DialogueStage.OGRENCI_YANITI and learner_message.strip():
-            return DialogueStage.GEREKCELI_ACIKLAMA
+        if stage == DialogueStage.OGRENCI_YANITI:
+            # The explanation gate is intentionally closed until the learner
+            # has supplied an actual answer.  A client may resend the state
+            # without a message, but that must not skip the recall turn.
+            return (DialogueStage.GEREKCELI_ACIKLAMA
+                    if learner_message.strip() else DialogueStage.OGRENCI_YANITI)
         order = list(DialogueStage)
         return order[min(order.index(stage) + 1, len(order) - 1)]
 
@@ -720,7 +724,16 @@ class SocraticTutorOrchestrator:
         audio_paths = [self.audio_cache.get_or_create(chunk, self.tts) for chunk in sentence_chunks(text)]
         tts_ms = int((time.monotonic() - tts_started) * 1000)
         if response_stage == DialogueStage.GEREKCELI_ACIKLAMA:
-            next_state = next_state.model_copy(update={"can_reveal_explanation": True})
+            # Only a server-side verified explanation can unlock the final
+            # response.  A caller-supplied final-stage state without that
+            # value is returned to the learner-answer gate.
+            if verified_explanation and verified_explanation.strip():
+                next_state = next_state.model_copy(update={"can_reveal_explanation": True})
+            else:
+                next_state = next_state.model_copy(update={
+                    "stage": DialogueStage.OGRENCI_YANITI,
+                    "can_reveal_explanation": False,
+                })
         self.last_timings = {
             "retrieval": retrieval_ms,
             "first_token": int(getattr(self.llm, "last_first_token_ms", 0) or 0),

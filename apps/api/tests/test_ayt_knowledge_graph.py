@@ -194,6 +194,34 @@ def test_final_stage_uses_only_verified_server_text(tmp_path: Path):
     assert next_state.can_reveal_explanation
 
 
+def test_student_answer_stage_cannot_skip_without_learner_message(tmp_path: Path):
+    class MustNotRun:
+        def generate(self, *_args, **_kwargs):
+            return "Bir ipucu sorusu?"
+
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), MustNotRun(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    state = TutorDialogueState(session_id="session-1", question_id="q-1",
+                               stage=DialogueStage.OGRENCI_YANITI)
+    next_state, _text, _ = orchestrator.start(question(), state)
+    assert next_state.stage == DialogueStage.OGRENCI_YANITI
+    assert next_state.can_reveal_explanation is False
+
+
+def test_final_stage_without_verified_text_is_returned_to_answer_gate(tmp_path: Path):
+    class MustNotRun:
+        def generate(self, *_args, **_kwargs):
+            raise AssertionError("final aşamada LLM çağrılmamalı")
+
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), MustNotRun(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    state = TutorDialogueState(session_id="session-1", question_id="q-1",
+                               stage=DialogueStage.GEREKCELI_ACIKLAMA)
+    next_state, _text, _ = orchestrator.start(question(), state)
+    assert next_state.stage == DialogueStage.OGRENCI_YANITI
+    assert next_state.can_reveal_explanation is False
+
+
 def test_local_llm_adapter_sends_bounded_prompt_and_parses_text(monkeypatch):
     captured = {}
 

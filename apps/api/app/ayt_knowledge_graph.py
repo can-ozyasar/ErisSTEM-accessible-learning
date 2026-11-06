@@ -416,9 +416,13 @@ class WeightedGraphSearch:
             hits = []
             metrics: dict[str, tuple[HistoricalNode, float, float]] = {}
             for node in self.nodes.values():
-                cosine = cosine_similarity(query_embedding, node.embedding)
                 lexical = self._lexical_score(node, text)
-                cosine = max(cosine, lexical) if self.embed is None else cosine
+                cosine = cosine_similarity(query_embedding, node.embedding)
+                # During corpus migration embeddings may be absent for a
+                # reviewed atom.  Keep the deterministic lexical signal as a
+                # bounded fallback instead of silently dropping that evidence.
+                if self.embed is None or node.embedding is None:
+                    cosine = lexical
                 metadata = self._metadata_score(node, text)
                 metrics[node.id] = (node, cosine, metadata)
             seeds = {node_id for node_id, (_node, cosine, metadata) in metrics.items()

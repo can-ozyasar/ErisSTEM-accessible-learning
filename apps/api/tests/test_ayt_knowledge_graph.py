@@ -60,6 +60,11 @@ def test_search_returns_components_and_ignores_unapproved_nodes():
     assert hit.supporting_edge_ids == ["e01"] or hit.hop == 0
 
 
+def test_embedding_search_keeps_lexical_fallback_for_unembedded_atoms():
+    result = WeightedGraphSearch(graph(), embed=lambda _text: [1.0, 0.0]).search(question(), top_k=3)
+    assert any(hit.node_id == "tbmm" for chain in result.chains for hit in chain.hits)
+
+
 def test_search_weights_are_explicit_and_normalized():
     with pytest.raises(ValueError):
         WeightedGraphSearch(graph(), weights={"cosine": 1.0})

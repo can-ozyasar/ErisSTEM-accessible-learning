@@ -19,7 +19,8 @@ def validate(queue: dict, pack: dict, audit: dict, *, expected_questions: int | 
         raise ValueError("Kanıt kuyruğu şeması geçersiz")
     if pack.get("schema") != "ogm-ayt-teacher-review-pack-v1":
         raise ValueError("PDF inceleme paketi şeması geçersiz")
-    if audit.get("schema") != "teacher-meb12-assessment-full-evidence-audit-v1":
+    if audit.get("schema") not in {"teacher-meb12-assessment-full-evidence-audit-v1",
+                                   "teacher-ayt-tarama-target-evidence-audit-v1"}:
         raise ValueError("MEB tam audit şeması geçersiz")
     if audit.get("reviewer_kind") != "history_teacher_agent_v1" or audit.get("is_human_teacher_approval") is not False:
         raise ValueError("Agent provenance veya insan onayı alanı geçersiz")

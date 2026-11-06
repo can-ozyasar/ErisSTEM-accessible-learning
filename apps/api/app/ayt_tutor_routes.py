@@ -8,7 +8,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .auth import Role, require_roles
 from .ayt_knowledge_graph import QuestionItem, TutorDialogueState
@@ -30,6 +30,14 @@ class AytTutorReply(BaseModel):
     text: str = Field(min_length=1, max_length=600)
     audio_ids: list[str] = Field(default_factory=list, max_length=8)
     timings_ms: dict[str, int] = Field(default_factory=dict)
+
+    @field_validator("timings_ms")
+    @classmethod
+    def valid_timings(cls, value: dict[str, int]) -> dict[str, int]:
+        allowed = {"retrieval", "first_token", "llm", "tts", "total"}
+        if set(value) - allowed or any(not isinstance(item, int) or item < 0 for item in value.values()):
+            raise ValueError("Geçersiz tutor zaman ölçümü")
+        return value
 
 
 @lru_cache(maxsize=1)

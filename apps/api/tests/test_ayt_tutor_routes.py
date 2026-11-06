@@ -1,10 +1,11 @@
 from pathlib import Path
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.ayt_knowledge_graph import DialogueStage, TutorDialogueState
-from app.ayt_tutor_routes import ayt_tutor_router
+from app.ayt_tutor_routes import AytTutorReply, ayt_tutor_router
 
 
 def client():
@@ -76,3 +77,15 @@ def test_route_returns_state_text_and_cache_id_with_local_runtime(monkeypatch, t
     assert body["audio_ids"] == ["b" * 64]
     assert body["state"]["stage"] == "hatirlamayi_ortaya_cikarma"
     assert body["timings_ms"]["first_token"] == 4
+
+
+def test_route_rejects_invalid_timing_contract():
+    payload = {"state": {"session_id": "session-1", "question_id": "q-route-1"},
+               "text": "Soru?", "audio_ids": [], "timings_ms": {"other": 1}}
+    response = client().post("/v1/ayt-tutor/turn", json={"question": question_payload()},
+                             headers={"X-Role": "student"})
+    # The public request does not accept response fields; the direct model
+    # validation below covers the contract without enabling runtime config.
+    with pytest.raises(ValueError, match="Geçersiz tutor"):
+        AytTutorReply.model_validate(payload)
+    assert response.status_code == 503

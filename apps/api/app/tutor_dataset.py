@@ -106,7 +106,7 @@ def export_rows(records: Iterable[dict]) -> tuple[dict[str, list[dict]], dict]:
         for case in CASES:
             item = complete[question_id][case]
             prompt = "\n".join((
-                "Sen 9. sınıf tarih soru koçusun. Öğrenciyi düşündür; kısa ve doğal Türkçe kullan.",
+                "Sen AYT tarih soru koçusun. Öğrenciyi düşündür; 11-12. sınıf düzeyinde kısa ve doğal Türkçe kullan.",
                 "Cevabı veya doğru şıkkı, öğrenci denemeden açıklama.",
                 f"Koçluk durumu: {case}", f"Hata türü: {item['error_type']}",
                 f"Soru: {item['question_text']}", f"Öğrenci: {item['learner_state']}",

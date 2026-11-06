@@ -139,7 +139,7 @@ def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
 def _prompt(stage: str, context: CoachContext, learner_message: str) -> str:
     """Never include answer label, other options, source coordinates, or answer text."""
     return "\n".join((
-        "Sen 9. sınıf tarih soru koçusun.",
+        "Sen AYT tarih soru koçusun. Öğrenci 11-12. sınıf tarih ve İnkılap Tarihi konularında çalışıyor.",
         "Yalnız Türkçe, sade ve tek soru cümlesi üret.",
         "Doğru cevabı, doğru şıkkı, cevap anahtarını, kesin çözümü veya sayısal cevabı söyleme.",
         "Kaynakta olmayan bilgi ekleme. Kaynak yetersizse bunu soru biçiminde belirt.",

@@ -30,10 +30,14 @@ def build(pairs: list[tuple[dict, dict]]) -> dict:
             row = rows[decision["candidate_id"]]
             if FORBIDDEN & set(row):
                 raise ValueError("Ham soru veya yanıt alanı kapsam metadata'sına giremez")
+            grade = decision["grade_verified"] if "grade_verified" in decision else decision["grade"]
+            unit = decision["unit_verified"] if "unit_verified" in decision else decision["meb_unit_id"]
+            relation = (decision["relation_type_verified"] if "relation_type_verified" in decision
+                        else decision["relation_type"])
             items.append({"exam_id": row["candidate_id"], "year": row["year"], "test": "AYT",
-                          "question_number": _number(row["candidate_id"]), "grade": decision.get("grade_verified", decision["grade"]),
-                          "unit_id": decision.get("unit_verified", decision["meb_unit_id"]), "concept": row["relation_type"],
-                          "relation_type": decision.get("relation_type_verified", decision["relation_type"]), "visual_dependency": False,
+                          "question_number": _number(row["candidate_id"]), "grade": grade,
+                          "unit_id": unit, "concept": row["relation_type"], "relation_type": relation,
+                          "visual_dependency": False,
                           "direct_evidence": row["direct_source_likely"] == "likely",
                           "accessible": row["accessibility"] == "text_accessible",
                           "reviewer": "history_teacher_agent_scope_review", "approved": True})

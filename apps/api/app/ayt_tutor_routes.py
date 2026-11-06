@@ -29,6 +29,7 @@ class AytTutorReply(BaseModel):
     state: TutorDialogueState
     text: str = Field(min_length=1, max_length=600)
     audio_ids: list[str] = Field(default_factory=list, max_length=8)
+    timings_ms: dict[str, int] = Field(default_factory=dict)
 
 
 @lru_cache(maxsize=1)
@@ -73,7 +74,8 @@ def ayt_tutor_router() -> APIRouter:
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         return AytTutorReply(state=state, text=text,
-                             audio_ids=[path.stem for path in audio_paths])
+                             audio_ids=[path.stem for path in audio_paths],
+                             timings_ms=getattr(service, "last_timings", {}))
 
     @router.get("/audio/{audio_id}")
     def audio(audio_id: str, _: Role = student):

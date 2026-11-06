@@ -31,6 +31,7 @@ class LocalHTTPLLM(LocalLLM):
         self.timeout = timeout if timeout is not None else float(os.getenv("LOCAL_TUTOR_LLM_TIMEOUT_SECONDS", "8"))
         if not 1 <= self.timeout <= 120:
             raise ValueError("Yerel LLM zaman aşımı 1 ile 120 saniye arasında olmalı")
+        self.last_first_token_ms = 0
 
     def generate(self, system_prompt: str, user_prompt: str, *, max_tokens: int) -> str:
         if not 1 <= max_tokens <= 96:
@@ -57,6 +58,7 @@ class LocalHTTPLLM(LocalLLM):
         text = decoded.get("text") if isinstance(decoded, dict) else None
         if not isinstance(text, str) or not text.strip():
             raise LocalLLMUnavailable("yerel_llm_geçersiz_yanıt")
+        self.last_first_token_ms = int(decoded.get("first_token_ms", 0) or 0)
         return text.strip()
 
 

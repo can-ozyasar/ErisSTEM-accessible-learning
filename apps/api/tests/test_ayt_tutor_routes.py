@@ -54,6 +54,9 @@ def test_route_returns_state_text_and_cache_id_with_local_runtime(monkeypatch, t
     audio.write_bytes(b"RIFF" + b"0" * 20)
 
     class FakeRuntime:
+        def __init__(self):
+            self.last_timings = {"retrieval": 2, "first_token": 4, "llm": 8, "tts": 1, "total": 15}
+
         def start(self, question, state, learner_message):
             assert question.answer_key_ref is None
             assert learner_message == "Bir ipucu ver"
@@ -72,3 +75,4 @@ def test_route_returns_state_text_and_cache_id_with_local_runtime(monkeypatch, t
     assert body["text"].startswith("Kaynakta")
     assert body["audio_ids"] == ["b" * 64]
     assert body["state"]["stage"] == "hatirlamayi_ortaya_cikarma"
+    assert body["timings_ms"]["first_token"] == 4

@@ -56,3 +56,8 @@ Private retrieval karşılaştırmaları `RetrievalGold` ve `evaluate_retrieval`
 ile aynı sonuç sözleşmesinden ölçülür: Recall@1/@3, MRR@3, nDCG@3, yanlış
 kanıt oranı ve çekimser kalma doğruluğu. Gold etiketler runtime nesnesine veya
 yerel LLM istemine taşınmaz.
+
+Her tutor turu ayrıca `retrieval`, `first_token`, `llm`, `tts` ve `total`
+milisaniye alanlarını üretir. İlk ses hedefi bu ölçümle izlenir; herhangi bir
+optimizasyon ölçülmüş gecikme ve koçluk kalitesi birlikte değerlendirilmeden
+varsayılan yapılmaz.

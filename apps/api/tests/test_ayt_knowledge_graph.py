@@ -141,6 +141,8 @@ def test_orchestrator_uses_content_addressed_audio_cache(tmp_path: Path):
     prewarmed = orchestrator.audio_cache.prewarm(["Soru hazır.", "Soru hazır."], FakeTTS())
     assert list(prewarmed) == ["Soru hazır."]
     assert next_state.stage == DialogueStage.HATIRLAMAYI_ORTAYA_CIKARMA
+    assert set(orchestrator.last_timings) == {"retrieval", "first_token", "llm", "tts", "total"}
+    assert orchestrator.last_timings["total"] >= 0
     assert "Ulusal egemenlik" in FakeLLM.captured_prompt
     assert "Kaynak kimliği" in FakeLLM.captured_prompt
 

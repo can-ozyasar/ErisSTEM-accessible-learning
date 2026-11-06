@@ -14,6 +14,17 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.build_ayt_graph_ap
 
 Öğretmen her satırda PDF kırpımını kontrol eder, `decision` alanını `approved_for_runtime` yapar, kısa birebir alıntıyı ve onun SHA-256 değerini doldurur; `pdf_crop_checked` ve `quality_checked` değerlerini `true` yapar. Görsel, yönerge veya OCR riski olan parça onaylanmaz.
 
+Görsel inceleme paketi:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.build_ayt_graph_approval_pack \
+  --corpus data/private/yks-ayt-source-v1/ayt-target-discovery-corpus-local12-v1.json \
+  --source-root data/private/yks-ayt-source-v1 \
+  --output data/private/yks-ayt-source-v1/ayt-graph-teacher-approval-pack-v1
+```
+
+Paketteki `index.html` ve `crops/` yalnız private inceleme içindir; paket kararları manifest’e otomatik yazmaz.
+
 ## Terfi ve graf üretimi
 
 ```bash

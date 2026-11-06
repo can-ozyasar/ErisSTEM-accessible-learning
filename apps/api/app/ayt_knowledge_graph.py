@@ -19,7 +19,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class StrictModel(BaseModel):
-    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True, populate_by_name=True)
 
 
 class NodeType(str, Enum):
@@ -116,7 +116,7 @@ class Edge(StrictModel):
 
 
 class KnowledgeGraph(StrictModel):
-    schema: str = "ayt-history-knowledge-graph-v1"
+    schema_version: str = Field(default="ayt-history-knowledge-graph-v1", alias="schema")
     corpus_checksum: str = Field(min_length=16, max_length=128)
     nodes: list[HistoricalNode] = Field(default_factory=list)
     edges: list[Edge] = Field(default_factory=list)
@@ -569,4 +569,4 @@ def example_graph_payload() -> dict[str, Any]:
                             choices=[QuestionChoice(label="A", text="TBMM'nin açılması"),
                                      QuestionChoice(label="B", text="Başka bir seçenek")], topic="Millî Mücadele")
     state = TutorDialogueState(session_id="demo-session", question_id="demo-q1")
-    return {"graph": graph.model_dump(mode="json"), "question": question.model_dump(mode="json"), "dialogue_state": state.model_dump(mode="json")}
+    return {"graph": graph.model_dump(mode="json", by_alias=True), "question": question.model_dump(mode="json"), "dialogue_state": state.model_dump(mode="json")}

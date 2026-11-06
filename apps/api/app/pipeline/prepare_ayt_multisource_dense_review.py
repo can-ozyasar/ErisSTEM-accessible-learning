@@ -11,6 +11,15 @@ import json
 from pathlib import Path
 
 SCHEMA = "official-ayt-multisource-dense-review-queue-v1"
+FULL_SCHEMA = "official-ayt-full-multisource-dense-review-queue-v1"
+DISCOVERY_SCHEMAS = {
+    "ayt-multisource-dense-discovery-v1",
+    "ayt-full-multisource-dense-discovery-v1",
+}
+RANKING_SCHEMAS = {
+    "official-ayt-multisource-dense-discovery-rankings-v1",
+    "official-ayt-full-multisource-dense-discovery-rankings-v1",
+}
 
 
 def _assert_false(payload: dict) -> None:
@@ -33,9 +42,9 @@ def _crop_key(document: dict) -> tuple[str, int, tuple[float, ...]]:
 
 
 def _validate_inputs(discovery: dict, rankings: dict) -> None:
-    if discovery.get("schema") != "ayt-multisource-dense-discovery-v1":
+    if discovery.get("schema") not in DISCOVERY_SCHEMAS:
         raise ValueError("Çok kaynaklı yoğun keşif girdisi gerekli")
-    if rankings.get("schema") != "official-ayt-multisource-dense-discovery-rankings-v1":
+    if rankings.get("schema") not in RANKING_SCHEMAS:
         raise ValueError("Çok kaynaklı yoğun sıralama çıktısı gerekli")
     _assert_false(discovery)
     _assert_false(rankings)
@@ -123,7 +132,7 @@ def build(discovery: dict, rankings: dict, *, first_stage_limit: int = 20, revie
             }
         )
     return {
-        "schema": SCHEMA,
+        "schema": FULL_SCHEMA if discovery["schema"] == "ayt-full-multisource-dense-discovery-v1" else SCHEMA,
         "corpus_checksum": discovery["corpus_checksum"],
         "source_bindings": discovery["source_bindings"],
         "embedding_model": rankings.get("embedding_model"),

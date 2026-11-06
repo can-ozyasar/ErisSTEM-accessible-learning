@@ -13,6 +13,11 @@ import pymupdf
 
 from .ayt_evidence_review_pack import _render_crop
 
+QUEUE_SCHEMAS = {
+    "official-ayt-multisource-dense-review-queue-v1": "ayt-multisource-dense-review-pack-v1",
+    "official-ayt-full-multisource-dense-review-queue-v1": "ayt-full-multisource-dense-review-pack-v1",
+}
+
 
 def _checksum(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -46,7 +51,8 @@ def _assert_excerpt_in_crop(document: pymupdf.Document, page: int, bbox: list[fl
 
 
 def build(queue: dict, sources: dict[str, Path], output: Path, *, per_question: int | None = None) -> dict:
-    if queue.get("schema") != "official-ayt-multisource-dense-review-queue-v1":
+    pack_schema = QUEUE_SCHEMAS.get(queue.get("schema"))
+    if pack_schema is None:
         raise ValueError("Çok kaynaklı AYT inceleme kuyruğu gerekli")
     if per_question is not None and per_question < 1:
         raise ValueError("Her soru için en az bir kart gerekli")
@@ -94,7 +100,7 @@ def build(queue: dict, sources: dict[str, Path], output: Path, *, per_question: 
             document.close()
 
     manifest = {
-        "schema": "ayt-multisource-dense-review-pack-v1",
+        "schema": pack_schema,
         "corpus_checksum": queue["corpus_checksum"],
         "source_bindings": queue["source_bindings"],
         "review_count": len(rows),

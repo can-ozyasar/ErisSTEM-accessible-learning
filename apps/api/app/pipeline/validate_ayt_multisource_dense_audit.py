@@ -7,6 +7,10 @@ from pathlib import Path
 
 DECISIONS = {"direct", "bounded_inference", "indirect", "wrong", "insufficient"}
 DIAGNOSES = {"none", "extraction_gap", "retrieval_miss", "bundle_composition_miss", "genuine_source_gap"}
+QUEUE_SCHEMAS = {
+    "official-ayt-multisource-dense-review-queue-v1",
+    "official-ayt-full-multisource-dense-review-queue-v1",
+}
 
 
 def _assert_false(payload: dict) -> None:
@@ -21,7 +25,7 @@ def _assert_false(payload: dict) -> None:
 
 
 def build(queue: dict, audit: dict) -> dict:
-    if queue.get("schema") != "official-ayt-multisource-dense-review-queue-v1":
+    if queue.get("schema") not in QUEUE_SCHEMAS:
         raise ValueError("Çok kaynaklı PDF kesiti inceleme kuyruğu gerekli")
     if audit.get("schema") != "teacher-official-ayt-multisource-dense-audit-v1":
         raise ValueError("Çok kaynaklı tarih öğretmeni ajan denetimi gerekli")

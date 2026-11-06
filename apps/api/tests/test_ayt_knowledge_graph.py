@@ -1,0 +1,93 @@
+from pathlib import Path
+
+import pytest
+
+from app.ayt_knowledge_graph import (
+    AudioCache,
+    Edge,
+    HistoricalNode,
+    KnowledgeGraph,
+    NodeMetadata,
+    NodeType,
+    QuestionChoice,
+    QuestionItem,
+    RelationType,
+    SocraticTutorOrchestrator,
+    TutorDialogueState,
+    WeightedGraphSearch,
+    example_graph_payload,
+)
+
+
+def graph() -> KnowledgeGraph:
+    return KnowledgeGraph(
+        corpus_checksum="0123456789abcdef0123456789abcdef",
+        nodes=[
+            HistoricalNode(id="topic", node_type=NodeType.TOPIC, label="Millî Mücadele", approved=True,
+                           metadata=NodeMetadata(source_ids=["src-topic"], node_weight=.8)),
+            HistoricalNode(id="tbmm", node_type=NodeType.KURUM_DEVLET, label="TBMM'nin açılması",
+                           description="Ulusal egemenlik", approved=True,
+                           metadata=NodeMetadata(years=[1920], concepts=["ulusal egemenlik"], source_ids=["src-tbmm"])),
+            HistoricalNode(id="unapproved", node_type=NodeType.OLAY_SAVAS, label="Taslak", approved=False),
+        ],
+        edges=[Edge(id="e01", from_node="tbmm", to_node="topic", relation=RelationType.ALT_KONUSUDUR,
+                    quote="TBMM'nin açılması Millî Mücadele ile ilişkilidir.", source_ids=["src-tbmm"], approved=True)],
+    )
+
+
+def question() -> QuestionItem:
+    return QuestionItem(id="q-1", stem="Ulusal egemenlikle ilgili gelişmeyi bul.", topic="Millî Mücadele",
+                        choices=[QuestionChoice(label="A", text="TBMM'nin açılması"),
+                                 QuestionChoice(label="B", text="Başka bir seçenek")])
+
+
+def test_graph_validates_and_serializes_example():
+    payload = example_graph_payload()
+    parsed = KnowledgeGraph.model_validate(payload["graph"])
+    assert parsed.approved_edges()[0].relation == RelationType.ALT_KONUSUDUR
+    assert payload["dialogue_state"]["can_reveal_explanation"] is False
+
+
+def test_search_returns_components_and_ignores_unapproved_nodes():
+    result = WeightedGraphSearch(graph()).search(question(), top_k=3)
+    assert {hit.node_id for chain in result.chains for hit in chain.hits}.issubset({"topic", "tbmm"})
+    hit = next(hit for chain in result.chains for hit in chain.hits if hit.node_id == "tbmm")
+    assert 0 <= hit.cosine_score <= 1 and 0 <= hit.metadata_score <= 1
+    assert hit.supporting_edge_ids == ["e01"] or hit.hop == 0
+
+
+def test_graph_rejects_approved_edge_to_unapproved_node():
+    with pytest.raises(ValueError):
+        KnowledgeGraph(
+            corpus_checksum="0123456789abcdef0123456789abcdef",
+            nodes=[HistoricalNode(id="a", node_type=NodeType.TOPIC, label="A", approved=True,
+                                  metadata=NodeMetadata(source_ids=["src-a"])),
+                   HistoricalNode(id="b", node_type=NodeType.TOPIC, label="B")],
+            edges=[Edge(id="e", from_node="a", to_node="b", relation=RelationType.ALT_KONUSUDUR,
+                        quote="A, B'nin alt konusudur.", source_ids=["src-a"], approved=True)],
+        )
+
+
+class FakeLLM:
+    def generate(self, system_prompt, user_prompt, *, max_tokens):
+        assert "cevap anahtarını söyleme" in system_prompt
+        assert "TBMM" in user_prompt
+        return "Kaynakta geçen hangi ayrıntı bu gelişmeyle ilişkilidir?"
+
+
+class FakeTTS:
+    def synthesize(self, text, *, output_path):
+        output_path.write_bytes(text.encode("utf-8"))
+
+
+def test_orchestrator_uses_content_addressed_audio_cache(tmp_path: Path):
+    orchestrator = SocraticTutorOrchestrator(WeightedGraphSearch(graph()), FakeLLM(),
+                                              AudioCache(tmp_path, "tts-v5"), FakeTTS())
+    state = TutorDialogueState(session_id="session-1", question_id="q-1")
+    next_state, text, audio = orchestrator.start(question(), state)
+    assert next_state.retrieved_node_ids
+    assert text.endswith("?")
+    assert audio and all(path.is_file() for path in audio)
+    _, _, audio_again = orchestrator.start(question(), state)
+    assert [path.name for path in audio] == [path.name for path in audio_again]
+

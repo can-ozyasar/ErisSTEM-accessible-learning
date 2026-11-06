@@ -1,0 +1,492 @@
+"""Deterministic, source-bound AYT History knowledge graph and tutor runtime.
+
+The module is intentionally self contained.  It does not download a model or
+call a hosted API: the application supplies an embedding function, a local
+LLM adapter and the project's fine-tuned TTS synthesizer.  Unapproved nodes or
+edges can be stored for review, but they never enter retrieval or prompts.
+"""
+from __future__ import annotations
+
+import hashlib
+import math
+import re
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Any, Callable, Protocol
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class StrictModel(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+
+class NodeType(str, Enum):
+    UNIT = "UNIT"
+    TOPIC = "TOPIC"
+    SUBTOPIC = "SUBTOPIC"
+    OLAY_SAVAS = "OLAY_SAVAS"
+    ANTLASMA_BELGE = "ANTLASMA_BELGE"
+    KISI_AKTOR = "KISI_AKTOR"
+    KURUM_DEVLET = "KURUM_DEVLET"
+    KAVRAM_ILKE = "KAVRAM_ILKE"
+    DONEM_KRONOLOJI = "DONEM_KRONOLOJI"
+    YER_COGRAFYA = "YER_COGRAFYA"
+    CEPHE = "CEPHE"
+
+
+class RelationType(str, Enum):
+    ALT_KONUSUDUR = "ALT_KONUSUDUR"
+    SEBEBIDIR = "SEBEBIDIR"
+    SONUCUDUR = "SONUCUDUR"
+    AMACIDIR = "AMACIDIR"
+    DONEMINDE_OLMUSTUR = "DONEMINDE_OLMUSTUR"
+    KRONOLOJIK_SONRASIDIR = "KRONOLOJIK_SONRASIDIR"
+    AKTORUDUR = "AKTORUDUR"
+    COGRAFYASIDIR = "COGRAFYASIDIR"
+    KAPSAMINDADIR = "KAPSAMINDADIR"
+    ILKESIYLE_ILISKILIDIR = "ILKESIYLE_ILISKILIDIR"
+    CELISIR_TAVIZDIR = "CELISIR_TAVIZDIR"
+    BENZERIDIR_PARALELDIR = "BENZERIDIR_PARALELDIR"
+    IMZALAYANIDIR = "IMZALAYANIDIR"
+    UYGULANDIGI_YERDIR = "UYGULANDIGI_YERDIR"
+
+
+class QuestionRelation(str, Enum):
+    SUPPORTS = "SUPPORTS"
+    CONTRADICTS = "CONTRADICTS"
+    CONTEXT = "CONTEXT"
+
+
+class DialogueStage(str, Enum):
+    SORU_ANALIZI = "soru_analizi"
+    HATIRLAMAYI_ORTAYA_CIKARMA = "hatirlamayi_ortaya_cikarma"
+    KANITLA_BAG_KURMA = "kanitla_bag_kurma"
+    SIK_ELEMESI = "sik_elemesi"
+    OGRENCI_YANITI = "ogrenci_yaniti"
+    GEREKCELI_ACIKLAMA = "gerekceli_aciklama"
+
+
+class NodeMetadata(StrictModel):
+    aliases: list[str] = Field(default_factory=list, max_length=32)
+    years: list[int] = Field(default_factory=list, max_length=12)
+    century: int | None = Field(default=None, ge=-50, le=30)
+    period: str | None = Field(default=None, max_length=120)
+    persons: list[str] = Field(default_factory=list, max_length=24)
+    places: list[str] = Field(default_factory=list, max_length=24)
+    concepts: list[str] = Field(default_factory=list, max_length=32)
+    section_id: str | None = Field(default=None, max_length=80)
+    unit_title: str | None = Field(default=None, max_length=160)
+    node_weight: float = Field(default=0.5, ge=0.0, le=1.0)
+    source_ids: list[str] = Field(default_factory=list, max_length=12)
+
+
+class HistoricalNode(StrictModel):
+    id: str = Field(min_length=3, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    node_type: NodeType
+    label: str = Field(min_length=2, max_length=180)
+    description: str = Field(default="", max_length=1200)
+    metadata: NodeMetadata = Field(default_factory=NodeMetadata)
+    embedding: list[float] | None = Field(default=None, max_length=8192)
+    approved: bool = False
+
+    @model_validator(mode="after")
+    def source_required_when_approved(self):
+        if self.approved and not self.metadata.source_ids:
+            raise ValueError("Onaylı düğüm en az bir kaynak kimliği taşımalı")
+        return self
+
+
+class Edge(StrictModel):
+    id: str = Field(min_length=3, max_length=120, pattern=r"^[A-Za-z0-9_.:-]+$")
+    from_node: str
+    to_node: str
+    relation: RelationType
+    quote: str = Field(min_length=12, max_length=520)
+    source_ids: list[str] = Field(min_length=1, max_length=4)
+    confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    approved: bool = False
+
+    @model_validator(mode="after")
+    def no_self_edge(self):
+        if self.from_node == self.to_node:
+            raise ValueError("Kenarın iki ucu aynı düğüm olamaz")
+        return self
+
+
+class KnowledgeGraph(StrictModel):
+    schema: str = "ayt-history-knowledge-graph-v1"
+    corpus_checksum: str = Field(min_length=16, max_length=128)
+    nodes: list[HistoricalNode] = Field(default_factory=list)
+    edges: list[Edge] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_graph(self):
+        node_ids = [node.id for node in self.nodes]
+        if len(node_ids) != len(set(node_ids)):
+            raise ValueError("Düğüm kimlikleri benzersiz olmalı")
+        edge_ids = [edge.id for edge in self.edges]
+        if len(edge_ids) != len(set(edge_ids)):
+            raise ValueError("Kenar kimlikleri benzersiz olmalı")
+        known = set(node_ids)
+        for edge in self.edges:
+            if edge.from_node not in known or edge.to_node not in known:
+                raise ValueError("Kenarın düğümleri grafikte bulunmalı")
+            if edge.approved:
+                source_nodes = {n.id for n in self.nodes if n.approved}
+                if edge.from_node not in source_nodes or edge.to_node not in source_nodes:
+                    raise ValueError("Onaylı kenar yalnız onaylı düğümlere bağlanabilir")
+        return self
+
+    def approved_nodes(self) -> list[HistoricalNode]:
+        return [node for node in self.nodes if node.approved]
+
+    def approved_edges(self) -> list[Edge]:
+        approved = {node.id for node in self.approved_nodes()}
+        return [edge for edge in self.edges if edge.approved and edge.from_node in approved and edge.to_node in approved]
+
+
+class QuestionChoice(StrictModel):
+    label: str = Field(pattern=r"^[A-E]$")
+    text: str = Field(min_length=1, max_length=800)
+
+
+class ChoiceEvidenceLink(StrictModel):
+    choice_label: str = Field(pattern=r"^[A-E]$")
+    node_ids: list[str] = Field(default_factory=list, max_length=8)
+    edge_ids: list[str] = Field(default_factory=list, max_length=8)
+    relation: QuestionRelation = QuestionRelation.CONTEXT
+    note: str = Field(default="", max_length=320)
+
+
+class QuestionItem(StrictModel):
+    id: str = Field(min_length=3, max_length=120)
+    stem: str = Field(min_length=8, max_length=3000)
+    choices: list[QuestionChoice] = Field(min_length=2, max_length=5)
+    unit_id: str | None = None
+    topic: str = Field(default="", max_length=180)
+    question_terms: list[str] = Field(default_factory=list, max_length=40)
+    choice_evidence: list[ChoiceEvidenceLink] = Field(default_factory=list, max_length=5)
+    # Gold answer is deliberately absent from the runtime object.  Private
+    # evaluation can store it outside this model.
+    answer_key_ref: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def unique_choices_and_links(self):
+        labels = [choice.label for choice in self.choices]
+        if len(labels) != len(set(labels)):
+            raise ValueError("Şık etiketleri benzersiz olmalı")
+        links = [link.choice_label for link in self.choice_evidence]
+        if len(links) != len(set(links)):
+            raise ValueError("Bir şık için tek kanıt bağlantısı kaydı kullanılmalı")
+        return self
+
+
+class TutorDialogueState(StrictModel):
+    session_id: str = Field(min_length=8, max_length=120)
+    question_id: str
+    stage: DialogueStage = DialogueStage.SORU_ANALIZI
+    selected_choice: str | None = Field(default=None, pattern=r"^[A-E]$")
+    eliminated_choices: list[str] = Field(default_factory=list, max_length=5)
+    asked_hints: list[str] = Field(default_factory=list, max_length=12)
+    learner_turns: int = Field(default=0, ge=0, le=20)
+    repeat_attempts: int = Field(default=0, ge=0, le=5)
+    retrieved_node_ids: list[str] = Field(default_factory=list, max_length=12)
+    retrieved_edge_ids: list[str] = Field(default_factory=list, max_length=12)
+    source_ids: list[str] = Field(default_factory=list, max_length=12)
+    can_reveal_explanation: bool = False
+
+    @model_validator(mode="after")
+    def reveal_only_at_final_stage(self):
+        if self.can_reveal_explanation and self.stage != DialogueStage.GEREKCELI_ACIKLAMA:
+            raise ValueError("Açıklama yalnız son aşamada açılabilir")
+        if any(label not in {"A", "B", "C", "D", "E"} for label in self.eliminated_choices):
+            raise ValueError("Geçersiz elenen şık etiketi")
+        return self
+
+
+class EvidenceHit(StrictModel):
+    choice_label: str = Field(pattern=r"^[A-E]$")
+    node_id: str
+    score: float
+    cosine_score: float = Field(ge=0.0, le=1.0)
+    metadata_score: float = Field(ge=0.0, le=1.0)
+    node_weight_score: float = Field(ge=0.0, le=1.0)
+    graph_score: float = Field(ge=0.0, le=1.0)
+    hop: int = Field(ge=0, le=2)
+    supporting_edge_ids: list[str] = Field(default_factory=list, max_length=8)
+    source_ids: list[str] = Field(default_factory=list, max_length=8)
+
+
+class EvidenceChain(StrictModel):
+    choice_label: str = Field(pattern=r"^[A-E]$")
+    hits: list[EvidenceHit] = Field(default_factory=list, max_length=8)
+    abstain: bool = False
+    abstain_reason: str | None = None
+
+
+class RetrievalResult(StrictModel):
+    chains: list[EvidenceChain]
+    query_terms: list[str]
+    metadata_filters: dict[str, list[str]] = Field(default_factory=dict)
+
+
+DATE_RE = re.compile(r"(?:MÖ|MS)?\s*\d{1,4}(?:\s*[-–]\s*\d{1,4})?", re.IGNORECASE)
+TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+")
+STOP = {"ve", "veya", "ile", "bir", "bu", "şu", "olan", "hangi", "hangisi", "aşağıdaki", "göre", "için", "de", "da"}
+
+
+def _tokens(text: str) -> set[str]:
+    return {item.casefold() for item in TOKEN_RE.findall(text) if len(item) > 2 and item.casefold() not in STOP}
+
+
+def cosine_similarity(left: list[float] | None, right: list[float] | None) -> float:
+    if not left or not right or len(left) != len(right):
+        return 0.0
+    denom = math.sqrt(sum(x * x for x in left) * sum(y * y for y in right))
+    return max(0.0, min(1.0, sum(x * y for x, y in zip(left, right)) / denom)) if denom else 0.0
+
+
+class EmbeddingFn(Protocol):
+    def __call__(self, text: str) -> list[float]: ...
+
+
+class WeightedGraphSearch:
+    """Question+choice search with explicit, inspectable score components."""
+
+    def __init__(self, graph: KnowledgeGraph, embed: EmbeddingFn | None = None):
+        self.graph = graph
+        self.embed = embed
+        self.nodes = {node.id: node for node in graph.approved_nodes()}
+        self.edges = graph.approved_edges()
+        self.adj: dict[str, list[tuple[str, Edge]]] = defaultdict(list)
+        for edge in self.edges:
+            self.adj[edge.from_node].append((edge.to_node, edge))
+            self.adj[edge.to_node].append((edge.from_node, edge))
+
+    @staticmethod
+    def _metadata_score(node: HistoricalNode, text: str) -> float:
+        query = text.casefold()
+        values = [node.label, *node.metadata.aliases, *node.metadata.persons,
+                  *node.metadata.places, *node.metadata.concepts, node.metadata.period or ""]
+        exact = sum(1 for value in values if value and value.casefold() in query)
+        dates = [str(year) for year in node.metadata.years]
+        exact += sum(1 for year in dates if year in query)
+        return min(1.0, exact / max(1, min(4, len([v for v in values if v]))))
+
+    @staticmethod
+    def _lexical_score(node: HistoricalNode, text: str) -> float:
+        query = _tokens(text)
+        target = _tokens(" ".join([node.label, node.description, *node.metadata.aliases,
+                                    *node.metadata.persons, *node.metadata.places, *node.metadata.concepts]))
+        return len(query & target) / max(1, len(query | target))
+
+    def _graph_scores(self, seed: str) -> dict[str, tuple[float, int, list[str]]]:
+        result: dict[str, tuple[float, int, list[str]]] = {seed: (1.0, 0, [])}
+        queue = deque([(seed, 0, [])])
+        while queue:
+            current, hop, edge_ids = queue.popleft()
+            if hop >= 2:
+                continue
+            for target, edge in self.adj.get(current, []):
+                next_hop = hop + 1
+                score = 1.0 if next_hop == 1 else 0.5
+                previous = result.get(target)
+                if previous is None or score > previous[0]:
+                    chain = [*edge_ids, edge.id]
+                    result[target] = (score, next_hop, chain)
+                    queue.append((target, next_hop, chain))
+        return result
+
+    def _query_graph_scores(self, seeds: set[str]) -> dict[str, tuple[float, int, list[str]]]:
+        """Return the strongest approved one/two-hop path from query seeds."""
+        combined: dict[str, tuple[float, int, list[str]]] = {}
+        for seed in sorted(seeds):
+            for node_id, value in self._graph_scores(seed).items():
+                previous = combined.get(node_id)
+                if previous is None or value[0] > previous[0] or (value[0] == previous[0] and value[1] < previous[1]):
+                    combined[node_id] = value
+        return combined
+
+    def search(self, question: QuestionItem, *, top_k: int = 3, min_score: float = 0.18) -> RetrievalResult:
+        if top_k < 1:
+            raise ValueError("top_k pozitif olmalı")
+        query_terms = sorted(_tokens(question.stem + " " + " ".join(choice.text for choice in question.choices)))
+        metadata_filters = {"dates": sorted(set(DATE_RE.findall(question.stem))), "terms": query_terms[:40]}
+        chains = []
+        for choice in question.choices:
+            text = f"{question.stem} {choice.text} {question.topic}"
+            query_embedding = self.embed(text) if self.embed else None
+            hits = []
+            metrics: dict[str, tuple[HistoricalNode, float, float]] = {}
+            for node in self.nodes.values():
+                cosine = cosine_similarity(query_embedding, node.embedding)
+                lexical = self._lexical_score(node, text)
+                cosine = max(cosine, lexical) if self.embed is None else cosine
+                metadata = self._metadata_score(node, text)
+                metrics[node.id] = (node, cosine, metadata)
+            seeds = {node_id for node_id, (_node, cosine, metadata) in metrics.items()
+                     if metadata > 0.0 or cosine > 0.08}
+            graph_scores = self._query_graph_scores(seeds)
+            for node_id, (node, cosine, metadata) in metrics.items():
+                graph_score, hop, edge_ids = graph_scores.get(node_id, (0.0, 2, []))
+                score = 0.45 * cosine + 0.25 * metadata + 0.10 * node.metadata.node_weight + 0.20 * graph_score
+                if score >= min_score:
+                    hits.append((score, node, cosine, metadata, graph_score, hop, edge_ids))
+            hits.sort(key=lambda item: (-item[0], item[1].id))
+            unique: dict[str, tuple] = {}
+            for hit in hits:
+                unique.setdefault(hit[1].id, hit)
+            selected = list(unique.values())[:top_k]
+            chains.append(EvidenceChain(
+                choice_label=choice.label,
+                hits=[EvidenceHit(choice_label=choice.label, node_id=node.id, score=round(score, 6),
+                                  cosine_score=round(cosine, 6), metadata_score=round(metadata, 6),
+                                  node_weight_score=node.metadata.node_weight,
+                                  graph_score=round(graph_score, 6), hop=hop,
+                                  supporting_edge_ids=edge_ids,
+                                  source_ids=node.metadata.source_ids)
+                       for score, node, cosine, metadata, graph_score, hop, edge_ids in selected],
+                abstain=not bool(selected),
+                abstain_reason=None if selected else "onaylı kaynak düğümü bulunamadı",
+            ))
+        return RetrievalResult(chains=chains, query_terms=query_terms, metadata_filters=metadata_filters)
+
+
+class LocalLLM(Protocol):
+    def generate(self, system_prompt: str, user_prompt: str, *, max_tokens: int) -> str: ...
+
+
+class TTSSynthesizer(Protocol):
+    def synthesize(self, text: str, *, output_path: Path) -> None: ...
+
+
+class AudioCache:
+    """Content-addressed WAV cache; dynamic sentences share the same path."""
+
+    def __init__(self, root: Path, voice_version: str):
+        self.root = root
+        self.voice_version = voice_version
+
+    def key(self, text: str) -> str:
+        normalized = " ".join(text.split())
+        return hashlib.sha256(f"{self.voice_version}\n{normalized}".encode()).hexdigest()
+
+    def path_for(self, text: str) -> Path:
+        return self.root / f"{self.key(text)}.wav"
+
+    def get_or_create(self, text: str, synthesizer: TTSSynthesizer) -> Path:
+        target = self.path_for(text)
+        if not target.is_file():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            # A crashed TTS process must never leave a half-written WAV that
+            # later requests mistake for a valid cache hit.
+            temporary = target.with_suffix(target.suffix + ".tmp")
+            synthesizer.synthesize(text, output_path=temporary)
+            temporary.replace(target)
+        return target
+
+
+def sentence_chunks(text: str, max_chars: int = 180) -> list[str]:
+    if max_chars < 40:
+        raise ValueError("max_chars çok küçük")
+    sentences = [part.strip() for part in re.split(r"(?<=[.!?])\s+", text.strip()) if part.strip()]
+    chunks: list[str] = []
+    for sentence in sentences:
+        if len(sentence) <= max_chars:
+            chunks.append(sentence)
+            continue
+        words, current = sentence.split(), ""
+        for word in words:
+            candidate = f"{current} {word}".strip()
+            if current and len(candidate) > max_chars:
+                chunks.append(current)
+                current = word
+            else:
+                current = candidate
+        if current:
+            chunks.append(current)
+    return chunks
+
+
+class SocraticTutorOrchestrator:
+    """Coordinates graph evidence, safe LLM prompts, dialogue state and TTS."""
+
+    def __init__(self, search: WeightedGraphSearch, llm: LocalLLM,
+                 audio_cache: AudioCache, tts: TTSSynthesizer):
+        self.search = search
+        self.llm = llm
+        self.audio_cache = audio_cache
+        self.tts = tts
+
+    @staticmethod
+    def _system_prompt() -> str:
+        return ("Sen görme engelli AYT öğrencisine kısa özel ders veren tarih koçusun. "
+                "Yalnız verilen onaylı kanıtlara dayan. İlk dört aşamada cevabı, doğru şıkkı "
+                "ve cevap anahtarını söyleme. Tek seferde tek soru sor; en fazla iki kısa cümle kullan. "
+                "Kaynak yetersizse tahmin etme ve bunu açıkça belirt.")
+
+    @staticmethod
+    def _context(result: RetrievalResult) -> str:
+        lines = []
+        for chain in result.chains:
+            for hit in chain.hits[:2]:
+                lines.append(f"Şık {hit.choice_label}: düğüm={hit.node_id}; kaynak={','.join(hit.source_ids)}; skor={hit.score}")
+        return "\n".join(lines) or "Onaylı kanıt yok."
+
+    def start(self, question: QuestionItem, state: TutorDialogueState | None = None,
+              learner_message: str = "") -> tuple[TutorDialogueState, str, list[Path]]:
+        current = state or TutorDialogueState(session_id=hashlib.sha256(question.id.encode()).hexdigest()[:16], question_id=question.id)
+        if current.question_id != question.id:
+            raise ValueError("Diyalog başka soruya taşınamaz")
+        result = self.search.search(question, top_k=3)
+        all_hits = [hit for chain in result.chains for hit in chain.hits]
+        if not all_hits:
+            text = "Bu soru için öğretmen onaylı kaynak düğümü bulunamadı. Önce sorunun senden ne istediğini kendi sözlerinle anlatır mısın?"
+            next_state = current.model_copy(update={"learner_turns": current.learner_turns + 1,
+                                                     "source_ids": [], "retrieved_node_ids": [], "retrieved_edge_ids": []})
+        else:
+            user_prompt = (f"Aşama: {current.stage.value}\nSoru: {question.stem}\n"
+                           f"Şıklar: " + " | ".join(f"{c.label}: {c.text}" for c in question.choices)
+                           + f"\nÖğrenci mesajı: {learner_message or 'Henüz yanıt vermedi.'}\n"
+                           + "Kanıt bağlamı:\n" + self._context(result))
+            text = self.llm.generate(self._system_prompt(), user_prompt, max_tokens=72).strip()
+            if not text or (current.stage != DialogueStage.GEREKCELI_ACIKLAMA and _answer_leak(text)):
+                text = "Kaynakta geçen ayrıntılardan hangisi soru kökündeki isteği açıklıyor?"
+            next_state = current.model_copy(update={
+                "learner_turns": current.learner_turns + 1,
+                "retrieved_node_ids": list(dict.fromkeys(hit.node_id for hit in all_hits))[:12],
+                "retrieved_edge_ids": list(dict.fromkeys(edge for hit in all_hits for edge in hit.supporting_edge_ids))[:12],
+                "source_ids": list(dict.fromkeys(source for hit in all_hits for source in hit.source_ids))[:12],
+            })
+        audio_paths = [self.audio_cache.get_or_create(chunk, self.tts) for chunk in sentence_chunks(text)]
+        return next_state, text, audio_paths
+
+
+def _answer_leak(text: str) -> bool:
+    return bool(re.search(r"(?:doğru cevap|doğru şık|cevap\s*[:：]|şık\s*[A-E]\b|[A-E]\s*şıkkı)", text, re.IGNORECASE))
+
+
+def example_graph_payload() -> dict[str, Any]:
+    """Small answer-free JSON example used in docs and schema tests."""
+    graph = KnowledgeGraph(
+        corpus_checksum="0123456789abcdef0123456789abcdef",
+        nodes=[
+            HistoricalNode(id="topic-milli-mucadele", node_type=NodeType.TOPIC,
+                           label="Millî Mücadele", approved=True,
+                           metadata=NodeMetadata(section_id="2.1", node_weight=0.9, source_ids=["src-topic-001"])),
+            HistoricalNode(id="event-tbmm", node_type=NodeType.KURUM_DEVLET,
+                           label="TBMM'nin açılması", description="Millî egemenliğin kurumsallaşması.", approved=True,
+                           metadata=NodeMetadata(years=[1920], concepts=["ulusal egemenlik"], source_ids=["src-meb-001"])),
+        ],
+        edges=[Edge(id="edge-topic-tbmm", from_node="event-tbmm", to_node="topic-milli-mucadele",
+                    relation=RelationType.ALT_KONUSUDUR, quote="TBMM'nin açılması Millî Mücadele döneminin önemli gelişmelerindendir.",
+                    source_ids=["src-meb-001"], confidence=0.96, approved=True)],
+    )
+    question = QuestionItem(id="demo-q1", stem="Millî egemenlikle ilgili gelişmeyi bul.",
+                            choices=[QuestionChoice(label="A", text="TBMM'nin açılması"),
+                                     QuestionChoice(label="B", text="Başka bir seçenek")], topic="Millî Mücadele")
+    state = TutorDialogueState(session_id="demo-session", question_id="demo-q1")
+    return {"graph": graph.model_dump(mode="json"), "question": question.model_dump(mode="json"), "dialogue_state": state.model_dump(mode="json")}

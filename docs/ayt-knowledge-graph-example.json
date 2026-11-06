@@ -1,0 +1,105 @@
+{
+  "graph": {
+    "schema": "ayt-history-knowledge-graph-v1",
+    "corpus_checksum": "0123456789abcdef0123456789abcdef",
+    "nodes": [
+      {
+        "id": "topic-milli-mucadele",
+        "node_type": "TOPIC",
+        "label": "Millî Mücadele",
+        "description": "",
+        "metadata": {
+          "aliases": [],
+          "years": [],
+          "century": null,
+          "period": null,
+          "persons": [],
+          "places": [],
+          "concepts": [],
+          "section_id": "2.1",
+          "unit_title": null,
+          "node_weight": 0.9,
+          "source_ids": [
+            "src-topic-001"
+          ]
+        },
+        "embedding": null,
+        "approved": true
+      },
+      {
+        "id": "event-tbmm",
+        "node_type": "KURUM_DEVLET",
+        "label": "TBMM'nin açılması",
+        "description": "Millî egemenliğin kurumsallaşması.",
+        "metadata": {
+          "aliases": [],
+          "years": [
+            1920
+          ],
+          "century": null,
+          "period": null,
+          "persons": [],
+          "places": [],
+          "concepts": [
+            "ulusal egemenlik"
+          ],
+          "section_id": null,
+          "unit_title": null,
+          "node_weight": 0.5,
+          "source_ids": [
+            "src-meb-001"
+          ]
+        },
+        "embedding": null,
+        "approved": true
+      }
+    ],
+    "edges": [
+      {
+        "id": "edge-topic-tbmm",
+        "from_node": "event-tbmm",
+        "to_node": "topic-milli-mucadele",
+        "relation": "ALT_KONUSUDUR",
+        "quote": "TBMM'nin açılması Millî Mücadele döneminin önemli gelişmelerindendir.",
+        "source_ids": [
+          "src-meb-001"
+        ],
+        "confidence": 0.96,
+        "approved": true
+      }
+    ]
+  },
+  "question": {
+    "id": "demo-q1",
+    "stem": "Millî egemenlikle ilgili gelişmeyi bul.",
+    "choices": [
+      {
+        "label": "A",
+        "text": "TBMM'nin açılması"
+      },
+      {
+        "label": "B",
+        "text": "Başka bir seçenek"
+      }
+    ],
+    "unit_id": null,
+    "topic": "Millî Mücadele",
+    "question_terms": [],
+    "choice_evidence": [],
+    "answer_key_ref": null
+  },
+  "dialogue_state": {
+    "session_id": "demo-session",
+    "question_id": "demo-q1",
+    "stage": "soru_analizi",
+    "selected_choice": null,
+    "eliminated_choices": [],
+    "asked_hints": [],
+    "learner_turns": 0,
+    "repeat_attempts": 0,
+    "retrieved_node_ids": [],
+    "retrieved_edge_ids": [],
+    "source_ids": [],
+    "can_reveal_explanation": false
+  }
+}

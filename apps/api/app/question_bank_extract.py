@@ -270,7 +270,13 @@ def _parse_question(lines, images, page_number, column, checksum):
             value = "; ".join(f"{header}: {_join([line])}" for header, line in zip(("I", "II", "III"), option_lines))
         elif len(option_lines) > 1 and all(abs(line.bbox[1] - option_lines[0].bbox[1]) < 3 for line in option_lines):
             names = ("Birinci sütun", "İkinci sütun", "Üçüncü sütun", "Dördüncü sütun", "Beşinci sütun")
-            value = "; ".join(f"{names[index]}: {_join([line])}" for index, line in enumerate(option_lines))
+            # A malformed or table-like page may expose more horizontal cells
+            # than a normal A–E option.  Keep all text and fail closed with a
+            # review flag instead of indexing past the five expected labels.
+            value = "; ".join(
+                f"{names[index] if index < len(names) else f'Sütun {index + 1}'}: {_join([line])}"
+                for index, line in enumerate(option_lines)
+            )
         else:
             value = _join(option_lines)
         if value:

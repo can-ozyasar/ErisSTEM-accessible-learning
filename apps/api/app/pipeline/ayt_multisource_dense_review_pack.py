@@ -16,6 +16,7 @@ from .ayt_evidence_review_pack import _render_crop
 QUEUE_SCHEMAS = {
     "official-ayt-multisource-dense-review-queue-v1": "ayt-multisource-dense-review-pack-v1",
     "official-ayt-full-multisource-dense-review-queue-v1": "ayt-full-multisource-dense-review-pack-v1",
+    "official-ayt-full-targeted-expansion-review-queue-v1": "ayt-full-targeted-expansion-review-pack-v1",
 }
 
 

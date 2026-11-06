@@ -25,6 +25,15 @@ PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.build_ayt_graph_ap
 
 Paketteki `index.html` ve `crops/` yalnız private inceleme içindir; paket kararları manifest’e otomatik yazmaz.
 
+Paket bütünlüğü şu komutla kontrol edilir:
+
+```bash
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.validate_ayt_graph_approval_pack \
+  --manifest data/private/yks-ayt-source-v1/ayt-graph-teacher-approval-pack-v1/manifest.json \
+  --pack-root data/private/yks-ayt-source-v1/ayt-graph-teacher-approval-pack-v1 \
+  --output data/private/yks-ayt-source-v1/ayt-graph-teacher-approval-pack-v1/validation.json
+```
+
 ## Terfi ve graf üretimi
 
 ```bash

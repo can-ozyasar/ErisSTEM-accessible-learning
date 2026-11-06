@@ -7,6 +7,7 @@ from app.ayt_knowledge_graph import (
     Edge,
     HistoricalNode,
     KnowledgeGraph,
+    KnowledgeGraphBuilder,
     NodeMetadata,
     NodeType,
     QuestionChoice,
@@ -66,6 +67,21 @@ def test_graph_rejects_approved_edge_to_unapproved_node():
             edges=[Edge(id="e", from_node="a", to_node="b", relation=RelationType.ALT_KONUSUDUR,
                         quote="A, B'nin alt konusudur.", source_ids=["src-a"], approved=True)],
         )
+
+
+def test_builder_keeps_unreviewed_corpus_nodes_out_of_runtime():
+    corpus = {
+        "schema": "multi-history-rag-v1", "corpus_checksum": "0123456789abcdef0123456789abcdef",
+        "books": [{"source_name": "meb.pdf", "source_checksum": "abcdef0123456789abcdef0123456789",
+                   "index": {"sections": [{"id": "2.1", "title": "Millî Mücadele"}],
+                              "chunks": [{"id": "c1", "section_id": "2.1", "section_title": "Millî Mücadele",
+                                          "text": "1920 yılında TBMM açıldı.",
+                                          "quality": {"quality_checked": True},
+                                          "pre_review": {"decision": "review_for_approval"}}]}}],
+    }
+    built = KnowledgeGraphBuilder(corpus["corpus_checksum"]).add_corpus(corpus).build()
+    assert built.approved_nodes() == []
+    assert len(built.nodes) == 3 and len(built.edges) == 2
 
 
 class FakeLLM:

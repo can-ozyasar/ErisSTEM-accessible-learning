@@ -148,6 +148,87 @@ class KnowledgeGraph(StrictModel):
         return [edge for edge in self.edges if edge.approved and edge.from_node in approved and edge.to_node in approved]
 
 
+class KnowledgeGraphBuilder:
+    """Convert a versioned multi-book corpus into a review-safe graph.
+
+    This builder creates structural book/section/chunk nodes only.  Entity
+    extraction (person, event, treaty, place) can add candidate nodes later,
+    but no such inference is silently promoted to an approved edge.
+    """
+
+    def __init__(self, corpus_checksum: str):
+        if len(corpus_checksum) < 16:
+            raise ValueError("Corpus checksum gerekli")
+        self.corpus_checksum = corpus_checksum
+        self.nodes: list[HistoricalNode] = []
+        self.edges: list[Edge] = []
+
+    @staticmethod
+    def _years(text: str) -> list[int]:
+        years: list[int] = []
+        for raw in re.findall(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)", text):
+            value = int(raw)
+            if value not in years:
+                years.append(value)
+        return years[:12]
+
+    @staticmethod
+    def _approved(chunk: dict) -> bool:
+        review = chunk.get("pre_review") or {}
+        return (review.get("decision") in {"approved", "approved_for_runtime"}
+                and bool(chunk.get("quality", {}).get("quality_checked", False)))
+
+    def add_corpus(self, corpus: dict) -> "KnowledgeGraphBuilder":
+        if corpus.get("schema") != "multi-history-rag-v1" or corpus.get("corpus_checksum") != self.corpus_checksum:
+            raise ValueError("Corpus şeması veya checksum eşleşmiyor")
+        for book in corpus.get("books", []):
+            book_id = f"book:{book['source_checksum'][:24]}"
+            book_source = [book["source_checksum"]]
+            self.nodes.append(HistoricalNode(id=book_id, node_type=NodeType.UNIT,
+                                              label=str(book.get("source_name", "MEB kitabı"))[:180],
+                                              metadata=NodeMetadata(source_ids=book_source), approved=False))
+            sections = book.get("index", {}).get("sections", [])
+            section_nodes: dict[str, str] = {}
+            for section in sections:
+                section_id = str(section.get("id", "unknown"))
+                node_id = f"section:{book['source_checksum'][:24]}:{section_id}"
+                section_nodes[section_id] = node_id
+                self.nodes.append(HistoricalNode(
+                    id=node_id, node_type=NodeType.TOPIC, label=str(section.get("title", section_id))[:180],
+                    metadata=NodeMetadata(section_id=section_id, unit_title=str(book.get("source_name", ""))[:160],
+                                          source_ids=book_source), approved=False))
+                self.edges.append(Edge(id=f"edge:{book['source_checksum'][:16]}:{section_id}:book",
+                                       from_node=node_id, to_node=book_id, relation=RelationType.ALT_KONUSUDUR,
+                                       quote=f"{section.get('title', section_id)} bölümü {book.get('source_name', 'MEB kitabı')} içindedir.",
+                                       source_ids=book_source, approved=False))
+            for chunk in book.get("index", {}).get("chunks", []):
+                chunk_id = str(chunk.get("id", ""))
+                if not chunk_id:
+                    continue
+                source_id = f"{book['source_checksum']}:{chunk_id}"
+                node_id = f"chunk:{source_id}"
+                text = str(chunk.get("text", ""))
+                section_id = str(chunk.get("section_id", "unknown"))
+                approved = self._approved(chunk)
+                warnings = chunk.get("quality", {}).get("warnings") or []
+                weight = max(0.0, min(1.0, 0.75 - 0.08 * len(warnings)))
+                self.nodes.append(HistoricalNode(
+                    id=node_id, node_type=NodeType.SUBTOPIC, label=str(chunk.get("section_title", section_id))[:180],
+                    description=text[:1200], metadata=NodeMetadata(section_id=section_id,
+                    unit_title=str(book.get("source_name", ""))[:160], years=self._years(text),
+                    node_weight=weight, source_ids=[source_id]), approved=approved))
+                parent = section_nodes.get(section_id)
+                if parent:
+                    self.edges.append(Edge(id=f"edge:{book['source_checksum'][:16]}:{chunk_id}:section",
+                                           from_node=node_id, to_node=parent, relation=RelationType.ALT_KONUSUDUR,
+                                           quote=text[:520] or "Kaynak parçası bu bölüm içinde yer alır.",
+                                           source_ids=[source_id], approved=approved))
+        return self
+
+    def build(self) -> KnowledgeGraph:
+        return KnowledgeGraph(corpus_checksum=self.corpus_checksum, nodes=self.nodes, edges=self.edges)
+
+
 class QuestionChoice(StrictModel):
     label: str = Field(pattern=r"^[A-E]$")
     text: str = Field(min_length=1, max_length=800)

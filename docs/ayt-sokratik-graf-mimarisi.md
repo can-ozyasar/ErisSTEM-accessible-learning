@@ -14,6 +14,13 @@
    kaynak kimliklerini içeren kısa bağlamla yerel LLM'i çağırır, erken cevap
    ifşasını engeller ve cümleleri içerik adresli WAV önbelleğine yollar.
 
+`KnowledgeGraphBuilder.add_corpus(...)` MEB corpus’unun kitap–bölüm–parça
+hiyerarşisini checksum’a bağlı aday düğümlere dönüştürür. `pre_review` ve
+`quality_checked` kapısı geçilmeden hiçbir parça veya hiyerarşi kenarı onaylı
+arama kümesine alınmaz. Kişi, olay ve antlaşma düğümleri ayrıca öğretmen
+onaylı atomlar olarak eklenir; otomatik çıkarım kendiliğinden öğrenciye kanıt
+olmaz.
+
 ## Ağırlıklı arama akışı
 
 ```mermaid

@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -60,3 +61,10 @@ def test_rejects_excerpt_from_unrelated_crop(tmp_path: Path):
     queue["rows"][0]["suggestions"][0]["excerpt"] = "Bu ifade bu PDF kesitinde bulunmayan bir bilgidir."
     with pytest.raises(ValueError, match="metin kapsamını"):
         build(queue, _sources(queue), tmp_path, per_question=1)
+
+
+def test_full_queue_uses_explicit_full_pack_schema(tmp_path: Path):
+    queue = deepcopy(_queue())
+    queue["schema"] = "official-ayt-full-multisource-dense-review-queue-v1"
+    result = build(queue, _sources(queue), tmp_path, per_question=1)
+    assert result["schema"] == "ayt-full-multisource-dense-review-pack-v1"

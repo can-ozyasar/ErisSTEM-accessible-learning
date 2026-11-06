@@ -1,4 +1,5 @@
 import json
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
@@ -47,3 +48,14 @@ def test_rejects_different_source_bindings():
     rankings["source_bindings"] = []
     with pytest.raises(ValueError, match="kaynak bağları"):
         build(discovery, rankings)
+
+
+def test_accepts_full_corpus_schema_without_changing_card_contract():
+    discovery = _discovery()
+    discovery = deepcopy(discovery)
+    discovery["schema"] = "ayt-full-multisource-dense-discovery-v1"
+    rankings = _rankings(discovery)
+    rankings["schema"] = "official-ayt-full-multisource-dense-discovery-rankings-v1"
+    result = build(discovery, rankings, review_limit=3)
+    assert result["schema"] == "official-ayt-full-multisource-dense-review-queue-v1"
+    assert all(card["source_checksum"] for row in result["rows"] for card in row["suggestions"])

@@ -24,15 +24,16 @@ def build(pairs: list[tuple[dict, dict]]) -> dict:
             raise ValueError("Etiket ve inceleme sürümü uyuşmuyor")
         rows = {row["candidate_id"]: row for row in tags.get("tags", [])}
         for decision in review.get("reviews", []):
-            if decision.get("candidate_id") not in rows or decision.get("decision") != "approved_for_scope_metadata":
+            status = decision.get("decision", decision.get("status"))
+            if decision.get("candidate_id") not in rows or status != "approved_for_scope_metadata":
                 continue
             row = rows[decision["candidate_id"]]
             if FORBIDDEN & set(row):
                 raise ValueError("Ham soru veya yanıt alanı kapsam metadata'sına giremez")
             items.append({"exam_id": row["candidate_id"], "year": row["year"], "test": "AYT",
-                          "question_number": _number(row["candidate_id"]), "grade": decision["grade_verified"],
-                          "unit_id": decision["unit_verified"], "concept": row["relation_type"],
-                          "relation_type": decision["relation_type_verified"], "visual_dependency": False,
+                          "question_number": _number(row["candidate_id"]), "grade": decision.get("grade_verified", decision["grade"]),
+                          "unit_id": decision.get("unit_verified", decision["meb_unit_id"]), "concept": row["relation_type"],
+                          "relation_type": decision.get("relation_type_verified", decision["relation_type"]), "visual_dependency": False,
                           "direct_evidence": row["direct_source_likely"] == "likely",
                           "accessible": row["accessibility"] == "text_accessible",
                           "reviewer": "history_teacher_agent_scope_review", "approved": True})

@@ -57,6 +57,14 @@ def test_search_returns_components_and_ignores_unapproved_nodes():
     assert hit.supporting_edge_ids == ["e01"] or hit.hop == 0
 
 
+def test_search_weights_are_explicit_and_normalized():
+    with pytest.raises(ValueError):
+        WeightedGraphSearch(graph(), weights={"cosine": 1.0})
+    search = WeightedGraphSearch(graph(), weights={"cosine": .5, "metadata": .2,
+                                                   "node_weight": .1, "graph": .2})
+    assert search.weights["cosine"] == .5
+
+
 def test_graph_rejects_approved_edge_to_unapproved_node():
     with pytest.raises(ValueError):
         KnowledgeGraph(

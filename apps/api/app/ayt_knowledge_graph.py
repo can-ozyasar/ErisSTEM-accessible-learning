@@ -313,6 +313,14 @@ class RetrievalResult(StrictModel):
     metadata_filters: dict[str, list[str]] = Field(default_factory=dict)
 
 
+DEFAULT_SCORE_WEIGHTS = {
+    "cosine": 0.45,
+    "metadata": 0.25,
+    "node_weight": 0.10,
+    "graph": 0.20,
+}
+
+
 DATE_RE = re.compile(r"(?:MÖ|MS)?\s*\d{1,4}(?:\s*[-–]\s*\d{1,4})?", re.IGNORECASE)
 TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+")
 STOP = {"ve", "veya", "ile", "bir", "bu", "şu", "olan", "hangi", "hangisi", "aşağıdaki", "göre", "için", "de", "da"}
@@ -336,9 +344,15 @@ class EmbeddingFn(Protocol):
 class WeightedGraphSearch:
     """Question+choice search with explicit, inspectable score components."""
 
-    def __init__(self, graph: KnowledgeGraph, embed: EmbeddingFn | None = None):
+    def __init__(self, graph: KnowledgeGraph, embed: EmbeddingFn | None = None,
+                 weights: dict[str, float] | None = None):
         self.graph = graph
         self.embed = embed
+        self.weights = dict(DEFAULT_SCORE_WEIGHTS if weights is None else weights)
+        if set(self.weights) != set(DEFAULT_SCORE_WEIGHTS) or any(value < 0 for value in self.weights.values()):
+            raise ValueError("Arama ağırlıkları cosine, metadata, node_weight ve graph alanlarını içermeli")
+        if not math.isclose(sum(self.weights.values()), 1.0, abs_tol=1e-6):
+            raise ValueError("Arama ağırlıklarının toplamı 1 olmalı")
         self.nodes = {node.id: node for node in graph.approved_nodes()}
         self.edges = graph.approved_edges()
         self.adj: dict[str, list[tuple[str, Edge]]] = defaultdict(list)
@@ -412,7 +426,9 @@ class WeightedGraphSearch:
             graph_scores = self._query_graph_scores(seeds)
             for node_id, (node, cosine, metadata) in metrics.items():
                 graph_score, hop, edge_ids = graph_scores.get(node_id, (0.0, 2, []))
-                score = 0.45 * cosine + 0.25 * metadata + 0.10 * node.metadata.node_weight + 0.20 * graph_score
+                score = (self.weights["cosine"] * cosine + self.weights["metadata"] * metadata
+                         + self.weights["node_weight"] * node.metadata.node_weight
+                         + self.weights["graph"] * graph_score)
                 if score >= min_score:
                     hits.append((score, node, cosine, metadata, graph_score, hop, edge_ids))
             hits.sort(key=lambda item: (-item[0], item[1].id))

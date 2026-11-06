@@ -90,3 +90,11 @@ def test_accepts_targeted_expansion_queue_schema():
     audit = _audit(queue)
     result = build(queue, audit)
     assert result["question_count"] == 10
+
+
+def test_accepts_versioned_full_audit_schema():
+    queue = _queue()
+    audit = _audit(queue)
+    audit["schema"] = "teacher-official-ayt-full-multisource-dense-audit-v2"
+    result = build(queue, audit)
+    assert result["supported_question_count"] == 1

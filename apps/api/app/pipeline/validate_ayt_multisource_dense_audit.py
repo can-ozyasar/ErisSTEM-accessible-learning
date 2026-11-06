@@ -14,6 +14,8 @@ QUEUE_SCHEMAS = {
 }
 AUDIT_SCHEMAS = {
     "teacher-official-ayt-multisource-dense-audit-v1",
+    "teacher-official-ayt-multisource-dense-audit-v2",
+    "teacher-official-ayt-full-multisource-dense-audit-v2",
     "teacher-official-ayt-full-targeted-expansion-audit-v1",
 }
 

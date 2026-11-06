@@ -241,7 +241,10 @@ def build(transcriptions: dict, corpus: dict, limit: int = 6) -> dict:
                     "source_name": book["source_name"],
                     "source_checksum": book["source_checksum"],
                     "grade": book["grade"],
-                    "section_id": item["section_id"],
+                    # Older private indexes may not carry a stable section id;
+                    # keep the candidate usable for teacher review while
+                    # preserving the human-readable section title.
+                    "section_id": item.get("section_id") or item.get("section_title", "belirsiz"),
                     "page": item["page"],
                     "bbox": item["bbox"],
                     "section_title": item["section_title"],

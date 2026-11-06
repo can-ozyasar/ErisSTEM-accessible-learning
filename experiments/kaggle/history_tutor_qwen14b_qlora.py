@@ -37,7 +37,13 @@ def rows(name: str) -> list[dict]:
         if item["case"] in group_cases:
             raise ValueError("a coaching stage repeats within a question group")
         group_cases.add(item["case"])
-    expected_groups = 84 if name == "train" else 18
+    # Production defaults remain 84/18.  A private research pilot may set
+    # explicit counts after its own readiness gate; this prevents a 17-group
+    # pilot from being mistaken for the 120-group production set.
+    expected_groups = int(os.getenv(
+        "TUTOR_QLORA_EXPECTED_TRAIN_GROUPS" if name == "train" else "TUTOR_QLORA_EXPECTED_DEV_GROUPS",
+        "84" if name == "train" else "18",
+    ))
     if len(groups) != expected_groups or len(parsed) != expected_groups * 6:
         raise ValueError(f"{name} must contain {expected_groups} complete question groups and six cases each")
     if any(len(cases) != 6 for cases in groups.values()):

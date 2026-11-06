@@ -47,13 +47,18 @@ def build(baseline: dict, candidate: dict) -> dict:
         raise ValueError("Soru düzeyi ajan provenance kaydı zorunlu")
     base, dense = _summary(base_rows), _summary(candidate_rows)
     changes = Counter()
+    transitions = Counter()
     for candidate_id, baseline_row in by_base.items():
-        before = _assessment(baseline_row) in SUPPORT
-        after = _assessment(by_candidate[candidate_id]) in SUPPORT
+        before_label = _assessment(baseline_row)
+        after_label = _assessment(by_candidate[candidate_id])
+        before = before_label in SUPPORT
+        after = after_label in SUPPORT
+        transitions[f"{before_label}_to_{after_label}"] += 1
         changes["improved" if not before and after else "regressed" if before and not after else "unchanged"] += 1
     return {
         "schema": "ayt-retrieval-agent-audit-delta-v1", "baseline": base, "candidate": dense,
-        "delta": {"support_count": dense["support_count"] - base["support_count"], "support_rate": round(dense["support_rate"] - base["support_rate"], 4), **dict(changes)},
+        "delta": {"support_count": dense["support_count"] - base["support_count"], "support_rate": round(dense["support_rate"] - base["support_rate"], 4), **dict(changes),
+                  "quality_transitions": dict(sorted(transitions.items()))},
         "accepted_for_next_review_stage": dense["support_count"] > base["support_count"] and changes["regressed"] == 0,
         "reviewer_kind": "history_teacher_agent_v1", "is_human_teacher_approval": False,
         "answer_key_accessed": False, "worked_explanation_accessed": False,

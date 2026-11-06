@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>ErişSTEM — Rapor 01: Proje Tanımı ve Planlama</title>
+  <style>
+    @page { size: A4; margin: 2.2cm 2.2cm 2cm; }
+    @page:first { margin: 1.8cm 2.2cm; }
+    * { box-sizing: border-box; }
+    body { color: #172033; font-family: "Liberation Serif", Georgia, serif; font-size: 11.2pt; line-height: 1.55; }
+    h1, h2, h3 { color: #0d3174; font-family: "Liberation Sans", Arial, sans-serif; }
+    h1 { font-size: 21pt; line-height: 1.2; text-align: center; margin: 16pt 0 8pt; }
+    h2 { font-size: 14pt; border-bottom: 1.4pt solid #1a5ba8; padding-bottom: 4pt; margin: 20pt 0 9pt; }
+    h3 { font-size: 11.5pt; margin: 13pt 0 4pt; }
+    p { text-align: justify; margin: 0 0 9pt; }
+    ul { margin: 4pt 0 10pt 18pt; padding: 0; }
+    li { margin: 3pt 0; }
+    .cover { min-height: 25.5cm; text-align: center; position: relative; padding-top: 4pt; page-break-after: always; }
+    .logo { width: 112px; height: 150px; object-fit: contain; margin: 0 auto 8pt; display: block; }
+    .university { font-family: "Liberation Sans", Arial, sans-serif; color: #0d3174; font-weight: bold; font-size: 15pt; letter-spacing: .25pt; }
+    .faculty { font-family: "Liberation Sans", Arial, sans-serif; color: #344052; font-size: 11pt; margin-top: 3pt; white-space: nowrap; }
+    .rule { width: 70%; border: 0; border-top: 2px solid #1a5ba8; margin: 38pt auto 28pt; }
+    .report-label { color: #1a5ba8; font-family: "Liberation Sans", Arial, sans-serif; font-size: 12pt; font-weight: bold; letter-spacing: .4pt; }
+    .subtitle { font-family: "Liberation Sans", Arial, sans-serif; font-size: 13pt; color: #3f4a5a; margin: 9pt auto 34pt; white-space: nowrap; }
+    .info { width: 76%; margin: 0 auto; border-collapse: collapse; font-size: 11.5pt; text-align: left; }
+    .info th { color: #0d3174; width: 40%; padding: 7pt 8pt; border-bottom: .5pt solid #c7d5e9; font-family: "Liberation Sans", Arial, sans-serif; }
+    .info td { padding: 7pt 8pt; border-bottom: .5pt solid #c7d5e9; }
+    .date { color: #4c5b71; font-family: "Liberation Sans", Arial, sans-serif; font-size: 10.5pt; margin-top: 30pt; }
+    .toc { page-break-before: always; page-break-after: always; }
+    .toc ol { margin-left: 20pt; }
+    .toc li { padding: 3pt 0; }
+    .box { background: #f2f6fb; border-left: 4px solid #1a5ba8; padding: 10pt 13pt; margin: 12pt 0; }
+    .box p { margin: 0; }
+    table.data { width: 100%; border-collapse: collapse; margin: 10pt 0 14pt; font-size: 10.4pt; }
+    table.data th { background: #0d3174; color: white; padding: 7pt; text-align: left; font-family: "Liberation Sans", Arial, sans-serif; }
+    table.data td { padding: 7pt; border: .5pt solid #b9c7d9; vertical-align: top; }
+    table.data tr:nth-child(even) td { background: #f6f8fb; }
+    .page-break { page-break-before: always; }
+    .small { font-size: 10.3pt; }
+    .refs li { margin-bottom: 7pt; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <img class="logo" src="sau-logo.svg" alt="Sakarya Üniversitesi logosu">
+    <div class="university">SAKARYA ÜNİVERSİTESİ</div>
+    <div class="faculty">Bilgisayar ve Bilişim Bilimleri Fakültesi<br>Bilgisayar Mühendisliği Bölümü</div>
+    <hr class="rule">
+    <div class="report-label">BİTİRME PROJESİ</div>
+    <h1>ErişSTEM</h1>
+    <div class="subtitle">Erişilebilir STEM Öğrenme Platformu<br><strong>Rapor 01: Proje Tanımı ve Planlama</strong></div>
+    <table class="info">
+      <tr><th>Hazırlayan</th><td>Muhammed Can Özyaşar</td></tr>
+      <tr><th>Öğrenci Numarası</th><td>G231210009</td></tr>
+      <tr><th>Danışman</th><td>Prof. Dr. Nejat Yumuşak</td></tr>
+      <tr><th>Akademik Birim</th><td>Bilgisayar ve Bilişim Bilimleri Fakültesi</td></tr>
+      <tr><th>Bölüm</th><td>Bilgisayar Mühendisliği</td></tr>
+    </table>
+    <div class="date">Sakarya, Ekim 2026</div>
+  </section>
+
+  <section class="toc">
+    <h2>İçindekiler</h2>
+    <ol>
+      <li>Giriş</li>
+      <li>Problem Tanımı</li>
+      <li>Projenin Amacı ve Hedefleri</li>
+      <li>Kapsam ve Sınırlar</li>
+      <li>Önerilen Sistem ve Çalışma Yaklaşımı</li>
+      <li>Planlanan Mimari</li>
+      <li>İş Planı ve Raporlama Yaklaşımı</li>
+      <li>Beklenen Katkılar</li>
+      <li>Sonuç</li>
+      <li>Kaynakça</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>1. Giriş</h2>
+    <p>STEM (fen, teknoloji, mühendislik ve matematik) içerikleri; formül, tablo, şekil, grafik ve çok katmanlı açıklamalar içermesi nedeniyle her öğrenci için dikkatli bir içerik sunumu gerektirir. Görme yetersizliği olan öğrenciler açısından ise kaynak materyalin yalnızca ekranda gösterilmesi yeterli değildir. İçeriğin doğru sırada okunabilmesi, yapısal öğelerinin anlaşılabilmesi, güvenilir metinle seslendirilebilmesi ve öğretmen denetimiyle yayımlanabilmesi gerekir [1, 2].</p>
+    <p>Bu bitirme projesinde ErişSTEM adı verilen, STEM öğrenme materyallerini erişilebilir bir öğrenme deneyimine dönüştürmeyi hedefleyen bir platform tasarlanmaktadır. Sistem; kaynak materyalin güvenli biçimde işlenmesi, erişilebilir öğrenci görünümünde sunulması ve belirsiz içeriklerin öğretmen incelemesine yönlendirilmesi fikri üzerine kuruludur. Bu ilk rapor, projenin gerekçesini, sınırlarını ve uygulanacak yaklaşımı tanımlamaktadır; geliştirme çıktıları ve değerlendirme sonuçları sonraki raporlarda ele alınacaktır.</p>
+
+    <h2>2. Problem Tanımı</h2>
+    <p>Eğitim materyallerinde bulunan düz metin dışındaki bileşenler erişilebilirlik açısından temel bir zorluk oluşturur. Özellikle matematiksel gösterimler, tablo hücreleri, şemalar ve sayfa düzeni; içerik bağlamından koparıldığında yanlış veya eksik anlaşılabilir. Görme engelli bireylerin matematik eğitimine ilişkin çalışma; notasyon, grafik, destekleyici araçlar ve bireyselleştirilmiş desteğin birlikte ele alınması gerektiğini göstermektedir [1]. Otomatik dönüştürme süreçleri bu öğeleri her zaman yeterli doğrulukla yorumlayamayabilir. Bu nedenle yanlış üretilmiş bir içerik, erişilebilirliği artırmak yerine öğrenme sürecini olumsuz etkileyebilir.</p>
+    <p>Problemin ikinci boyutu öğrenme etkileşimidir. Erişilebilir içerik yalnızca okunabilir metin sağlamakla sınırlı kalmamalıdır. Öğrencinin konuya hazırlanması, açıklama katmanları arasında ilerlemesi, sorular üzerinde çalışması ve kendi öğrenme sürecini takip edebilmesi için yönlendirilmiş bir akışa ihtiyaç vardır. Aynı zamanda içerik üretimi ile öğrenciye sunum arasında öğretmen tarafından kontrol edilebilir bir süreç bulunmalıdır.</p>
+    <div class="box"><p><strong>Temel problem:</strong> STEM materyallerindeki bilgi yapısını ve kaynak bağlamını koruyarak, görme yetersizliği olan öğrenciler için anlaşılır, denetlenebilir ve etkileşimli bir öğrenme ortamı sunmaktır.</p></div>
+
+    <h2>3. Projenin Amacı ve Hedefleri</h2>
+    <p>ErişSTEM’in ana amacı, yetkili olarak edinilmiş STEM kaynaklarını erişilebilir öğrenme içeriğine dönüştürmeye yönelik bir yazılım mimarisi ve öğrenci deneyimi ortaya koymaktır. Proje, erişilebilirlik ile içerik güvenilirliğini birlikte ele alır; otomatik işleme sonucu belirsiz olan öğelerin doğrudan öğrenciye sunulması yerine denetime açılmasını esas alır.</p>
+    <p>Bu amaç doğrultusunda aşağıdaki hedefler belirlenmiştir:</p>
+    <ul>
+      <li>Kaynak içeriğin sayfa ve konum bilgilerini koruyacak bir işleme yaklaşımı oluşturmak,</li>
+      <li>Doğrulanmış metin ve tabloları erişilebilir öğrenci arayüzünde sunmak,</li>
+      <li>Doğrulanmış metin için Türkçe sesli okuma ve Türkçe 1. derece edebî Braille desteği planlamak,</li>
+      <li>Belirsiz veya düşük güvenli öğeler için öğretmen inceleme ve onay akışı tasarlamak,</li>
+      <li>Öğrencinin rehberli çalışma ve bağımsız deneme aşamalarını destekleyen bir öğrenme akışı sağlamak,</li>
+      <li>İşlem, düzeltme ve yayın kararlarının izlenebilirliğini korumak.</li>
+    </ul>
+  </section>
+
+  <section class="page-break">
+    <h2>4. Kapsam ve Sınırlar</h2>
+    <p>Projenin ilk sürümü, erişilebilir öğrenme için gerekli çekirdek akışa odaklanır: kaynakların yetkili yerel ortamda işlenmesi, işlenmiş içeriklerin denetlenmesi ve öğrenciye erişilebilir biçimde sunulması. Kaynak telifi ve kişisel veri güvenliği, proje kapsamının belirlenmesinde temel kısıtlar olarak kabul edilmiştir.</p>
+    <table class="data">
+      <thead><tr><th>Planlanan kapsam</th><th>Kapsam dışı / sınırlandırılmış alan</th></tr></thead>
+      <tbody>
+        <tr><td>Kaynak koordinatlarıyla izlenebilir metin, tablo ve belge öğeleri</td><td>Gerçek ders kitabı PDF’lerinin veya sayfa görüntülerinin depoda yayımlanması</td></tr>
+        <tr><td>Doğrulanmış içerik için sesli okuma ve edebî Braille desteği</td><td>Matematiksel gösterimlerin doğrulama olmadan otomatik Braille’e dönüştürülmesi</td></tr>
+        <tr><td>Öğretmen inceleme, düzeltme ve yayın kontrol akışı</td><td>Öğrencinin kaynak dosya yükleyebilmesi</td></tr>
+        <tr><td>Öğrenme atölyesi ve soru çözümünde rehberli akış</td><td>Üretim ortamı kimlik doğrulaması ve geniş ölçekli canlı kullanım</td></tr>
+      </tbody>
+    </table>
+    <p>Gerçek kaynak materyaller yalnızca yetkili yerel ortamda işlenecektir. Depoda telif açısından güvenli sentetik örneklerin kullanılması planlanmaktadır. Matematiksel içerik ve görsel bölge çözümleme gibi doğruluğu kritik alanlar, kalite eşiği karşılanmadığı sürece öğrenci yayın akışına alınmayacaktır.</p>
+
+    <h2>5. Önerilen Sistem ve Çalışma Yaklaşımı</h2>
+    <p>Sistem, kaynak içeriğin kontrollü şekilde işlenmesiyle başlar. Yetkili bir kullanıcı, incelenecek kaynağı ve sayfa kapsamını belirler. İşleme aşamasında metin, tablo veya diğer belge öğeleri kaynak sayfası ve konumu ile ilişkilendirilir. Bu ilişki, içerik üzerinde yapılacak denetimin kaynağa geri izlenebilmesini sağlar. Arayüz tasarımında algılanabilirlik, klavyeyle kullanılabilirlik ve anlaşılabilir yapı için WCAG 2.2 ilkeleri dikkate alınacaktır [3].</p>
+    <p>İşleme sonucunda güvenilir olduğu belirlenen içerikler öğrenci görünümünde okunabilir yapı olarak sunulur. Öğrenci, bölümlenmiş metni dinleyebilir, erişilebilir tablo yapısını inceleyebilir ve uygun olduğunda Braille karşılığından yararlanabilir. Matematiksel ifadelerde ses, Braille ve ifade içi gezinme için MathCAT benzeri yardımcı teknoloji yaklaşımları incelenmiştir [4]. Güven düzeyi düşük formül, görsel ya da tablo gibi öğeler ise doğrudan yayımlanmaz; öğretmen inceleme kuyruğuna yönlendirilir. Öğretmen düzeltme yaptıktan sonra içerik yayınlanabilir hâle gelir.</p>
+    <p>Öğrenme atölyesi bileşeni, öğrencinin konuya ilişkin ön bilgisini yoklamayı; katmanlı açıklamalarla çalışmayı; ardından yardımlı ve yardımsız sorularla ilerlemeyi hedefler. Öğrencinin ilk yanıtı, kullandığı yardım ve tamamladığı aşamalar ayrı biçimde kaydedilerek öğrenme sürecinin izlenmesi amaçlanır.</p>
+
+    <h2>6. Planlanan Mimari</h2>
+    <table class="data small">
+      <thead><tr><th>Katman</th><th>Sorumluluk</th></tr></thead>
+      <tbody>
+        <tr><td>Kaynak işleme katmanı</td><td>Yetkili yerel kaynağı işleme, belge öğelerini kaynak konumuyla ilişkilendirme ve işlem kaydı tutma.</td></tr>
+        <tr><td>Kalite ve denetim katmanı</td><td>Düşük güvenli içerikleri işaretleme; öğretmen düzeltmesi, onayı ve yayın kararını izleme.</td></tr>
+        <tr><td>Uygulama programlama arayüzü</td><td>Öğrenci, öğretmen ve inceleme akışları için kontrollü veri erişimi sağlama.</td></tr>
+        <tr><td>Öğrenci arayüzü</td><td>Erişilebilir okuma, sesli dinleme, Braille görünümü, soru çözme ve öğrenme ilerlemesini sunma.</td></tr>
+        <tr><td>Öğretmen arayüzü</td><td>İnceleme bekleyen içeriği görüntüleme, düzeltme ve yayın kararını yönetme.</td></tr>
+      </tbody>
+    </table>
+    <p>Mimari, öğrenciye sunulan içeriği kaynak işleme sürecinden ayıracak biçimde planlanmaktadır. Böylece kaynak dosyalar öğrenci arayüzüne doğrudan açılmaz; yalnızca denetlenmiş ve yayınlanmış içerikler sunulur. Bu ayrım, hem telif/gizlilik sınırlarını hem de içerik doğruluğu kontrolünü destekler.</p>
+  </section>
+
+  <section class="page-break">
+    <h2>7. İş Planı ve Raporlama Yaklaşımı</h2>
+    <p>Proje dört rapor üzerinden aşamalı biçimde izlenecektir. Her rapor bir önceki aşamada tanımlanan hedeflerin somut çıktılarıyla ilişkilendirilecek; henüz tamamlanmamış çalışmalar kesin sonuç gibi sunulmayacaktır.</p>
+    <table class="data">
+      <thead><tr><th>Rapor</th><th>Odak</th></tr></thead>
+      <tbody>
+        <tr><td>Rapor 01</td><td>Problem, amaç, kapsam, sistem yaklaşımı ve çalışma planının tanımlanması.</td></tr>
+        <tr><td>Rapor 02</td><td>Tasarım kararları, veri/iş akışı ve geliştirilen temel bileşenlerin açıklanması.</td></tr>
+        <tr><td>Rapor 03</td><td>Uygulama ilerlemesi, testler ve tespit edilen geliştirme ihtiyaçlarının değerlendirilmesi.</td></tr>
+        <tr><td>Rapor 04</td><td>Son durum, değerlendirme sonuçları, sınırlılıklar ve gelecek çalışma önerileri.</td></tr>
+      </tbody>
+    </table>
+    <p>İlk aşamada gereksinimler ve sistem sınırları netleştirilecek; ikinci aşamada bu gereksinimlerin yazılım bileşenlerine nasıl dönüştürüldüğü açıklanacaktır. Sonraki aşamalarda işlevsel doğrulama, erişilebilirlik kontrolleri ve öğrenme deneyimine ilişkin gözlemler raporlanacaktır.</p>
+
+    <h2>8. Beklenen Katkılar</h2>
+    <p>Projenin beklenen temel katkısı, STEM içeriğinin erişilebilirliğini yalnızca dosya dönüştürme problemi olarak değil; kaynak doğruluğu, öğretmen denetimi ve öğrenme deneyimiyle birlikte ele alan bir prototip sunmasıdır. Kaynak konumunun korunması, içerik üzerinde yapılan düzenlemelerin izlenmesi ve belirsiz öğelerin yayın öncesinde kontrol edilmesi, güvenilir erişilebilir içerik üretimi için bir çalışma modeli sağlayacaktır.</p>
+    <p>Öğrenci tarafında ise bölümlenmiş okuma, sesli dinleme, Braille desteği ve rehberli soru çözümü gibi bileşenlerin bir arada sunulması hedeflenmektedir. Bu yaklaşımın, öğrencinin içeriğe erişmesi yanında konu üzerinde etkin biçimde çalışmasına da katkı sağlaması beklenmektedir.</p>
+
+    <h2>9. Sonuç</h2>
+    <p>ErişSTEM, görme yetersizliği olan öğrencilerin STEM materyallerine erişimindeki yapısal ve pedagojik güçlükleri hedefleyen bir bitirme projesidir. Proje; içerik doğruluğunu, erişilebilir sunumu ve öğretmen denetimini aynı sistem içinde birleştirmeyi planlamaktadır. Bu raporda projenin neden gerekli olduğu, hangi sınırlar içinde ele alınacağı ve sistemin hangi ilkelerle çalışacağı açıklanmıştır. Sonraki raporlarda tasarımın somutlaştırılması, uygulama süreci ve değerlendirme bulguları aşamalı olarak sunulacaktır.</p>
+
+    <h2>10. Kaynakça</h2>
+    <ol class="refs small">
+      <li>Aktaş, F. N. ve Argün, Z. (2021). <em>Görme Engelli Bireylerin Matematik Eğitiminde İhtiyaçları ve Sorunları: Cebir Kavramları Bağlamında</em>. Ankara Üniversitesi Eğitim Bilimleri Fakültesi Özel Eğitim Dergisi, 22(3). https://dergipark.org.tr/tr/pub/ozelegitimdergisi/article/750682</li>
+      <li>Eğitimde Görme Engelliler Derneği. (t.y.). <em>Görme engelli öğrenciler için ders kitaplarında erişilebilirlik kriterleri</em>. https://www.eged.org/sayfa/gorme-engelli-ogrenciler-icin-ders-kitaplarinda-erisilebilirlik-kriterleri-ve-ders-kitaplarinda</li>
+      <li>World Wide Web Consortium (W3C). (2024). <em>Web Content Accessibility Guidelines (WCAG) 2.2</em>. W3C Recommendation. https://www.w3.org/TR/WCAG22/</li>
+      <li>DAISY Consortium. (t.y.). <em>MathCAT: Math Capable Assistive Technology — User Guide</em>. https://daisy.github.io/MathCAT/users.html</li>
+      <li>Millî Eğitim Bakanlığı. (2023). <em>Görme yetersizliği olan öğrenciler için sesli kütüphane oluşturuldu</em>. https://www.meb.gov.tr/gorme-yetersizligi-olan-ogrenciler-icin-sesli-kutuphane-olusturuldu/haber/28068/tr</li>
+      <li>Millî Eğitim Bakanlığı. (2018). <em>Özel Eğitim Hizmetleri Yönetmeliği</em>. https://orgm.meb.gov.tr/alt_sayfalar/mevzuat/Ozel_Egitim_Hizmetleri_Yonetmeligi_son.pdf</li>
+    </ol>
+  </section>
+</body>
+</html>

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from app.ayt_knowledge_graph import (
     WeightedGraphSearch,
     example_graph_payload,
 )
+from app.ayt_local_runtime import LocalHTTPLLM, load_approved_graph
 
 
 def graph() -> KnowledgeGraph:
@@ -116,4 +118,47 @@ def test_orchestrator_uses_content_addressed_audio_cache(tmp_path: Path):
     assert [path.name for path in audio] == [path.name for path in audio_again]
     prewarmed = orchestrator.audio_cache.prewarm(["Soru hazır.", "Soru hazır."], FakeTTS())
     assert list(prewarmed) == ["Soru hazır."]
+
+
+def test_local_llm_adapter_sends_bounded_prompt_and_parses_text(monkeypatch):
+    captured = {}
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _limit):
+            return b'{"text":"Kaynakta hangi ayrinti soruyu acikliyor?"}'
+
+    def fake_urlopen(request, timeout):
+        captured["timeout"] = timeout
+        captured["payload"] = request.data
+        captured["url"] = request.full_url
+        return Response()
+
+    monkeypatch.setattr("app.ayt_local_runtime.urlopen", fake_urlopen)
+    text = LocalHTTPLLM("http://tutor-llm:8001/generate").generate("Kural", "Soru", max_tokens=72)
+    assert text.startswith("Kaynakta")
+    assert captured["url"].endswith("/generate")
+    assert "Kural" in captured["payload"].decode("utf-8")
+    assert captured["timeout"] == 8
+
+
+def test_local_llm_requires_http_endpoint():
+    with pytest.raises(ValueError):
+        LocalHTTPLLM("https://hosted.example/generate")
+
+
+def test_graph_loader_fails_closed_without_approved_surface(tmp_path: Path):
+    path = tmp_path / "graph.json"
+    path.write_text(json.dumps({
+        "schema": "ayt-history-knowledge-graph-v1",
+        "corpus_checksum": "0123456789abcdef0123456789abcdef",
+        "nodes": [], "edges": []
+    }), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="onaylı_ayt_grafi_yok"):
+        load_approved_graph(path)
 

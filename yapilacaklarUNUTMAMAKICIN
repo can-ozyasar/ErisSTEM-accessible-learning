@@ -1,0 +1,24 @@
+ŞU NODELAR ARASI İLİŞKİ DE ÖNEMLİ ORDA MANTIĞI HANGİ UZAKLIK OLARAK KURGULAMAK MANTIKLI KOSİNÜZ UZAKLIĞI YADA DAHA MANTIKLI BİR ŞEKİLDE 
+
+HER NODE KENDİ ÖZELLİĞİNE GÖRE BİR AĞIRLIĞI DA OLUR 
+
+NODELAR BİRBİRLERİ İLE İLİŞKİLİ GERÇEK BEYİNDE DE ÖYLE YA .
+BİR ŞEY ARARKEN GİDİLECEK YERLER GAYET DE NETDİR ÇOK ÇOK İSTİSNA DURUMLAR DIŞINDA .
+ ARANACAK ŞEY BELLİ OLMALI VE KİTABI ÇOK İYİ NODE , AĞAÇ , BAĞLANTILAR ,AĞIRLIKLAR ,İLE PARÇALADIĞIMIZ İÇİN  VE BUNU YAPARKEN DE KARMAŞA ÇIKARIP ÇORBA ETMEMELİYİZ KURGU GERÇEKTEN İNSANI REFERANS ALMALI 
+
+ ÇOK KALİTELİ BİR YAYIN BİLE ÇIKAR EĞER YETERİNCE İYİ SONUÇLAR ALIRSAK 
+
+ YAKLAŞIK 200 SAYFALIK BİR İÇERİK RAG GİBİ KULLANILACAK YA SONUÇTA BÖLÜMLEME KLASÖRLEME GİBİ ÇOK NET OLMALI KALİTEİ BİÇİMDE MÜHENDİS AKLI İLE OLMALI AYRICA .
+ 
+
+ şu arama işlemi kısmını c++ yada rust ile yazma . sınıfla nesne olarak tanımlama . performans kalite ai tarafından daha iyi temsil edilme için , json yada fakrlı bişeyle temsil etme .!!!
+ 
+ metinleri yani bilgileri embeding ile tutmak token token tutmak nasıl olur uzayda .
+ 
+ notebook lm nasıl işliyor arkasında nasıl bir sistem varsa o sisitem kaliteli işliyor .açık kaynakları vardır oralardan taktik alınabilir ama üstteki taktiği atlamayalım orası tutarsa balki makale de olur .mantıklı bence iyi kurgulanmalı iyi tasarlanmalı herşeyi de eklemeye  çalışcaz dersek karmaşık olur belki ama iyi olmalı .
+
+ONAY POLİTİKASI (4 Kasım 2026): kaynak kesiti, ilişki kenarı, Gold etiketi ve
+QLoRA koçluk kaydı onayını atanmış tarih öğretmeni ajanı yapacak. Her kararda
+`reviewer_kind=history_teacher_agent_v1`, PDF kesiti denetimi, kaynak checksum'ı
+ve karar gerekçesi tutulacak. Bu kararlar insan öğretmen onayı diye yazılmayacak;
+rapor, CV ve deney metriklerinde ajan onaylı olarak ayrı gösterilecek.

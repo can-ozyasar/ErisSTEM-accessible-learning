@@ -54,6 +54,15 @@ def test_graph_validates_and_serializes_example():
     assert payload["dialogue_state"]["can_reveal_explanation"] is False
 
 
+def test_versioned_json_schema_artifact_covers_runtime_models():
+    schema_path = Path(__file__).parents[3] / "docs" / "ayt-runtime-schemas.json"
+    payload = json.loads(schema_path.read_text(encoding="utf-8"))
+    assert payload["schema_version"] == "ayt-history-runtime-schemas-v1"
+    assert payload["knowledge_graph"]["$defs"]
+    assert "properties" in payload["question_item"]
+    assert "properties" in payload["tutor_dialogue_state"]
+
+
 def test_search_returns_components_and_ignores_unapproved_nodes():
     result = WeightedGraphSearch(graph()).search(question(), top_k=3)
     assert {hit.node_id for chain in result.chains for hit in chain.hits}.issubset({"topic", "tbmm"})

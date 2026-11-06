@@ -42,6 +42,8 @@ C --> T[Fine-tune TTS + SHA256 ses önbelleği]
 Örnek şema yükü [ayt-knowledge-graph-example.json](ayt-knowledge-graph-example.json)
 dosyasındadır. Bu örnek cevap anahtarı içermez. Cevap anahtarı yalnız private
 değerlendirme katmanında, ayrı bir dosyada tutulmalıdır.
+Makine tarafından doğrulanabilir Pydantic çıktısı [ayt-runtime-schemas.json](ayt-runtime-schemas.json)
+dosyasındadır.
 
 ## Runtime ve onay kapısı
 

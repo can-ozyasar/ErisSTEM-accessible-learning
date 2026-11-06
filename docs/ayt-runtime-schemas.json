@@ -1,0 +1,575 @@
+{
+  "schema_version": "ayt-history-runtime-schemas-v1",
+  "knowledge_graph": {
+    "$defs": {
+      "Edge": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 120,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "from_node": {
+            "title": "From Node",
+            "type": "string"
+          },
+          "to_node": {
+            "title": "To Node",
+            "type": "string"
+          },
+          "relation": {
+            "$ref": "#/$defs/RelationType"
+          },
+          "quote": {
+            "maxLength": 520,
+            "minLength": 12,
+            "title": "Quote",
+            "type": "string"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Source Ids",
+            "type": "array"
+          },
+          "confidence": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "type": "number"
+          },
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "from_node",
+          "to_node",
+          "relation",
+          "quote",
+          "source_ids"
+        ],
+        "title": "Edge",
+        "type": "object"
+      },
+      "HistoricalNode": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 120,
+            "minLength": 3,
+            "pattern": "^[A-Za-z0-9_.:-]+$",
+            "title": "Id",
+            "type": "string"
+          },
+          "node_type": {
+            "$ref": "#/$defs/NodeType"
+          },
+          "label": {
+            "maxLength": 180,
+            "minLength": 2,
+            "title": "Label",
+            "type": "string"
+          },
+          "description": {
+            "default": "",
+            "maxLength": 1200,
+            "title": "Description",
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/$defs/NodeMetadata"
+          },
+          "embedding": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "maxItems": 8192,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Embedding"
+          },
+          "approved": {
+            "default": false,
+            "title": "Approved",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "node_type",
+          "label"
+        ],
+        "title": "HistoricalNode",
+        "type": "object"
+      },
+      "NodeMetadata": {
+        "additionalProperties": false,
+        "properties": {
+          "aliases": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Aliases",
+            "type": "array"
+          },
+          "years": {
+            "items": {
+              "type": "integer"
+            },
+            "maxItems": 12,
+            "title": "Years",
+            "type": "array"
+          },
+          "century": {
+            "anyOf": [
+              {
+                "maximum": 30,
+                "minimum": -50,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Century"
+          },
+          "period": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Period"
+          },
+          "persons": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Persons",
+            "type": "array"
+          },
+          "places": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 24,
+            "title": "Places",
+            "type": "array"
+          },
+          "concepts": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 32,
+            "title": "Concepts",
+            "type": "array"
+          },
+          "section_id": {
+            "anyOf": [
+              {
+                "maxLength": 80,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Section Id"
+          },
+          "unit_title": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Unit Title"
+          },
+          "node_weight": {
+            "default": 0.5,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Node Weight",
+            "type": "number"
+          },
+          "source_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 12,
+            "title": "Source Ids",
+            "type": "array"
+          }
+        },
+        "title": "NodeMetadata",
+        "type": "object"
+      },
+      "NodeType": {
+        "enum": [
+          "UNIT",
+          "TOPIC",
+          "SUBTOPIC",
+          "OLAY_SAVAS",
+          "ANTLASMA_BELGE",
+          "KISI_AKTOR",
+          "KURUM_DEVLET",
+          "KAVRAM_ILKE",
+          "DONEM_KRONOLOJI",
+          "YER_COGRAFYA",
+          "CEPHE"
+        ],
+        "title": "NodeType",
+        "type": "string"
+      },
+      "RelationType": {
+        "enum": [
+          "ALT_KONUSUDUR",
+          "SEBEBIDIR",
+          "SONUCUDUR",
+          "AMACIDIR",
+          "DONEMINDE_OLMUSTUR",
+          "KRONOLOJIK_SONRASIDIR",
+          "AKTORUDUR",
+          "COGRAFYASIDIR",
+          "KAPSAMINDADIR",
+          "ILKESIYLE_ILISKILIDIR",
+          "CELISIR_TAVIZDIR",
+          "BENZERIDIR_PARALELDIR",
+          "IMZALAYANIDIR",
+          "UYGULANDIGI_YERDIR"
+        ],
+        "title": "RelationType",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "schema": {
+        "default": "ayt-history-knowledge-graph-v1",
+        "title": "Schema",
+        "type": "string"
+      },
+      "corpus_checksum": {
+        "maxLength": 128,
+        "minLength": 16,
+        "title": "Corpus Checksum",
+        "type": "string"
+      },
+      "nodes": {
+        "items": {
+          "$ref": "#/$defs/HistoricalNode"
+        },
+        "title": "Nodes",
+        "type": "array"
+      },
+      "edges": {
+        "items": {
+          "$ref": "#/$defs/Edge"
+        },
+        "title": "Edges",
+        "type": "array"
+      }
+    },
+    "required": [
+      "corpus_checksum"
+    ],
+    "title": "KnowledgeGraph",
+    "type": "object"
+  },
+  "question_item": {
+    "$defs": {
+      "ChoiceEvidenceLink": {
+        "additionalProperties": false,
+        "properties": {
+          "choice_label": {
+            "pattern": "^[A-E]$",
+            "title": "Choice Label",
+            "type": "string"
+          },
+          "node_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Node Ids",
+            "type": "array"
+          },
+          "edge_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 8,
+            "title": "Edge Ids",
+            "type": "array"
+          },
+          "relation": {
+            "$ref": "#/$defs/QuestionRelation",
+            "default": "CONTEXT"
+          },
+          "note": {
+            "default": "",
+            "maxLength": 320,
+            "title": "Note",
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice_label"
+        ],
+        "title": "ChoiceEvidenceLink",
+        "type": "object"
+      },
+      "QuestionChoice": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "pattern": "^[A-E]$",
+            "title": "Label",
+            "type": "string"
+          },
+          "text": {
+            "maxLength": 800,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "text"
+        ],
+        "title": "QuestionChoice",
+        "type": "object"
+      },
+      "QuestionRelation": {
+        "enum": [
+          "SUPPORTS",
+          "CONTRADICTS",
+          "CONTEXT"
+        ],
+        "title": "QuestionRelation",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "maxLength": 120,
+        "minLength": 3,
+        "title": "Id",
+        "type": "string"
+      },
+      "stem": {
+        "maxLength": 3000,
+        "minLength": 8,
+        "title": "Stem",
+        "type": "string"
+      },
+      "choices": {
+        "items": {
+          "$ref": "#/$defs/QuestionChoice"
+        },
+        "maxItems": 5,
+        "minItems": 2,
+        "title": "Choices",
+        "type": "array"
+      },
+      "unit_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Unit Id"
+      },
+      "topic": {
+        "default": "",
+        "maxLength": 180,
+        "title": "Topic",
+        "type": "string"
+      },
+      "question_terms": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 40,
+        "title": "Question Terms",
+        "type": "array"
+      },
+      "choice_evidence": {
+        "items": {
+          "$ref": "#/$defs/ChoiceEvidenceLink"
+        },
+        "maxItems": 5,
+        "title": "Choice Evidence",
+        "type": "array"
+      },
+      "answer_key_ref": {
+        "anyOf": [
+          {
+            "maxLength": 120,
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Answer Key Ref"
+      }
+    },
+    "required": [
+      "id",
+      "stem",
+      "choices"
+    ],
+    "title": "QuestionItem",
+    "type": "object"
+  },
+  "tutor_dialogue_state": {
+    "$defs": {
+      "DialogueStage": {
+        "enum": [
+          "soru_analizi",
+          "hatirlamayi_ortaya_cikarma",
+          "kanitla_bag_kurma",
+          "sik_elemesi",
+          "ogrenci_yaniti",
+          "gerekceli_aciklama"
+        ],
+        "title": "DialogueStage",
+        "type": "string"
+      }
+    },
+    "additionalProperties": false,
+    "properties": {
+      "session_id": {
+        "maxLength": 120,
+        "minLength": 8,
+        "title": "Session Id",
+        "type": "string"
+      },
+      "question_id": {
+        "title": "Question Id",
+        "type": "string"
+      },
+      "stage": {
+        "$ref": "#/$defs/DialogueStage",
+        "default": "soru_analizi"
+      },
+      "selected_choice": {
+        "anyOf": [
+          {
+            "pattern": "^[A-E]$",
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Selected Choice"
+      },
+      "eliminated_choices": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 5,
+        "title": "Eliminated Choices",
+        "type": "array"
+      },
+      "asked_hints": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 12,
+        "title": "Asked Hints",
+        "type": "array"
+      },
+      "learner_turns": {
+        "default": 0,
+        "maximum": 20,
+        "minimum": 0,
+        "title": "Learner Turns",
+        "type": "integer"
+      },
+      "repeat_attempts": {
+        "default": 0,
+        "maximum": 5,
+        "minimum": 0,
+        "title": "Repeat Attempts",
+        "type": "integer"
+      },
+      "retrieved_node_ids": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 12,
+        "title": "Retrieved Node Ids",
+        "type": "array"
+      },
+      "retrieved_edge_ids": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 12,
+        "title": "Retrieved Edge Ids",
+        "type": "array"
+      },
+      "source_ids": {
+        "items": {
+          "type": "string"
+        },
+        "maxItems": 12,
+        "title": "Source Ids",
+        "type": "array"
+      },
+      "can_reveal_explanation": {
+        "default": false,
+        "title": "Can Reveal Explanation",
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "session_id",
+      "question_id"
+    ],
+    "title": "TutorDialogueState",
+    "type": "object"
+  }
+}

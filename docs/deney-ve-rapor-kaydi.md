@@ -746,3 +746,15 @@ okunuş kuralları gerekir.
 ### 2026-11 — AYT grafik öğretmen onay paketi
 
 186 parçalık yerel 12. sınıf corpusu için checksum bağlı PDF kesit paketi üretildi. HTML inceleme formu karar, birebir alıntı, PDF kesiti kontrolü, kalite kontrolü ve öğretmen kimliğini toplar; manifesti yalnız inceleyen kişi indirir. Paket doğrulayıcı tüm crop dosyalarının, sayfa/bbox ve kaynak checksum kayıtlarının tutarlı olduğunu kontrol eder. Hiçbir agent kararı veya bekleyen kayıt runtime grafiğine terfi ettirilmez; öğretmen onay manifesti gelene kadar `runtime_enabled=false` kalır.
+
+### 2026-11 — AYT runtime şeması ve diyalog güvenlik sertleştirmesi
+
+Bilgi grafiği düğüm ve kenarlarına kaynak checksum’ı, PDF sayfası, koordinat,
+birebir alıntı, çıkarma yöntemi, inceleme durumu ve kalite bayrakları eklendi.
+Öğrenci yanıtı boşken açıklama aşamasına geçiş kilitlendi; açık A–E seçimi
+`TutorDialogueState.selected_choice` alanına kaydediliyor ancak doğruluk
+değerlendirmesi runtime’da yapılmıyor. Cevap anahtarı alanı runtime Pydantic
+şemasından çıkarıldı ve dış girdide katı doğrulamayla reddediliyor.
+
+`ddcc4ce` sonrasında tam test paketi **561 geçti**; yalnız Starlette/httpx
+deprecation uyarısı kaldı. Gerçek MEB grafiği insan onayı olmadan açılmıyor.

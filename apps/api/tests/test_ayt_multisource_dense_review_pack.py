@@ -53,3 +53,10 @@ def test_rejects_incomplete_source_mapping(tmp_path: Path):
     sources.pop(next(iter(sources)))
     with pytest.raises(ValueError, match="tam eşleşmeli"):
         build(queue, sources, tmp_path, per_question=1)
+
+
+def test_rejects_excerpt_from_unrelated_crop(tmp_path: Path):
+    queue = _queue()
+    queue["rows"][0]["suggestions"][0]["excerpt"] = "Bu ifade bu PDF kesitinde bulunmayan bir bilgidir."
+    with pytest.raises(ValueError, match="metin kapsamını"):
+        build(queue, _sources(queue), tmp_path, per_question=1)

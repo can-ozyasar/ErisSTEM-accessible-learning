@@ -5,6 +5,8 @@ import argparse
 import hashlib
 import html
 import json
+import re
+import unicodedata
 from pathlib import Path
 
 import pymupdf
@@ -21,6 +23,26 @@ def _parse_source(value: str) -> tuple[str, Path]:
     if not separator or len(checksum) != 64 or not raw_path:
         raise ValueError("Kaynak biçimi checksum=PDF_yolu olmalı")
     return checksum, Path(raw_path)
+
+
+def _layout_tokens(text: str) -> list[str]:
+    text = text.replace("\u00ad", "").casefold()
+    text = "".join(char for char in unicodedata.normalize("NFKD", text) if not unicodedata.combining(char))
+    return re.findall(r"[a-zçğıöşü0-9]+", text)
+
+
+def _assert_excerpt_in_crop(document: pymupdf.Document, page: int, bbox: list[float], excerpt: str) -> None:
+    """Reject a crop whose source text does not contain the excerpt semantically.
+
+    PDF extraction can reorder a heading and its paragraph or insert soft
+    hyphens.  Token coverage tolerates those layout effects while still
+    rejecting a crop from an unrelated page or coordinate.
+    """
+    crop_text = document[page - 1].get_text("text", clip=pymupdf.Rect(bbox))
+    expected = _layout_tokens(excerpt)
+    actual = set(_layout_tokens(crop_text))
+    if not expected or sum(token in actual for token in expected) / len(expected) < 0.98:
+        raise ValueError("PDF kesiti aday alıntının metin kapsamını karşılamıyor")
 
 
 def build(queue: dict, sources: dict[str, Path], output: Path, *, per_question: int | None = None) -> dict:
@@ -44,6 +66,9 @@ def build(queue: dict, sources: dict[str, Path], output: Path, *, per_question: 
                 checksum = suggestion["source_checksum"]
                 if checksum not in documents:
                     raise ValueError("Kart tanımlanmamış kaynak PDF'sine bağlı")
+                _assert_excerpt_in_crop(
+                    documents[checksum], suggestion["page"], suggestion["bbox"], suggestion["excerpt"]
+                )
                 filename = f"{checksum[:12]}-{suggestion['record_id']}.png"
                 relative = Path("crops") / filename
                 _render_crop(documents[checksum], suggestion["page"], suggestion["bbox"], output / relative)

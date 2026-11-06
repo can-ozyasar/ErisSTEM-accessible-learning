@@ -3,7 +3,7 @@ from app.pipeline.ayt_target_atom_queue import build
 
 def _record(identifier: str, section: str, text: str, decision: str = "manual_review"):
     return {"id": identifier, "section_id": section, "section_title": "Millî Mücadele’ye Hazırlık",
-            "page": 10 if identifier == "short" else 11, "bbox": [0, 0, 1, 1], "text": text,
+            "page": 10 if identifier in {"short", "context"} else 11, "bbox": [0, 0, 1, 1], "text": text,
             "heading": "Başlık", "pre_review": {"decision": decision},
             "quality": {"warnings": []}}
 
@@ -23,8 +23,9 @@ def test_atom_context_queue_keeps_short_clean_atom_and_never_enables_runtime():
     queue = build(pool, corpus, candidate_limit=2, first_stage_limit=2)
     proposal = queue["proposals"][0]
     assert queue["index_counts"] == {"atom": 1, "context": 1}
-    assert any(item["record_id"] == "short" for item in proposal["suggestions"])
+    assert any("short" in item["record_ids"] for item in proposal["suggestions"])
     assert all(item["section_id"] != "9.9" for item in proposal["suggestions"])
+    assert proposal["suggestions"][0]["retrieval_channels"] == ["atom", "context"]
     assert queue["runtime_enabled"] is False
     assert queue["qlora_enabled"] is False
     assert queue["answer_key_accessed"] is False

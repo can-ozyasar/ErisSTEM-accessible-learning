@@ -74,16 +74,45 @@ def _rrf(*rankings: list[dict], constant: int = 60) -> dict[str, float]:
     return scores
 
 
+def _evidence_key(record: dict) -> str:
+    """Join atom/context copies only when they point to the exact same crop."""
+    bbox = ":".join(f"{value:.2f}" for value in record["bbox"])
+    return f"{record['source_checksum']}:{record['page']}:{bbox}"
+
+
+def _fuse_equivalent_crops(atom_ranked: list[dict], context_ranked: list[dict]) -> list[dict]:
+    """Fuse matching atom/context rankings without pretending nearby text is one fact."""
+    atom_rrf, context_rrf = _rrf(atom_ranked), _rrf(context_ranked)
+    grouped: dict[str, list[dict]] = defaultdict(list)
+    for record in [*atom_ranked, *context_ranked]:
+        grouped[_evidence_key(record)].append(record)
+    fused = []
+    for key, records in grouped.items():
+        # A context is more useful for crop review when both represent exactly
+        # the same rectangle; otherwise retain the strongest candidate.
+        representative = next((item for item in records if item["granularity"] == "context"), records[0])
+        channels = sorted({item["granularity"] for item in records})
+        score = sum((atom_rrf if item["granularity"] == "atom" else context_rrf)[item["id"]]
+                    for item in records)
+        fused.append({
+            **representative,
+            "evidence_key": key,
+            "record_ids": sorted({item["record_id"] for item in records}),
+            "retrieval_channels": channels,
+            "rrf_score": round(score, 6),
+        })
+    return fused
+
+
 def _diverse(records: list[dict], limit: int) -> list[dict]:
-    """Avoid a single page crowding out complementary evidence."""
+    """Avoid duplicate atom/context crops crowding out complementary evidence."""
     selected: list[dict] = []
-    seen_page_granularity: set[tuple[int, str]] = set()
+    seen_evidence: set[str] = set()
     for record in records:
-        page_key = (record["page"], record["granularity"])
-        if page_key in seen_page_granularity:
+        if record["evidence_key"] in seen_evidence:
             continue
         selected.append(record)
-        seen_page_granularity.add(page_key)
+        seen_evidence.add(record["evidence_key"])
         if len(selected) == limit:
             break
     return selected
@@ -125,13 +154,9 @@ def build(pool: dict, corpus: dict, *, candidate_limit: int = 12, first_stage_li
         started = time.perf_counter()
         atom_ranked = atom_index.rank(query, first_stage_limit)
         context_ranked = context_index.rank(query, first_stage_limit)
-        rrf = _rrf(atom_ranked, context_ranked)
-        merged = {record["id"]: {**record, "retrieval_channels": [record["granularity"]]}
-                  for record in [*atom_ranked, *context_ranked]}
-        for record in atom_ranked + context_ranked:
-            merged[record["id"]]["rrf_score"] = round(rrf[record["id"]], 6)
+        merged = _fuse_equivalent_crops(atom_ranked, context_ranked)
         ranked = sorted(
-            merged.values(),
+            merged,
             key=lambda item: (-item["rrf_score"], -item["score"], item["page"], item["id"]),
         )
         selected = _diverse(ranked, candidate_limit)

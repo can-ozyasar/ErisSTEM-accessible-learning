@@ -15,9 +15,11 @@ from app.ayt_knowledge_graph import (
     QuestionChoice,
     QuestionItem,
     RelationType,
+    RetrievalGold,
     SocraticTutorOrchestrator,
     TutorDialogueState,
     WeightedGraphSearch,
+    evaluate_retrieval,
     example_graph_payload,
 )
 from app.ayt_local_runtime import LocalHTTPLLM, load_approved_graph
@@ -71,6 +73,17 @@ def test_search_weights_are_explicit_and_normalized():
     search = WeightedGraphSearch(graph(), weights={"cosine": .5, "metadata": .2,
                                                    "node_weight": .1, "graph": .2})
     assert search.weights["cosine"] == .5
+
+
+def test_retrieval_metrics_score_relevant_rank_and_abstention():
+    result = WeightedGraphSearch(graph()).search(question(), top_k=3)
+    metrics = evaluate_retrieval([(result, [RetrievalGold(choice_label="A", relevant_node_ids=["tbmm"]),
+                                            RetrievalGold(choice_label="B", should_abstain=True)])])
+    assert metrics.query_count == 2
+    assert metrics.recall_at_1 >= 0
+    assert 0 <= metrics.mrr_at_3 <= 1
+    assert 0 <= metrics.ndcg_at_3 <= 1
+    assert 0 <= metrics.wrong_evidence_rate <= 1
 
 
 def test_graph_rejects_approved_edge_to_unapproved_node():

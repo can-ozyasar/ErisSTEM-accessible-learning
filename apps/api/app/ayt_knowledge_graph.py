@@ -333,6 +333,24 @@ class RetrievalResult(StrictModel):
     metadata_filters: dict[str, list[str]] = Field(default_factory=dict)
 
 
+class RetrievalGold(StrictModel):
+    """Private evaluation label; never sent to the student or local LLM."""
+
+    choice_label: str = Field(pattern=r"^[A-E]$")
+    relevant_node_ids: list[str] = Field(default_factory=list, max_length=20)
+    should_abstain: bool = False
+
+
+class RetrievalMetrics(StrictModel):
+    query_count: int = Field(ge=0)
+    recall_at_1: float = Field(ge=0.0, le=1.0)
+    recall_at_3: float = Field(ge=0.0, le=1.0)
+    mrr_at_3: float = Field(ge=0.0, le=1.0)
+    ndcg_at_3: float = Field(ge=0.0, le=1.0)
+    wrong_evidence_rate: float = Field(ge=0.0, le=1.0)
+    abstain_accuracy: float = Field(ge=0.0, le=1.0)
+
+
 DEFAULT_SCORE_WEIGHTS = {
     "cosine": 0.45,
     "metadata": 0.25,
@@ -355,6 +373,51 @@ def cosine_similarity(left: list[float] | None, right: list[float] | None) -> fl
         return 0.0
     denom = math.sqrt(sum(x * x for x in left) * sum(y * y for y in right))
     return max(0.0, min(1.0, sum(x * y for x, y in zip(left, right)) / denom)) if denom else 0.0
+
+
+def evaluate_retrieval(cases: list[tuple[RetrievalResult, list[RetrievalGold]]]) -> RetrievalMetrics:
+    """Evaluate choice-level retrieval against a private gold set.
+
+    ``cases`` is intentionally passed by the evaluation runner instead of
+    stored in the runtime graph.  A result can be scored against multiple
+    choices, while answer keys and gold labels remain outside student prompts.
+    """
+    totals = {"r1": 0.0, "r3": 0.0, "mrr": 0.0, "ndcg": 0.0,
+              "wrong": 0.0, "evidence": 0.0, "abstain": 0.0}
+    count = 0
+    for result, gold_rows in cases:
+        by_choice = {chain.choice_label: chain for chain in result.chains}
+        for gold in gold_rows:
+            chain = by_choice.get(gold.choice_label)
+            ranked = [hit.node_id for hit in chain.hits] if chain else []
+            relevant = set(gold.relevant_node_ids)
+            count += 1
+            totals["r1"] += float(bool(set(ranked[:1]) & relevant)) if relevant else 0.0
+            totals["r3"] += float(bool(set(ranked[:3]) & relevant)) if relevant else 0.0
+            first = next((index for index, node_id in enumerate(ranked[:3], start=1)
+                          if node_id in relevant), None)
+            totals["mrr"] += 1.0 / first if first else 0.0
+            dcg = sum((1.0 / math.log2(index + 2)) for index, node_id in enumerate(ranked[:3])
+                      if node_id in relevant)
+            ideal = 1.0 / math.log2(2) if relevant else 0.0
+            totals["ndcg"] += dcg / ideal if ideal else 0.0
+            if ranked:
+                totals["wrong"] += sum(node_id not in relevant for node_id in ranked)
+                totals["evidence"] += len(ranked)
+            predicted_abstain = not ranked if chain is None else chain.abstain
+            totals["abstain"] += float(predicted_abstain == gold.should_abstain)
+    if count == 0:
+        return RetrievalMetrics(query_count=0, recall_at_1=0, recall_at_3=0, mrr_at_3=0,
+                                ndcg_at_3=0, wrong_evidence_rate=0, abstain_accuracy=0)
+    return RetrievalMetrics(
+        query_count=count,
+        recall_at_1=round(totals["r1"] / count, 6),
+        recall_at_3=round(totals["r3"] / count, 6),
+        mrr_at_3=round(totals["mrr"] / count, 6),
+        ndcg_at_3=round(totals["ndcg"] / count, 6),
+        wrong_evidence_rate=round(totals["wrong"] / totals["evidence"], 6) if totals["evidence"] else 0.0,
+        abstain_accuracy=round(totals["abstain"] / count, 6),
+    )
 
 
 class EmbeddingFn(Protocol):

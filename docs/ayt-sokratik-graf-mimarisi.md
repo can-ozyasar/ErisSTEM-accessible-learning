@@ -51,3 +51,8 @@ yüklenebildiğinde çalışır. Aday corpus ve agent incelemeleri bu kapıyı a
 `promote_ayt_graph_approvals.py` checksum, PDF alıntısı, sayfa/bbox ve insan
 reviewer kimliğini doğrular; onay şablonu `build_ayt_graph_approval_template.py`
 ile üretilir.
+
+Private retrieval karşılaştırmaları `RetrievalGold` ve `evaluate_retrieval`
+ile aynı sonuç sözleşmesinden ölçülür: Recall@1/@3, MRR@3, nDCG@3, yanlış
+kanıt oranı ve çekimser kalma doğruluğu. Gold etiketler runtime nesnesine veya
+yerel LLM istemine taşınmaz.

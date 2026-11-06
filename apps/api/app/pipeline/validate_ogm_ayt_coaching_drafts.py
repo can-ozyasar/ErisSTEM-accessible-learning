@@ -34,6 +34,8 @@ def validate(payload: dict, source_input: dict, *, expected_groups: int | None =
         ids, quotes = row.get("source_ids", []), row.get("evidence_quotes", [])
         if not 1 <= len(ids) <= 2 or len(ids) != len(quotes) or len(set(ids)) != len(ids):
             raise ValueError("Her turda bir veya iki benzersiz kaynak ve alıntı gerekli")
+        if any(not isinstance(quote, str) or not quote.strip() or len(quote) > 520 for quote in quotes):
+            raise ValueError("Kaynak alıntısı 520 karakteri aşamaz")
         if any(source_id not in allowed[qid] or quote not in allowed[qid][source_id] for source_id, quote in zip(ids, quotes)):
             raise ValueError("Alıntı, aynı sorunun onaylanmamış kaynağından geliyor")
         if stage in EARLY and ANSWER_LEAK.search(row.get("guide_response", "")):

@@ -14,6 +14,15 @@ from pathlib import Path
 from ..tutor_coach import ANSWER_LABEL
 from ..tutor_dataset import CASES, EARLY_ANSWER_CASES
 
+CASE_ALIASES = {
+    "soru_analizi": "soruyu_anlama",
+    "hatırlamayı_ortaya_çıkarma": "hatirlayani_ortaya_cikar",
+    "kanıtla_bağ_kurma": "kanitla_bag_kur",
+    "şık_sınama": "siki_sina",
+    "yanlış_cevap_düzeltme": "yanlis_cevabi_duzelt",
+    "doğru_cevabı_gerekçelendirme": "dogruyu_pekistir",
+}
+
 
 def _question_texts(transcriptions: dict) -> dict[str, str]:
     if transcriptions.get("schema") != "ogm-ayt-private-transcription-v1":
@@ -35,6 +44,7 @@ def _canonical_records(payload: dict, questions: dict[str, str]) -> list[dict]:
     output = []
     for row in records:
         case = row.get("case", row.get("stage"))
+        case = CASE_ALIASES.get(case, case)
         evidence = row.get("source_evidence", [])
         source_ids = row.get("source_ids") or [item.get("source_id") for item in evidence]
         quotes = row.get("evidence_quotes") or [item.get("quote") for item in evidence]

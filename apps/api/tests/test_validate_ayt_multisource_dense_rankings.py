@@ -48,3 +48,9 @@ def test_rejects_answer_key_access():
     rankings["answer_key_accessed"] = True
     with pytest.raises(ValueError, match="answer_key_accessed"):
         build(discovery, rankings)
+
+
+def test_accepts_legacy_per_query_latency_list():
+    discovery, rankings = _data()
+    rankings["latencies_ms"] = [1.0] * len(discovery["queries"])
+    assert build(discovery, rankings)["latencies_ms"] == rankings["latencies_ms"]

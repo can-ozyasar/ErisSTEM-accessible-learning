@@ -60,8 +60,11 @@ def build(discovery: dict, rankings: dict) -> dict:
             max_depth = max(max_depth, len(values))
 
     latencies = rankings.get("latencies_ms", {})
-    if not isinstance(latencies, dict):
-        raise ValueError("latencies_ms nesne olmalı")
+    # Earlier runner versions wrote one latency per query as a list; newer
+    # runners may expose p50/p95 fields. Preserve either explicit format while
+    # rejecting arbitrary values.
+    if not isinstance(latencies, (dict, list)):
+        raise ValueError("latencies_ms nesne veya liste olmalı")
     return {
         "schema": "official-ayt-multisource-dense-rankings-validation-v1",
         "ranking_schema": rankings["schema"],

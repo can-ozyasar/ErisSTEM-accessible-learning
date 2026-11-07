@@ -21,6 +21,11 @@ alıntılar ve onaylı ilişki kenarlarıdır.
    Böylece eğitim, geliştirme ve kapalı test arasında kavram sızıntısı
    önlenir.
 
+`export_autonomous_graph_qlora.py`, bu dört adımı private bir graf üzerinde
+çalıştırır. Kırk kaynak izli taslağı altı koçluk turuna dönüştürür; yalnız
+`train.jsonl` ve `dev.jsonl` Kaggle dizinine yazılır. `sealed_test.jsonl` ve
+cevap etiketi taşıyan taslaklar yerelde, ayrı dizinde kalır.
+
 ## QLoRA kabul sırası
 
 Otomatik adaylar önce kaynak kesiti üzerinden incelenir. İnceleme sonrası

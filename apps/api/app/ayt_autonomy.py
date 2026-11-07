@@ -77,6 +77,8 @@ class TeacherValidation(StrictModel):
     rationale: str = Field(min_length=3, max_length=800)
     reviewer_kind: str = "rule_based_teacher_candidate_v1"
     model_judgment_used: bool = False
+    retrieval_attempts: int = Field(default=1, ge=1, le=3)
+    retry_queries: list[str] = Field(default_factory=list, max_length=2)
     is_human_teacher_approval: bool = False
     runtime_enabled: bool = False
     qlora_enabled: bool = False
@@ -302,6 +304,38 @@ class HistoryTeacherValidatorAgent:
                                  evidence_node_ids=selected[:self.max_atoms], evidence_edge_ids=selected_edges[:self.max_atoms],
                                  rationale="Aday metinler var ancak güvenilir bir doğrudan veya sınırlı çoklu-hop ilişki kurulamadı.")
 
+    def validate_with_retry(self, question: QuestionItem, analyzer: QuestionAnalyzerAndEliminator,
+                            *, max_attempts: int = 3) -> TeacherValidation:
+        """Use transparent ReAct-style query reformulation before abstaining.
+
+        Retries add only terms already present in the question, topic and
+        choices. They cannot inject an answer, a source quote or model-world
+        knowledge into retrieval.
+        """
+        if not 1 <= max_attempts <= 3:
+            raise ValueError("max_attempts 1 ile 3 arasında olmalı")
+        first = analyzer.analyze_and_eliminate(question)
+        verdict = self.validate(question, first)
+        attempted: list[str] = []
+        if verdict.decision != "insufficient" or max_attempts == 1:
+            return verdict
+        base_terms = list(dict.fromkeys([*question.question_terms, *_terms(question.topic), *_terms(question.stem)]))
+        choice_terms = [term for choice in question.choices for term in _terms(choice.text)]
+        variants = [
+            " ".join(base_terms[:12]),
+            " ".join([*base_terms[:7], *choice_terms[:8]]),
+        ]
+        for attempt, query in enumerate(variants[:max_attempts - 1], start=2):
+            if not query.strip():
+                continue
+            attempted.append(query)
+            retry_question = question.model_copy(update={"topic": query[:180]})
+            retry = analyzer.analyze_and_eliminate(retry_question)
+            candidate = self.validate(question, retry)
+            if candidate.decision in {"direct", "bounded_inference"}:
+                return candidate.model_copy(update={"retrieval_attempts": attempt, "retry_queries": attempted})
+        return verdict.model_copy(update={"retrieval_attempts": 1 + len(attempted), "retry_queries": attempted})
+
     def _direct_overlap(self, question: QuestionItem, node_id: str) -> bool:
         node = self.nodes.get(node_id)
         if node is None:
@@ -331,23 +365,24 @@ class HistoryTeacherValidatorAgent:
             # Search only source-approved edges with confidence, and grow a
             # single path within one choice's chain. Independent chunks and
             # evidence from different alternatives cannot be synthesized.
-            selected = [chain_candidates[0]]
-            remaining = set(chain_candidates[1:])
-            selected_edges: list[str] = []
-            while remaining and len(selected) < self.max_atoms:
-                current = selected[-1]
-                link = next((edge for edge in self.edges.values()
-                             if edge.confidence >= self.min_edge_confidence
-                             and ((edge.from_node == current and edge.to_node in remaining)
-                                  or (edge.to_node == current and edge.from_node in remaining))), None)
-                if link is None:
-                    break
-                neighbor = link.to_node if link.from_node == current else link.from_node
-                selected.append(neighbor)
-                selected_edges.append(link.id)
-                remaining.remove(neighbor)
-            if len(selected) >= 2 and selected_edges:
-                return selected, selected_edges
+            for start in chain_candidates:
+                selected = [start]
+                remaining = set(chain_candidates) - {start}
+                selected_edges: list[str] = []
+                while remaining and len(selected) < self.max_atoms:
+                    current = selected[-1]
+                    link = next((edge for edge in self.edges.values()
+                                 if edge.confidence >= self.min_edge_confidence
+                                 and ((edge.from_node == current and edge.to_node in remaining)
+                                      or (edge.to_node == current and edge.from_node in remaining))), None)
+                    if link is None:
+                        break
+                    neighbor = link.to_node if link.from_node == current else link.from_node
+                    selected.append(neighbor)
+                    selected_edges.append(link.id)
+                    remaining.remove(neighbor)
+                if len(selected) >= 2 and selected_edges:
+                    return selected, selected_edges
         return [], []
 
 

@@ -98,7 +98,7 @@ def main():
         quant = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
                                    bnb_4bit_compute_dtype=torch.float16)
         model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION, quantization_config=quant,
-                                                      device_map={"": 0}, torch_dtype=torch.float16)
+                                                      device_map={"": 0}, dtype=torch.float16)
         model.config.use_cache = False
         peft = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                           target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], task_type="CAUSAL_LM")
@@ -109,11 +109,22 @@ def main():
                               per_device_train_batch_size=1, per_device_eval_batch_size=1,
                               gradient_accumulation_steps=8, gradient_checkpointing=True,
                               learning_rate=learning_rate, logging_steps=5, eval_strategy="epoch",
-                              save_strategy="epoch", fp16=True, max_length=768,
+                              save_strategy="epoch", fp16=True, bf16=False, max_length=768,
                               completion_only_loss=True, report_to="none", seed=seed,
                               data_seed=seed)
         trainer = SFTTrainer(model=model, args=arguments, train_dataset=Dataset.from_list(train),
                              eval_dataset=Dataset.from_list(dev), processing_class=tokenizer, peft_config=peft)
+        # PEFT may preserve the base checkpoint's bf16 adapter dtype even when
+        # the 4-bit compute path is fp16. T4's fp16 GradScaler cannot unscale
+        # bf16 gradients, so coerce only trainable adapter tensors before the
+        # first optimizer step. Frozen quantized base weights stay untouched.
+        trainable_dtypes: dict[str, int] = {}
+        for parameter in trainer.model.parameters():
+            if parameter.requires_grad and parameter.dtype == torch.bfloat16:
+                parameter.data = parameter.data.to(dtype=torch.float16)
+            if parameter.requires_grad:
+                name = str(parameter.dtype).removeprefix("torch.")
+                trainable_dtypes[name] = trainable_dtypes.get(name, 0) + parameter.numel()
         started = time.monotonic()
         trainer.train()
         metrics = trainer.evaluate()
@@ -125,6 +136,7 @@ def main():
                        "adapter": str(adapter), "training": {"quantization": "nf4-4bit-fp16", "completion_only_loss": True,
                        "gradient_checkpointing": True, "epochs": 3, "learning_rate": learning_rate,
                        "lora": {"r": 16, "alpha": 32}, "seed": seed,
+                       "trainable_parameter_dtypes": trainable_dtypes,
                        "packages": {name: version(name) for name in ("transformers", "accelerate", "peft", "bitsandbytes", "trl", "datasets")},
                        "selection_note": "Choose by reviewed development behaviour, not eval_loss alone."}})
     except Exception as error:

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from ..ayt_autonomy import (
     ConceptBasedDataSplitter,
+    GeneratedDraftQualityGate,
     GraphToQuestionGenerator,
     HistoryTeacherValidatorAgent,
     SplitRecord,
@@ -85,16 +86,30 @@ def _rows_for_draft(draft: dict) -> list[dict]:
     return output
 
 
-def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict[str, list[dict]], dict, list[dict]]:
+def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict[str, list[dict]], dict, list[dict], list[dict]]:
     # The research-graph file carries top-level operational metadata
     # (research_only, review status). KnowledgeGraph itself is intentionally
     # strict, so pass only its immutable graph fields into the model.
     graph = KnowledgeGraph.model_validate({
         key: graph_payload[key] for key in ("schema", "corpus_checksum", "nodes", "edges")
     })
-    drafts = GraphToQuestionGenerator(graph).generate(limit=limit)
+    # Generate a wider private candidate pool.  Source traceability alone is
+    # insufficient: OCR fragments can still form an unusable spoken question.
+    # The deterministic quality gate runs *before* the split, so rejected
+    # drafts can never leak into Kaggle training or sealed evaluation.
+    # Source books are uneven: the first relation-ranked candidates can share
+    # an OCR layout pattern. Search a wider private pool before deciding that
+    # the target count is unavailable; the quality gate still decides every
+    # individual record.
+    candidates = GraphToQuestionGenerator(graph).generate(limit=max(limit * 6, limit))
+    reviews = [GeneratedDraftQualityGate().review(draft) for draft in candidates]
+    drafts = [draft for draft, review in zip(candidates, reviews) if review.accepted][:limit]
     if len(drafts) != limit:
-        raise ValueError(f"Kaynak izli {limit} taslak üretilemedi; yalnız {len(drafts)} ilişki uygun")
+        accepted = sum(review.accepted for review in reviews)
+        raise ValueError(
+            f"Konuşulabilir ve kaynak izli {limit} taslak üretilemedi; "
+            f"{len(candidates)} adayın yalnız {accepted} tanesi kalite kapısından geçti"
+        )
     validations = [HistoryTeacherValidatorAgent(graph).validate_generated_draft(draft) for draft in drafts]
     rejected = [validation.question_id for validation in validations if validation.decision != "direct"]
     if rejected:
@@ -117,6 +132,12 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
         "splits": {name: len(records) for name, records in groups.items()},
         "source_bound": True,
         "teacher_agent_direct_validations": len(validations),
+        "deterministic_draft_quality_gate": {
+            "candidate_count": len(candidates),
+            "accepted_count": len(drafts),
+            "rejected_count": sum(not review.accepted for review in reviews),
+            "gate": "deterministic_draft_quality_gate_v1",
+        },
         "relation_distribution": dict(sorted(Counter(draft.relation_type for draft in drafts).items())),
         "answer_keys_included": False,
         "human_review_required_before_production": True,
@@ -132,7 +153,7 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
             "sealed_test_uploaded": False,
         },
     }
-    return rows, manifest, private_drafts
+    return rows, manifest, private_drafts, [review.model_dump(mode="json") for review in reviews]
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -146,16 +167,19 @@ def main() -> None:
     parser.add_argument("--kaggle-output", type=Path, required=True)
     parser.add_argument("--sealed-output", type=Path, required=True)
     parser.add_argument("--private-drafts-output", type=Path, required=True)
+    parser.add_argument("--quality-audit-output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=40)
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
     payload = json.loads(args.graph.read_text(encoding="utf-8"))
-    rows, manifest, drafts = build(payload, limit=args.limit, seed=args.seed)
+    rows, manifest, drafts, reviews = build(payload, limit=args.limit, seed=args.seed)
     for name in ("train", "dev"):
         _write_jsonl(args.kaggle_output / f"{name}.jsonl", rows[name])
     _write_jsonl(args.sealed_output / "sealed_test.jsonl", rows["sealed_test"])
     args.private_drafts_output.parent.mkdir(parents=True, exist_ok=True)
     args.private_drafts_output.write_text(json.dumps({"schema": "autonomous-graph-drafts-v1", "drafts": drafts}, ensure_ascii=False, indent=2), encoding="utf-8")
+    args.quality_audit_output.parent.mkdir(parents=True, exist_ok=True)
+    args.quality_audit_output.write_text(json.dumps({"schema": "generated-draft-quality-audit-v1", "reviews": reviews}, ensure_ascii=False, indent=2), encoding="utf-8")
     (args.kaggle_output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(manifest, ensure_ascii=False))
 

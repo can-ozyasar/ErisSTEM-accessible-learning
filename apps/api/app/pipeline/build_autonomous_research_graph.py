@@ -24,6 +24,15 @@ RESULT_RE = re.compile(r"(?P<cause>.{12,220}?)\s+sonucunda\s+(?P<effect>.{12,220
 PURPOSE_RE = re.compile(r"(?P<purpose>.{12,180}?)\s+amacıyla\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.I)
 ACTOR_RE = re.compile(r"(?P<actor>.{3,140}?)\s+tarafından\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.I)
 AFTER_RE = re.compile(r"(?P<first>.{12,220}?)\s+(?:ardından|akabinde|sonra)\s+(?P<second>.{12,220}?)(?:[.!?]|$)", re.I)
+EVENT_TITLE_RE = re.compile(
+    r"\b(?P<event>(?:[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû’'\-]+"
+    r"(?:\s+(?:[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû’'\-]+|[a-zçğıöşüâîû]+)){0,5})"
+    r"\s+(?:Antlaşması|Antlaşması|Sözleşmesi|Kongresi|Genelgesi|Savaşı|Harekâtı|Harekatı|"
+    r"Meclisi|Hareketi|Konferansı|Darbesi|Reformu|Seferi|Mücadelesi|Teşkilatı|Örgütü))\b"
+)
+LINE_END_HYPHEN_RE = re.compile(r"(?<=[A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû])-\s+(?=[a-zçğıöşüâîû])")
+TEMPORAL_ACTION_RE = re.compile(r"\b(?P<action>imzalandı|kuruldu|toplandı|başladı|sona erdi|gerçekleşti)\b", re.I)
+TEMPORAL_CONTEXT_RISK_RE = re.compile(r"\b(?:devam ederken|sonrasında|sırasında|öncesinde|esnasında)\b", re.I)
 
 
 def _id(prefix: str, *parts: str) -> str:
@@ -36,7 +45,12 @@ def _eligible(chunk: dict) -> bool:
     review = chunk.get("pre_review", {})
     text = str(chunk.get("text", "")).strip()
     return (
-        review.get("decision") == "review_for_approval"
+        # ``manual_review`` is a source-quality queue state, not a statement
+        # that the text is false.  For this private research graph we admit a
+        # clean manual-review candidate only as a source-coordinate-bound
+        # draft; it still cannot enter student runtime or QLoRA without the
+        # later teacher and spoken-question quality gates.
+        review.get("decision") in {"review_for_approval", "manual_review"}
         and len(text) >= 40
         and not EXCLUDE_RE.search(text)
         and not quality.get("visual_or_caption_risk")
@@ -63,6 +77,16 @@ def _phrase(value: str) -> str:
     return compact
 
 
+def _normalize_layout_ocr(text: str) -> str:
+    """Repair only deterministic PDF line-end hyphenation for spoken text.
+
+    The corpus retains the original PDF extraction and crop. This display
+    normalization changes only ``ilişki- lerinde``-style line breaks, while
+    preserving in-word hyphens, numbers and source coordinates.
+    """
+    return " ".join(LINE_END_HYPHEN_RE.sub("", text).split())
+
+
 def _explicit_relations(text: str) -> list[tuple[str, str, RelationType, str]]:
     """Extract only cue-marked relations from one source sentence.
 
@@ -85,6 +109,59 @@ def _explicit_relations(text: str) -> list[tuple[str, str, RelationType, str]]:
                 if len(left) >= 12 and len(right) >= 12 and left != right:
                     found.append((left, right, relation, sentence[:520]))
     return found
+
+
+def _event_titles(sentence: str) -> list[str]:
+    """Extract only compact, source-verbatim historical event titles.
+
+    This deliberately favours precision over coverage.  A full source
+    sentence is a useful evidence atom, but it is not a usable event node for
+    a spoken question.  The title remains a literal substring of the quoted
+    sentence, so no historical fact is invented during normalization.
+    """
+    result: list[str] = []
+    for match in EVENT_TITLE_RE.finditer(sentence):
+        title = " ".join(match.group("event").split())
+        if (12 <= len(title) <= 96 and len(title.split()) <= 8
+                and "[" not in title and "]" not in title and title not in result):
+            result.append(title)
+    return result
+
+
+def _event_year_action(sentence: str, title: str, year: str, *, title_count: int) -> str | None:
+    """Return a direct event--year action, otherwise reject the association.
+
+    A sentence may mention a war as background and give the date of a second
+    event.  Proximity alone would create a false graph edge.  The extractor
+    therefore requires a direct action verb or an immediate parenthesized
+    year, and refuses ambiguous multi-title sentences without that evidence.
+    """
+    title_match = re.search(re.escape(title), sentence)
+    year_match = re.search(rf"(?<!\d){re.escape(year)}(?!\d)", sentence)
+    if title_match is None or year_match is None:
+        return None
+    left, right = sorted((title_match.end(), year_match.end()))
+    gap_start, gap_end = sorted((title_match.end(), year_match.start()))
+    gap = sentence[gap_start:gap_end]
+    distance = abs(title_match.start() - year_match.start())
+    action_matches = list(TEMPORAL_ACTION_RE.finditer(sentence))
+    nearby = [match for match in action_matches
+              if min(abs(match.start() - title_match.end()), abs(match.start() - year_match.end())) <= 70]
+    if TEMPORAL_CONTEXT_RISK_RE.search(gap):
+        return None
+    if re.search(rf"\(\s*{re.escape(year)}\s*\)", sentence[title_match.end():title_match.end() + 45]):
+        return "dated"
+    if distance > 85 or not nearby:
+        return None
+    # If another named event competes in the same sentence, an unambiguous
+    # verb must appear after this title/year pair rather than merely nearby.
+    if title_count > 1 and not any(match.start() >= max(title_match.end(), year_match.end()) for match in nearby):
+        return None
+    action = nearby[0].group("action").casefold()
+    return {
+        "imzalandı": "signed", "kuruldu": "founded", "toplandı": "convened",
+        "başladı": "started", "sona erdi": "ended", "gerçekleşti": "occurred",
+    }.get(action)
 
 
 def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
@@ -118,6 +195,22 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
         ))
         return node_id
 
+    def year_node(*, checksum: str, year: str, source_id: str, chunk: dict, quote: str) -> str:
+        year_key = (checksum, year)
+        existing = year_nodes.get(year_key)
+        if existing is not None:
+            return existing
+        node_id = _id("period", checksum, year)
+        year_nodes[year_key] = node_id
+        nodes.append(HistoricalNode(
+            id=node_id, node_type=NodeType.DONEM_KRONOLOJI, label=year,
+            metadata=NodeMetadata(node_weight=0.8, years=[int(year)], source_ids=[source_id],
+                                  source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"], quote=quote,
+                                  extraction_method="explicit_year", review_status="agent_source_traceable"),
+            approved=True,
+        ))
+        return node_id
+
     for book in corpus.get("books", []):
         checksum = str(book.get("source_checksum", ""))
         if len(checksum) < 16:
@@ -125,7 +218,7 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
         for chunk in book.get("index", {}).get("chunks", []):
             if selected >= limit or not _eligible(chunk):
                 continue
-            text = " ".join(str(chunk["text"]).split())[:520]
+            text = _normalize_layout_ocr(str(chunk["text"]))[:520]
             atom_id = _id("atom", checksum, str(chunk["id"]))
             if atom_id in seen_atoms:
                 continue
@@ -143,7 +236,7 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
                                           unit_title=str(book.get("source_name", ""))[:160],
                                           source_ids=[source_id], source_checksum=checksum,
                                           page=chunk["page"], bbox=chunk["bbox"], quote=text,
-                                          extraction_method="agent_research_section", review_status="agent_source_traceable"),
+                                          extraction_method="agent_research_section_layout_normalized", review_status="agent_source_traceable"),
                     approved=True,
                 ))
             nodes.append(HistoricalNode(
@@ -151,34 +244,55 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
                 metadata=NodeMetadata(node_weight=0.9, years=[int(value) for value in YEAR_RE.findall(text)][:8],
                                       section_id=section_key[1], unit_title=str(book.get("source_name", ""))[:160],
                                       source_ids=[source_id], source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"],
-                                      quote=text, extraction_method="agent_traceable_atom", review_status="agent_source_traceable"),
+                                      quote=text, extraction_method="agent_traceable_atom_layout_normalized", review_status="agent_source_traceable"),
                 approved=True,
             ))
             edges.append(Edge(
                 id=_id("edge", atom_id, section_id, "scope"), from_node=atom_id, to_node=section_id,
                 relation=RelationType.KAPSAMINDADIR, quote=text, source_ids=[source_id], confidence=0.8,
                 approved=True, source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"],
-                extraction_method="same_chunk_section", review_status="agent_source_traceable",
+                extraction_method="same_chunk_section_layout_normalized", review_status="agent_source_traceable",
             ))
             for year in dict.fromkeys(YEAR_RE.findall(text)):
-                year_key = (checksum, year)
-                year_id = year_nodes.get(year_key)
-                if year_id is None:
-                    year_id = _id("period", checksum, year)
-                    year_nodes[year_key] = year_id
-                    nodes.append(HistoricalNode(
-                        id=year_id, node_type=NodeType.DONEM_KRONOLOJI, label=year,
-                        metadata=NodeMetadata(node_weight=0.8, years=[int(year)], source_ids=[source_id],
-                                              source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"], quote=text,
-                                              extraction_method="explicit_year", review_status="agent_source_traceable"),
-                        approved=True,
-                    ))
+                year_id = year_node(checksum=checksum, year=year, source_id=source_id, chunk=chunk, quote=text)
                 edges.append(Edge(
                     id=_id("edge", atom_id, year_id, "year"), from_node=atom_id, to_node=year_id,
                     relation=RelationType.DONEMINDE_OLMUSTUR, quote=text, source_ids=[source_id], confidence=0.95,
                     approved=True, source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"],
                     extraction_method="explicit_year_in_source", review_status="agent_source_traceable",
                 ))
+            # Source sentences with a named event and a year create a compact
+            # event--time edge in addition to the broader atom--time edge.
+            # The former can form a natural spoken question; the latter stays
+            # available for retrieval/context but is filtered by the draft
+            # quality gate if it is sentence-shaped.
+            for sentence in SENTENCE_RE.split(text):
+                sentence = " ".join(sentence.split())
+                if not sentence:
+                    continue
+                years = list(dict.fromkeys(YEAR_RE.findall(sentence)))
+                if not years:
+                    continue
+                titles = _event_titles(sentence)
+                for title in titles:
+                    event_id = claim_node(checksum=checksum, chunk=chunk, source_id=source_id,
+                                          section_id=section_key[1], label=title, quote=sentence,
+                                          relation=RelationType.DONEMINDE_OLMUSTUR)
+                    for year in years:
+                        action = _event_year_action(sentence, title, year, title_count=len(titles))
+                        if action is None:
+                            continue
+                        year_id = year_node(checksum=checksum, year=year, source_id=source_id,
+                                            chunk=chunk, quote=sentence)
+                        edges.append(Edge(
+                            id=_id("edge", event_id, year_id, "named_event_year"),
+                            from_node=event_id, to_node=year_id,
+                            relation=RelationType.DONEMINDE_OLMUSTUR, quote=sentence,
+                            source_ids=[source_id], confidence=0.97, approved=True,
+                            source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"],
+                            extraction_method=f"source_verbatim_named_event_year_{action}",
+                            review_status="agent_source_traceable",
+                        ))
             for left, right, relation, quote in _explicit_relations(text):
                 left_id = claim_node(checksum=checksum, chunk=chunk, source_id=source_id,
                                      section_id=section_key[1], label=left, quote=quote, relation=relation)
@@ -217,7 +331,7 @@ def main() -> None:
 
 
 def selected_count(graph: KnowledgeGraph) -> int:
-    return sum(node.metadata.extraction_method == "agent_traceable_atom" for node in graph.nodes)
+    return sum((node.metadata.extraction_method or "").startswith("agent_traceable_atom") for node in graph.nodes)
 
 
 if __name__ == "__main__":

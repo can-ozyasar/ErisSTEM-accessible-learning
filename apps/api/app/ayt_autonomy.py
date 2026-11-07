@@ -102,6 +102,21 @@ class GeneratedQuestionDraft(StrictModel):
     human_review_required: bool = True
 
 
+class DraftQualityReview(StrictModel):
+    """A deterministic gate between source-traceability and QLoRA eligibility.
+
+    A source-backed edge can still make a bad student question when an OCR
+    fragment becomes an endpoint.  Traceability therefore proves neither
+    Turkish readability nor pedagogical usability.  This review intentionally
+    fails closed: a rejected draft remains a private repair candidate.
+    """
+
+    question_id: str
+    accepted: bool
+    issues: list[str] = Field(default_factory=list, max_length=16)
+    reviewer_kind: str = "deterministic_draft_quality_gate_v1"
+
+
 class SplitRecord(StrictModel):
     id: str = Field(min_length=1, max_length=160)
     concept_keys: list[str] = Field(min_length=1, max_length=32)
@@ -139,6 +154,94 @@ _TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+")
 _NEGATIVE_RE = re.compile(r"\b(değildir|değil|olamaz|söylenemez|ulaşılamaz|yanlıştır|hangisi.*?dışında)\b", re.I)
 _CHRONOLOGY_RE = re.compile(r"\b(önce|sonra|kronolojik|sıralama|ilk|son|ardından|öncelik)\b", re.I)
 _INFERENCE_RE = re.compile(r"\b(çıkarılabilir|ulaşılabilir|gösterir|neden|sonuç|amaç|beklenir|yorum)\b", re.I)
+
+_DRAFT_OCR_FRAGMENT_RE = re.compile(
+    r"\b(?:istan|atlan|nort|tıriti|organizeyşın|dar|ön|pa)\s+"
+    r"(?:bul|tik|lantik|besi|cülüğünde|rtisinin)\b",
+    re.I,
+)
+_TRUNCATED_DATE_RELATION_RE = re.compile(r"\b\d{1,2}\s+[A-Za-zÇĞİÖŞÜçğıöşü]+\s+[12]\s+ile\s+\d{4}\b")
+_LINEBREAK_WORD_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]{2,}-\s+[a-zçğıöşüâîû]")
+_GENERIC_ENDPOINT_START_RE = re.compile(r"^(?:bu|şu|o|ancak|ayrıca|ve|ile|da|de|bir|yüzyılda)\b", re.I)
+_INCOMPLETE_ENDPOINT_END_RE = re.compile(r"\b(?:ile|ve|için|arasında|tarafından|amacıyla|nedeniyle|sonucunda)$", re.I)
+
+
+class GeneratedDraftQualityGate:
+    """Reject malformed source-derived question drafts before any data split.
+
+    The gate is deliberately narrow.  It does not judge historical truth;
+    that belongs to ``HistoryTeacherValidatorAgent`` and source review.  It
+    identifies mechanical failures which make a spoken question unusable:
+    clipped dates, OCR-split words, sentence-sized relation endpoints and
+    malformed five-choice items.
+    """
+
+    _temporal = {RelationType.DONEMINDE_OLMUSTUR.value, RelationType.KRONOLOJIK_SONRASIDIR.value}
+
+    @staticmethod
+    def _endpoint_issues(value: str, *, temporal_source: bool = False) -> list[str]:
+        compact = " ".join(value.split())
+        words = _TOKEN_RE.findall(compact)
+        problems: list[str] = []
+        if not compact or len(compact) > 100 or len(words) > 14:
+            problems.append("endpoint_too_long")
+        if compact.endswith((".", ";", ":", ",")):
+            problems.append("endpoint_is_sentence_fragment")
+        if (_DRAFT_OCR_FRAGMENT_RE.search(compact) or _LINEBREAK_WORD_RE.search(compact)
+                or "[" in compact or "]" in compact):
+            problems.append("endpoint_has_ocr_artifact")
+        if _GENERIC_ENDPOINT_START_RE.search(compact) or compact[:1].islower():
+            problems.append("endpoint_is_generic_or_unfinished")
+        if _INCOMPLETE_ENDPOINT_END_RE.search(compact):
+            problems.append("endpoint_has_incomplete_grammar")
+        if temporal_source and re.search(r"\b\d{4}\b", compact):
+            problems.append("temporal_subject_contains_unparsed_date")
+        return problems
+
+    def review(self, draft: GeneratedQuestionDraft) -> DraftQualityReview:
+        question = draft.runtime_question
+        issues: list[str] = []
+        stem = " ".join(question.stem.split())
+        temporal_template = (draft.relation_type == RelationType.DONEMINDE_OLMUSTUR.value
+                             and stem.startswith("Kaynağa göre ")
+                             and stem.endswith((" hangi yılda imzalanmıştır?", " hangi yılda kurulmuştur?",
+                                                " hangi yılda başlamıştır?", " hangi yılda sona ermiştir?",
+                                                " hangi yılda gerçekleşmiştir?")))
+        relation_template = stem.startswith("Kaynağa göre ") and stem.endswith(" arasındaki ilişki hangisidir?")
+        natural_relation_template = {
+            RelationType.SEBEBIDIR.value: stem.endswith(" durumunun nedenlerinden hangisidir?"),
+            RelationType.SONUCUDUR.value: stem.endswith(" durumunun sonuçlarından hangisidir?"),
+            RelationType.AMACIDIR.value: stem.endswith(" uygulamasının amacı aşağıdakilerden hangisidir?"),
+            RelationType.AKTORUDUR.value: stem.endswith(" eylemini gerçekleştiren taraf hangisidir?"),
+        }.get(draft.relation_type, False)
+        if not (temporal_template or relation_template or natural_relation_template):
+            issues.append("unsupported_question_template")
+        if len(stem) > 235:
+            issues.append("spoken_stem_too_long")
+        if _TRUNCATED_DATE_RELATION_RE.search(stem):
+            issues.append("truncated_date_in_stem")
+        if _DRAFT_OCR_FRAGMENT_RE.search(stem) or "[" in stem or "]" in stem:
+            issues.append("ocr_artifact_in_stem")
+        if len(question.choices) != 5 or {choice.label for choice in question.choices} != {"A", "B", "C", "D", "E"}:
+            issues.append("invalid_choice_set")
+        if not any(choice.label == draft.answer_label for choice in question.choices):
+            issues.append("missing_private_answer_position")
+        endpoints = question.question_terms[:2]
+        if len(endpoints) != 2:
+            issues.append("missing_relation_endpoints")
+        else:
+            temporal = draft.relation_type in self._temporal
+            issues.extend(self._endpoint_issues(endpoints[0], temporal_source=temporal))
+            issues.extend(self._endpoint_issues(endpoints[1]))
+            if temporal and not re.fullmatch(r"(?:MÖ\s*)?\d{4}", " ".join(endpoints[1].split())):
+                issues.append("temporal_target_is_not_normalized_year")
+            if temporal_template and any(not re.fullmatch(r"\d{4}", choice.text) for choice in question.choices):
+                issues.append("temporal_choices_are_not_years")
+        quote = " ".join(draft.source_quote.split())
+        if len(quote) < 24 or _DRAFT_OCR_FRAGMENT_RE.search(quote) or _LINEBREAK_WORD_RE.search(quote):
+            issues.append("source_quote_quality_risk")
+        return DraftQualityReview(question_id=draft.id, accepted=not issues,
+                                  issues=sorted(set(issues)))
 
 
 def _terms(text: str) -> list[str]:
@@ -469,6 +572,16 @@ class GraphToQuestionGenerator:
             for relation in sorted(by_relation, key=lambda value: value.value):
                 if by_relation[relation]:
                     ordered_edges.append(by_relation[relation].pop(0))
+        # A natural content question needs content alternatives, not five
+        # relation labels.  All option phrases are still source-verbatim graph
+        # endpoints; only the one backed by the current edge is correct.
+        target_pool: dict[RelationType, list[str]] = defaultdict(list)
+        for edge in self.edges:
+            target = self.nodes[edge.to_node].label
+            if (edge.relation != RelationType.KAPSAMINDADIR
+                    and not GeneratedDraftQualityGate._endpoint_issues(target)
+                    and target not in target_pool[edge.relation]):
+                target_pool[edge.relation].append(target)
         for edge in ordered_edges:
             # A generated item must point to a source quote with traceable PDF
             # provenance. A structural edge without a checked quote is skipped.
@@ -482,18 +595,43 @@ class GraphToQuestionGenerator:
             source = self.nodes[edge.from_node]
             target = self.nodes[edge.to_node]
             correct_relation = relation_labels[edge.relation]
-            distractors = [relation_labels[relation] for relation in relation_choices if relation != edge.relation][:4]
             # Deterministic option order varies by edge, reducing answer-position
             # leakage while leaving the private key only on the draft wrapper.
             labels = ("A", "B", "C", "D", "E")
             rotation = int(hashlib.sha256(edge.id.encode()).hexdigest()[:4], 16) % len(labels)
             answer_index = rotation
-            option_texts = distractors[:answer_index] + [correct_relation] + distractors[answer_index:]
+            if edge.relation == RelationType.DONEMINDE_OLMUSTUR and re.fullmatch(r"\d{4}", target.label):
+                year = int(target.label)
+                offsets = (-24, -12, 9, 18)
+                distractors = [str(year + offset) for offset in offsets]
+                correct_value = target.label
+                action = (edge.extraction_method or "").rsplit("_", 1)[-1]
+                temporal_verb = {
+                    "signed": "imzalanmıştır", "founded": "kurulmuştur",
+                    "convened": "toplanmıştır", "started": "başlamıştır",
+                    "ended": "sona ermiştir", "occurred": "gerçekleşmiştir",
+                    "dated": "gerçekleşmiştir",
+                }.get(action, "gerçekleşmiştir")
+                stem = f"Kaynağa göre {source.label} hangi yılda {temporal_verb}?"
+            else:
+                candidates = [value for value in target_pool[edge.relation] if value != target.label]
+                if len(candidates) < 4:
+                    continue
+                distractors = candidates[:4]
+                correct_value = target.label
+                template = {
+                    RelationType.SEBEBIDIR: f"Kaynağa göre {source.label} durumunun nedenlerinden hangisidir?",
+                    RelationType.SONUCUDUR: f"Kaynağa göre {source.label} durumunun sonuçlarından hangisidir?",
+                    RelationType.AMACIDIR: f"Kaynağa göre {source.label} uygulamasının amacı aşağıdakilerden hangisidir?",
+                    RelationType.AKTORUDUR: f"Kaynağa göre {source.label} eylemini gerçekleştiren taraf hangisidir?",
+                }
+                stem = template.get(edge.relation, f"Kaynağa göre {source.label} ile {target.label} arasındaki ilişki hangisidir?")
+            option_texts = distractors[:answer_index] + [correct_value] + distractors[answer_index:]
             choices = [QuestionChoice(label=label, text=value)
                        for label, value in zip(labels, option_texts)]
             question = QuestionItem(
                 id=f"generated:{edge.id}",
-                stem=f"Kaynağa göre {source.label} ile {target.label} arasındaki ilişki hangisidir?",
+                stem=stem,
                 choices=choices,
                 topic=source.metadata.unit_title or "",
                 question_terms=[source.label, target.label, correct_relation],

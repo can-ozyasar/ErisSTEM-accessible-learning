@@ -455,7 +455,21 @@ class GraphToQuestionGenerator:
             right = self.nodes[edge.to_node].metadata.node_weight
             return (-(left + right) / 2, -edge.confidence, edge.id)
 
+        # KAPSAMINDADIR is useful for graph navigation but produces shallow
+        # "paragraph belongs to heading" questions.  Keep it out of the
+        # coaching corpus.  Round-robin the remaining relation types so a
+        # frequent date relation cannot crowd out explicit cause, purpose or
+        # actor evidence.
+        by_relation: dict[RelationType, list[Edge]] = defaultdict(list)
         for edge in sorted(self.edges, key=importance):
+            if edge.relation != RelationType.KAPSAMINDADIR:
+                by_relation[edge.relation].append(edge)
+        ordered_edges: list[Edge] = []
+        while any(by_relation.values()):
+            for relation in sorted(by_relation, key=lambda value: value.value):
+                if by_relation[relation]:
+                    ordered_edges.append(by_relation[relation].pop(0))
+        for edge in ordered_edges:
             # A generated item must point to a source quote with traceable PDF
             # provenance. A structural edge without a checked quote is skipped.
             if (len(edge.quote.strip()) < 12 or not edge.source_ids

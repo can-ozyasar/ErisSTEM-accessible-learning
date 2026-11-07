@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections import Counter
 from pathlib import Path
 
 from ..ayt_autonomy import (
@@ -109,15 +110,17 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
             for name, records in groups.items()}
     manifest = {
         "schema": "autonomous-graph-qlora-research-pack-v1",
-        "status": "research_ready",
+        "status": "candidate_review_required",
         "review_status": "agent_generated_source_traceable",
         "question_groups": len(private_drafts),
         "examples": sum(len(value) for value in rows.values()),
         "splits": {name: len(records) for name, records in groups.items()},
         "source_bound": True,
         "teacher_agent_direct_validations": len(validations),
+        "relation_distribution": dict(sorted(Counter(draft.relation_type for draft in drafts).items())),
         "answer_keys_included": False,
         "human_review_required_before_production": True,
+        "training_eligible_without_human_review": False,
         "corpus_checksum": graph.corpus_checksum,
         "seed": seed,
         "kaggle_runner": {

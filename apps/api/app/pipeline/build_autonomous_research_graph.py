@@ -18,6 +18,12 @@ from ..ayt_knowledge_graph import Edge, HistoricalNode, KnowledgeGraph, NodeMeta
 YEAR_RE = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)")
 EXCLUDE_RE = re.compile(r"\b(soru|hangisi|belirtiniz|etkinlik|görsel|tablo|cevaplayınız|tartışınız)\b", re.I)
 EVENT_RE = re.compile(r"\b(savaş|muharebe|antlaşma|antlaşması|kongre|genelge|meclis|hareketi|inkılap)\b", re.I)
+SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+CAUSE_RE = re.compile(r"(?P<cause>.{12,220}?)\s+(?:nedeniyle|sebebiyle|yüzünden|dolayı)\s+(?P<effect>.{12,220}?)(?:[.!?]|$)", re.I)
+RESULT_RE = re.compile(r"(?P<cause>.{12,220}?)\s+sonucunda\s+(?P<effect>.{12,220}?)(?:[.!?]|$)", re.I)
+PURPOSE_RE = re.compile(r"(?P<purpose>.{12,180}?)\s+amacıyla\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.I)
+ACTOR_RE = re.compile(r"(?P<actor>.{3,140}?)\s+tarafından\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.I)
+AFTER_RE = re.compile(r"(?P<first>.{12,220}?)\s+(?:ardından|akabinde|sonra)\s+(?P<second>.{12,220}?)(?:[.!?]|$)", re.I)
 
 
 def _id(prefix: str, *parts: str) -> str:
@@ -36,7 +42,6 @@ def _eligible(chunk: dict) -> bool:
         and not quality.get("visual_or_caption_risk")
         and not quality.get("instruction_risk")
         and not quality.get("ocr_fragment_risk")
-        and bool(YEAR_RE.search(text))
         and chunk.get("page") is not None
         and chunk.get("bbox") is not None
     )
@@ -50,6 +55,38 @@ def _node_type(text: str) -> NodeType:
     return NodeType.KAVRAM_ILKE
 
 
+def _phrase(value: str) -> str:
+    """Return a short source-verbatim claim label, never a generated summary."""
+    compact = " ".join(value.strip(" ,;:-").split())
+    if len(compact) > 180:
+        compact = compact[:180].rsplit(" ", 1)[0]
+    return compact
+
+
+def _explicit_relations(text: str) -> list[tuple[str, str, RelationType, str]]:
+    """Extract only cue-marked relations from one source sentence.
+
+    A relation is emitted only when both endpoints are literal substrings of
+    that sentence.  These are review candidates, not student-runtime facts.
+    """
+    found: list[tuple[str, str, RelationType, str]] = []
+    patterns = (
+        (CAUSE_RE, "effect", "cause", RelationType.SEBEBIDIR),
+        (RESULT_RE, "cause", "effect", RelationType.SONUCUDUR),
+        (PURPOSE_RE, "action", "purpose", RelationType.AMACIDIR),
+        (ACTOR_RE, "action", "actor", RelationType.AKTORUDUR),
+        (AFTER_RE, "second", "first", RelationType.KRONOLOJIK_SONRASIDIR),
+    )
+    for sentence in SENTENCE_RE.split(text):
+        sentence = " ".join(sentence.split())
+        for pattern, left_name, right_name, relation in patterns:
+            for match in pattern.finditer(sentence):
+                left, right = _phrase(match.group(left_name)), _phrase(match.group(right_name))
+                if len(left) >= 12 and len(right) >= 12 and left != right:
+                    found.append((left, right, relation, sentence[:520]))
+    return found
+
+
 def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
     if corpus.get("schema") != "multi-history-rag-v1":
         raise ValueError("multi-history-rag-v1 corpus gerekli")
@@ -57,8 +94,30 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
     edges: list[Edge] = []
     section_nodes: dict[tuple[str, str], str] = {}
     year_nodes: dict[tuple[str, str], str] = {}
+    claim_nodes: dict[tuple[str, str, str], str] = {}
     seen_atoms: set[str] = set()
     selected = 0
+
+    def claim_node(*, checksum: str, chunk: dict, source_id: str, section_id: str,
+                   label: str, quote: str, relation: RelationType) -> str:
+        key = (checksum, str(chunk["id"]), label)
+        existing = claim_nodes.get(key)
+        if existing is not None:
+            return existing
+        node_id = _id("claim", checksum, str(chunk["id"]), label)
+        claim_nodes[key] = node_id
+        nodes.append(HistoricalNode(
+            id=node_id, node_type=_node_type(label), label=label, description=quote,
+            metadata=NodeMetadata(node_weight=0.92, years=[int(value) for value in YEAR_RE.findall(quote)][:8],
+                                  section_id=section_id, unit_title=str(chunk.get("section_title", ""))[:160],
+                                  source_ids=[source_id], source_checksum=checksum, page=chunk["page"],
+                                  bbox=chunk["bbox"], quote=quote,
+                                  extraction_method=f"explicit_{relation.value.casefold()}_cue",
+                                  review_status="agent_source_traceable"),
+            approved=True,
+        ))
+        return node_id
+
     for book in corpus.get("books", []):
         checksum = str(book.get("source_checksum", ""))
         if len(checksum) < 16:
@@ -119,6 +178,18 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
                     relation=RelationType.DONEMINDE_OLMUSTUR, quote=text, source_ids=[source_id], confidence=0.95,
                     approved=True, source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"],
                     extraction_method="explicit_year_in_source", review_status="agent_source_traceable",
+                ))
+            for left, right, relation, quote in _explicit_relations(text):
+                left_id = claim_node(checksum=checksum, chunk=chunk, source_id=source_id,
+                                     section_id=section_key[1], label=left, quote=quote, relation=relation)
+                right_id = claim_node(checksum=checksum, chunk=chunk, source_id=source_id,
+                                      section_id=section_key[1], label=right, quote=quote, relation=relation)
+                edges.append(Edge(
+                    id=_id("edge", left_id, right_id, relation.value), from_node=left_id, to_node=right_id,
+                    relation=relation, quote=quote, source_ids=[source_id], confidence=0.76,
+                    approved=True, source_checksum=checksum, page=chunk["page"], bbox=chunk["bbox"],
+                    extraction_method=f"explicit_{relation.value.casefold()}_cue",
+                    review_status="agent_source_traceable",
                 ))
             selected += 1
     if selected == 0:

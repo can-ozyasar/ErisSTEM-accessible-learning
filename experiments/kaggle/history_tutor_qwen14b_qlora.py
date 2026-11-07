@@ -114,14 +114,14 @@ def main():
                               data_seed=seed)
         trainer = SFTTrainer(model=model, args=arguments, train_dataset=Dataset.from_list(train),
                              eval_dataset=Dataset.from_list(dev), processing_class=tokenizer, peft_config=peft)
-        # PEFT may preserve the base checkpoint's bf16 adapter dtype even when
-        # the 4-bit compute path is fp16. T4's fp16 GradScaler cannot unscale
-        # bf16 gradients, so coerce only trainable adapter tensors before the
-        # first optimizer step. Frozen quantized base weights stay untouched.
+        # The 4-bit base model computes in fp16, but LoRA adapters must retain
+        # fp32 master weights on a T4.  AMP's GradScaler may unscale fp32
+        # gradients, whereas it rejects both bf16 and fp16 adapter gradients.
+        # Frozen quantized base weights stay untouched.
         trainable_dtypes: dict[str, int] = {}
         for parameter in trainer.model.parameters():
-            if parameter.requires_grad and parameter.dtype == torch.bfloat16:
-                parameter.data = parameter.data.to(dtype=torch.float16)
+            if parameter.requires_grad and parameter.dtype != torch.float32:
+                parameter.data = parameter.data.to(dtype=torch.float32)
             if parameter.requires_grad:
                 name = str(parameter.dtype).removeprefix("torch.")
                 trainable_dtypes[name] = trainable_dtypes.get(name, 0) + parameter.numel()

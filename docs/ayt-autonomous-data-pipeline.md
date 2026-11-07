@@ -22,9 +22,19 @@ alıntılar ve onaylı ilişki kenarlarıdır.
    önlenir.
 
 `export_autonomous_graph_qlora.py`, bu dört adımı private bir graf üzerinde
-çalıştırır. Kırk kaynak izli taslağı altı koçluk turuna dönüştürür; yalnız
+çalıştırır. Kaynak izli taslakları altı koçluk turuna dönüştürür; yalnız
 `train.jsonl` ve `dev.jsonl` Kaggle dizinine yazılır. `sealed_test.jsonl` ve
 cevap etiketi taşıyan taslaklar yerelde, ayrı dizinde kalır.
+
+Graf kenarının kaynakta bulunması tek başına yeterli değildir.
+`GeneratedDraftQualityGate`, split'ten önce konuşulabilir soru kökünü
+doğrular: satır sonu OCR bölünmesi, kırpılmış tarih, cümle boyunda düğüm,
+bozuk beşli şık ve eksik dil bilgisi olan taslakları reddeder. PDF'deki
+`ilişki- lerinde` türü satır sonları yalnız konuşma metninde deterministik
+olarak birleştirilir; checksum, sayfa ve koordinat korunur ve çıkarma yöntemi
+normalizasyonu belirtir. Aynı cümlede geçen her olay-yıl çifti ilişki değildir:
+adlandırılmış olay-yıl kenarı ancak doğrudan eylem fiili veya bitişik tarih
+kalıbı bulunduğunda üretilir.
 
 ## QLoRA kabul sırası
 
@@ -35,9 +45,16 @@ aktarımına girer. Kaggle paketi PDF, koordinat, cevap anahtarı, çözüm metn
 Qwen3-14B için NF4 4-bit QLoRA, completion-only loss ve grup bazlı split
 doğrulamasını uygular.
 
-## Geçerli durum
+## Deney kaydı ve geçerli durum
 
-Mevcut 80 grup / 480 tur, `agent_reviewed_only` araştırma pilotudur. Bu
-durum üretim modeli veya öğrenci çalışma zamanı için onay anlamına gelmez.
-Kaynak kapsama denetimindeki eksik sorular, yeni atom-bağlam çıkarımı ve
-ilişki grafiğiyle tamamlanmadan eğitim başlatılmaz.
+Kaggle'daki teknik QLoRA smoke testi tamamlandı: Qwen3-14B sabit sürümü,
+NF4 4-bit taban, fp32 LoRA ana ağırlıkları, üç epoch, 168 eğitim ve 36
+geliştirme turu. Adaptör üretildi. Bu küçük setin `eval_loss` değeri yalnız
+optimizasyon sinyalidir; taban modele karşı pedagojik kalite kanıtı değildir.
+
+İlk 180 tersine üretilmiş taslağın kalite denetimi, uzun atomların ve OCR
+artıklarının konuşulamaz soru ürettiğini ortaya çıkardı. Bu bulgu sonrasında
+kalite kapısı ve olay-yıl ilişki denetimi eklendi. Yeni 120+ grubun eğitimi,
+kapalı testte kullanılacak grup ayrımı, kaynak bağlılık ve erken cevap ifşası
+değerlendirmesi hazır olmadan başlatılmaz. Araştırma çıktısı öğrenci çalışma
+zamanına alınmaz; `research_only` sınırı korunur.

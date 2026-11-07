@@ -91,6 +91,7 @@ class GeneratedQuestionDraft(StrictModel):
     runtime_question: QuestionItem
     answer_label: str = Field(pattern=r"^[A-E]$")
     supporting_edge_id: str
+    relation_type: str = Field(min_length=3, max_length=64)
     concept_keys: list[str] = Field(min_length=1, max_length=12)
     source_ids: list[str] = Field(min_length=1, max_length=8)
     source_quote: str = Field(min_length=12, max_length=520)
@@ -452,8 +453,11 @@ class GraphToQuestionGenerator:
             )
             drafts.append(GeneratedQuestionDraft(
                 id=question.id, runtime_question=question, answer_label=labels[answer_index],
-                supporting_edge_id=edge.id,
-                concept_keys=[source.id, target.id, f"relation:{edge.relation.value}"],
+                supporting_edge_id=edge.id, relation_type=edge.relation.value,
+                # Relation *type* is an annotation shared by unrelated
+                # questions. Treating it as a concept would merge the entire
+                # dataset into one split. The concrete edge remains a key.
+                concept_keys=[source.id, target.id, f"edge:{edge.id}"],
                 source_ids=edge.source_ids, source_quote=edge.quote,
                 source_checksum=edge.source_checksum, page=edge.page, bbox=edge.bbox,
             ))

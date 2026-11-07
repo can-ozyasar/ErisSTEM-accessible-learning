@@ -55,7 +55,8 @@ def _coach_completion(case: str, *, subject: str, relation: str, quote: str) -> 
 
 def _rows_for_draft(draft: dict) -> list[dict]:
     question = draft["runtime_question"]
-    relation = draft["concept_keys"][-1].removeprefix("relation:").replace("_", " ").casefold()
+    relation_type = draft["relation_type"]
+    relation = relation_type.replace("_", " ").casefold()
     subject = question["stem"].removeprefix("Kaynağa göre ").removesuffix(" arasındaki ilişki hangisidir?")
     choices = " | ".join(f"{item['label']}) {item['text']}" for item in question["choices"])
     output = []
@@ -71,7 +72,7 @@ def _rows_for_draft(draft: dict) -> list[dict]:
         output.append({
             "group_id": draft["id"],
             "case": case,
-            "error_type": _error_type(draft["concept_keys"][-1].removeprefix("relation:")),
+            "error_type": _error_type(relation_type),
             "prompt": prompt,
             "completion": _coach_completion(case, subject=subject, relation=relation, quote=draft["source_quote"]),
         })
@@ -79,7 +80,12 @@ def _rows_for_draft(draft: dict) -> list[dict]:
 
 
 def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict[str, list[dict]], dict, list[dict]]:
-    graph = KnowledgeGraph.model_validate(graph_payload)
+    # The research-graph file carries top-level operational metadata
+    # (research_only, review status). KnowledgeGraph itself is intentionally
+    # strict, so pass only its immutable graph fields into the model.
+    graph = KnowledgeGraph.model_validate({
+        key: graph_payload[key] for key in ("schema", "corpus_checksum", "nodes", "edges")
+    })
     drafts = GraphToQuestionGenerator(graph).generate(limit=limit)
     if len(drafts) != limit:
         raise ValueError(f"Kaynak izli {limit} taslak üretilemedi; yalnız {len(drafts)} ilişki uygun")

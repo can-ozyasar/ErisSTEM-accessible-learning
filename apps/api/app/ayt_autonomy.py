@@ -305,6 +305,41 @@ class HistoryTeacherValidatorAgent:
                                  evidence_node_ids=selected[:self.max_atoms], evidence_edge_ids=selected_edges[:self.max_atoms],
                                  rationale="Aday metinler var ancak güvenilir bir doğrudan veya sınırlı çoklu-hop ilişki kurulamadı.")
 
+    def validate_generated_draft(self, draft: GeneratedQuestionDraft) -> TeacherValidation:
+        """Accept a reverse-generated item only when its exact edge proves it.
+
+        This is separate from retrieval validation: generated questions already
+        know an edge privately, but the teacher agent must still ensure that
+        the edge, its two approved endpoints and the verbatim quote form one
+        direct, traceable claim.
+        """
+        edge = self.edges.get(draft.supporting_edge_id)
+        source = self.nodes.get(edge.from_node) if edge else None
+        target = self.nodes.get(edge.to_node) if edge else None
+        if (edge is None or source is None or target is None
+                or edge.relation.value != draft.relation_type
+                or edge.source_ids != draft.source_ids
+                or edge.quote != draft.source_quote
+                or edge.source_checksum != draft.source_checksum
+                or edge.page != draft.page or edge.bbox != draft.bbox):
+            return TeacherValidation(
+                question_id=draft.id, decision="insufficient",
+                rationale="Taslak, kaynak alıntılı onaylı ilişki kenarıyla birebir eşleşmiyor.",
+            )
+        quote_terms = set(_terms(edge.quote))
+        endpoint_terms = set(_terms(source.label)) | set(_terms(target.label))
+        if not endpoint_terms or not (quote_terms & endpoint_terms):
+            return TeacherValidation(
+                question_id=draft.id, decision="insufficient",
+                rationale="İlişki kenarının alıntısı iki düğümden en az birini açıkça taşımıyor.",
+            )
+        return TeacherValidation(
+            question_id=draft.id, decision="direct", evidence_node_ids=[source.id, target.id],
+            evidence_edge_ids=[edge.id], source_ids=edge.source_ids,
+            rationale="Tersine üretilen soru, iki onaylı düğüm ve kaynak alıntılı tek ilişki kenarıyla doğrudan destekleniyor.",
+            reviewer_kind="rule_based_teacher_candidate_v1",
+        )
+
     def validate_with_retry(self, question: QuestionItem, analyzer: QuestionAnalyzerAndEliminator,
                             *, max_attempts: int = 3) -> TeacherValidation:
         """Use transparent ReAct-style query reformulation before abstaining.

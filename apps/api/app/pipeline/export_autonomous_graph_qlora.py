@@ -10,7 +10,12 @@ import argparse
 import json
 from pathlib import Path
 
-from ..ayt_autonomy import ConceptBasedDataSplitter, GraphToQuestionGenerator, SplitRecord
+from ..ayt_autonomy import (
+    ConceptBasedDataSplitter,
+    GraphToQuestionGenerator,
+    HistoryTeacherValidatorAgent,
+    SplitRecord,
+)
 from ..ayt_knowledge_graph import KnowledgeGraph
 from ..tutor_dataset import CASES
 
@@ -89,6 +94,10 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
     drafts = GraphToQuestionGenerator(graph).generate(limit=limit)
     if len(drafts) != limit:
         raise ValueError(f"Kaynak izli {limit} taslak üretilemedi; yalnız {len(drafts)} ilişki uygun")
+    validations = [HistoryTeacherValidatorAgent(graph).validate_generated_draft(draft) for draft in drafts]
+    rejected = [validation.question_id for validation in validations if validation.decision != "direct"]
+    if rejected:
+        raise ValueError(f"Öğretmen ajanı {len(rejected)} tersine üretilen taslağı doğrudan kanıtlayamadı")
     private_drafts = [draft.model_dump(mode="json") for draft in drafts]
     split = ConceptBasedDataSplitter(seed=seed).split([
         SplitRecord(id=draft.id, concept_keys=draft.concept_keys, payload={"draft_id": draft.id})
@@ -106,6 +115,7 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
         "examples": sum(len(value) for value in rows.values()),
         "splits": {name: len(records) for name, records in groups.items()},
         "source_bound": True,
+        "teacher_agent_direct_validations": len(validations),
         "answer_keys_included": False,
         "human_review_required_before_production": True,
         "corpus_checksum": graph.corpus_checksum,

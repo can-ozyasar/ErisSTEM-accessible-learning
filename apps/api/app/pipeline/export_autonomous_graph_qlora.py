@@ -110,6 +110,14 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
         "human_review_required_before_production": True,
         "corpus_checksum": graph.corpus_checksum,
         "seed": seed,
+        "kaggle_runner": {
+            "script": "experiments/kaggle/history_tutor_qwen14b_qlora.py",
+            "environment": {
+                "TUTOR_QLORA_EXPECTED_TRAIN_GROUPS": str(len(groups["train"])),
+                "TUTOR_QLORA_EXPECTED_DEV_GROUPS": str(len(groups["dev"])),
+            },
+            "sealed_test_uploaded": False,
+        },
     }
     return rows, manifest, private_drafts
 

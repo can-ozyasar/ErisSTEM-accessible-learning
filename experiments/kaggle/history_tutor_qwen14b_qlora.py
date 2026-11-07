@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 import time
+from importlib.metadata import version
 from pathlib import Path
 
 MODEL = "Qwen/Qwen3-14B"
@@ -51,6 +52,10 @@ def rows(name: str) -> list[dict]:
     return parsed
 
 
+def group_ids(items: list[dict]) -> set[str]:
+    return {item["group_id"] for item in items}
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
     report = {"model": MODEL, "revision": REVISION, "status": "started", "input": str(INPUT),
@@ -59,11 +64,16 @@ def main():
         REPORT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     try:
         train, dev = rows("train"), rows("dev")
+        overlap = group_ids(train) & group_ids(dev)
+        if overlap:
+            raise ValueError("train ve dev aynı soru grubunu içeremez")
         if (INPUT / "sealed_test.jsonl").exists():
             raise ValueError("sealed test must remain local and outside the Kaggle input")
         report["examples"] = {"train": len(train), "dev": len(dev)}
-        subprocess.run([sys.executable, "-m", "pip", "install", "-q", "transformers==5.3.0", "accelerate==1.12.0",
-                        "peft==0.18.1", "bitsandbytes==0.49.2", "trl==0.29.0", "datasets==4.0.0"], check=True)
+        if os.getenv("TUTOR_QLORA_SKIP_INSTALL") != "1":
+            subprocess.run([sys.executable, "-m", "pip", "install", "-q", "transformers>=4.51,<5",
+                            "accelerate>=1.4", "peft>=0.14", "bitsandbytes>=0.45",
+                            "trl>=0.15", "datasets>=3.2"], check=True)
         import torch
         from datasets import Dataset
         from peft import LoraConfig
@@ -78,7 +88,7 @@ def main():
         quant = BitsAndBytesConfig(load_in_4bit=True, bnb_4bit_quant_type="nf4", bnb_4bit_use_double_quant=True,
                                    bnb_4bit_compute_dtype=torch.float16)
         model = AutoModelForCausalLM.from_pretrained(MODEL, revision=REVISION, quantization_config=quant,
-                                                      device_map={"": 0}, dtype=torch.float16)
+                                                      device_map={"": 0}, torch_dtype=torch.float16)
         model.config.use_cache = False
         peft = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05,
                           target_modules=["q_proj", "k_proj", "v_proj", "o_proj"], task_type="CAUSAL_LM")
@@ -105,6 +115,7 @@ def main():
                        "adapter": str(adapter), "training": {"quantization": "nf4-4bit-fp16", "completion_only_loss": True,
                        "gradient_checkpointing": True, "epochs": 3, "learning_rate": learning_rate,
                        "lora": {"r": 16, "alpha": 32}, "seed": seed,
+                       "packages": {name: version(name) for name in ("transformers", "accelerate", "peft", "bitsandbytes", "trl", "datasets")},
                        "selection_note": "Choose by reviewed development behaviour, not eval_loss alone."}})
     except Exception as error:
         report.update({"status": "failed", "error_type": type(error).__name__, "error": str(error)[:2000]})

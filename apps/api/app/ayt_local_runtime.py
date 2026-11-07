@@ -77,6 +77,11 @@ def load_approved_graph(path: Path, *, expected_checksum: str | None = None) -> 
     """Load a graph only when it contains an approved runtime surface."""
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
+        # Research graphs intentionally reuse the strict graph schema so they
+        # can be evaluated, but they must never become student runtime data
+        # merely by being pointed to through an environment variable.
+        if payload.get("research_only") is True or payload.get("runtime_enabled") is False:
+            raise RuntimeError("araştırma_grafi_runtime_açılamaz")
         graph = KnowledgeGraph.model_validate(payload)
     except (OSError, json.JSONDecodeError, ValueError) as error:
         raise RuntimeError("geçerli_ayt_grafi_yüklenemedi") from error

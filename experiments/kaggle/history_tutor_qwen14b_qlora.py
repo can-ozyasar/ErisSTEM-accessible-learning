@@ -13,6 +13,11 @@ import time
 from importlib.metadata import version
 from pathlib import Path
 
+# Kaggle's T4 setting can expose two GPUs to one notebook process. TRL's
+# SFTTrainer rejects that implicit DataParallel configuration, so QLoRA runs
+# deliberately on a single visible GPU.
+os.environ.setdefault("CUDA_VISIBLE_DEVICES", "0")
+
 MODEL = "Qwen/Qwen3-14B"
 REVISION = "40c069824f4251a91eefaf281ebe4c544efd3e18"
 INPUT = Path(os.getenv("TUTOR_QLORA_INPUT", "/kaggle/input/history-tutor-qlora-input-v1"))
@@ -27,6 +32,11 @@ def rows(name: str) -> list[dict]:
     parsed = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
     if not parsed:
         raise ValueError(f"{name} is empty")
+    # Keep the completion boundary on a tokenizer-stable newline. Without it,
+    # a trailing ``Koç:`` can merge with the first completion token and make
+    # completion-only masking learn from a different prompt prefix.
+    for item in parsed:
+        item["prompt"] = item["prompt"].rstrip() + "\n"
     forbidden = ("answer_label", "answer_key", "source_text", "pdf", "bbox", "page", "answer_source_checked")
     groups: dict[str, set[str]] = {}
     for item in parsed:

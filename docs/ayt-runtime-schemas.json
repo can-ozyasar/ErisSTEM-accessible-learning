@@ -419,9 +419,7 @@
           "KAPSAMINDADIR",
           "ILKESIYLE_ILISKILIDIR",
           "CELISIR_TAVIZDIR",
-          "BENZERIDIR_PARALELDIR",
-          "IMZALAYANIDIR",
-          "UYGULANDIGI_YERDIR"
+          "BENZERIDIR_PARALELDIR"
         ],
         "title": "RelationType",
         "type": "string"

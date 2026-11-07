@@ -413,8 +413,6 @@ class GraphToQuestionGenerator:
             RelationType.ILKESIYLE_ILISKILIDIR: "ilkesiyle ilişkilidir",
             RelationType.CELISIR_TAVIZDIR: "çelişir veya taviz niteliğindedir",
             RelationType.BENZERIDIR_PARALELDIR: "benzer veya paraleldir",
-            RelationType.IMZALAYANIDIR: "imzalayanıdır",
-            RelationType.UYGULANDIGI_YERDIR: "uygulandığı yerdir",
         }
         relation_choices = [relation for relation in RelationType if relation in relation_labels]
         def importance(edge: Edge) -> tuple[float, float, str]:

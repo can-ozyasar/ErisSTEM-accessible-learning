@@ -21,6 +21,20 @@ def test_queue_excludes_unstable_layout_and_visual_questions():
     assert queue["summary"]["blocked_reasons"]["görsel_betimleme_gerekli"] == 1
 
 
+def test_queue_keeps_text_blank_questions_and_rejects_visual_choice_references():
+    blank = _question("blank", 1, "A")
+    blank["question"]["question_type"] = "fill_in_the_blank"
+    blank["question"]["parts"] = [{"text": "Boş bırakılan yere aşağıdakilerden hangisi gelir?"}]
+    visual_choice = _question("choice-visual", 2, "A")
+    visual_choice["question"]["choices"] = [{"label": "A", "text": "Haritada gösterilen bölge"}]
+    book = {"source_checksum": "a" * 64, "page_contexts": {1: {"topic": "A"}, 2: {"topic": "A"}},
+            "questions": [blank, visual_choice]}
+    queue = build(book, target=2)
+    assert queue["selected_count"] == 1
+    assert queue["selected"][0]["question_id"] == "blank"
+    assert queue["summary"]["blocked_reasons"]["görsel_betimleme_gerekli"] == 1
+
+
 def test_queue_normalizes_topic_spelling_and_rejects_test_name_as_topic():
     book = {"source_checksum": "a" * 64, "page_contexts": {1: {"topic": "Eski Çağ’da Hukuk"}, 2: {"topic": "Eski Çağ'da Hukuk"}, 3: {"topic": "Ünite Tarama Testi"}}, "questions": [_question("one", 1, ""), _question("two", 2, ""), _question("generic", 3, "")]}
     queue = build(book, target=3)

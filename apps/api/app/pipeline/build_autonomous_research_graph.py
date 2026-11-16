@@ -12,27 +12,32 @@ import json
 import re
 from pathlib import Path
 
-from ..ayt_knowledge_graph import Edge, HistoricalNode, KnowledgeGraph, NodeMetadata, NodeType, RelationType
-
+from ..ayt_knowledge_graph import (
+    Edge,
+    HistoricalNode,
+    KnowledgeGraph,
+    NodeMetadata,
+    NodeType,
+    RelationType,
+)
 
 YEAR_RE = re.compile(r"(?<!\d)(1[0-9]{3}|20[0-9]{2})(?!\d)")
-EXCLUDE_RE = re.compile(r"\b(soru|hangisi|belirtiniz|etkinlik|görsel|tablo|cevaplayınız|tartışınız)\b", re.I)
-EVENT_RE = re.compile(r"\b(savaş|muharebe|antlaşma|antlaşması|kongre|genelge|meclis|hareketi|inkılap)\b", re.I)
-SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
-CAUSE_RE = re.compile(r"(?P<cause>.{12,220}?)\s+(?:nedeniyle|sebebiyle|yüzünden|dolayı)\s+(?P<effect>.{12,220}?)(?:[.!?]|$)", re.I)
-RESULT_RE = re.compile(r"(?P<cause>.{12,220}?)\s+sonucunda\s+(?P<effect>.{12,220}?)(?:[.!?]|$)", re.I)
-PURPOSE_RE = re.compile(r"(?P<purpose>.{12,180}?)\s+amacıyla\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.I)
-ACTOR_RE = re.compile(r"(?P<actor>.{3,140}?)\s+tarafından\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.I)
-AFTER_RE = re.compile(r"(?P<first>.{12,220}?)\s+(?:ardından|akabinde|sonra)\s+(?P<second>.{12,220}?)(?:[.!?]|$)", re.I)
+EXCLUDE_RE = re.compile(r"\b(soru|hangisi|belirtiniz|etkinlik|görsel|tablo|cevaplayınız|tartışınız)\b", re.IGNORECASE)
+EVENT_RE = re.compile(r"\b(savaş|muharebe|antlaşma|antlaşması|kongre|genelge|meclis|hareketi|inkılap)\b", re.IGNORECASE)
+SENTENCE_RE = re.compile(r"(?<!\bI\.)(?<!\bII\.)(?<!\bIII\.)(?<!\bIV\.)(?<=[.!?])\s+")
+CAUSE_RE = re.compile(r"(?P<cause>.{12,220}?)\s+(?:nedeniyle|sebebiyle|yüzünden|dolayı)\s+(?P<effect>.{12,220}?)(?:[.!?]|$)", re.IGNORECASE)
+RESULT_RE = re.compile(r"(?P<cause>.{12,220}?)\s+sonucunda\s+(?P<effect>.{12,220}?)(?:[.!?]|$)", re.IGNORECASE)
+PURPOSE_RE = re.compile(r"(?P<purpose>.{12,180}?)\s+amacıyla\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.IGNORECASE)
+ACTOR_RE = re.compile(r"(?P<actor>.{3,140}?)\s+tarafından\s+(?P<action>.{12,220}?)(?:[.!?]|$)", re.IGNORECASE)
+AFTER_RE = re.compile(r"(?P<first>.{12,220}?)\s+(?:ardından|akabinde|sonra)\s+(?P<second>.{12,220}?)(?:[.!?]|$)", re.IGNORECASE)
 EVENT_TITLE_RE = re.compile(
-    r"\b(?P<event>(?:[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû’'\-]+"
-    r"(?:\s+(?:[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû’'\-]+|[a-zçğıöşüâîû]+)){0,5})"
+    r"\b(?P<event>(?:[IVX]+\.\s+)?[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû’'\-]+"
+    r"(?:\s+(?:[A-ZÇĞİÖŞÜ][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû’'\-]+|ve)){0,4}"
     r"\s+(?:Antlaşması|Antlaşması|Sözleşmesi|Kongresi|Genelgesi|Savaşı|Harekâtı|Harekatı|"
     r"Meclisi|Hareketi|Konferansı|Darbesi|Reformu|Seferi|Mücadelesi|Teşkilatı|Örgütü))\b"
 )
 LINE_END_HYPHEN_RE = re.compile(r"(?<=[A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû])-\s+(?=[a-zçğıöşüâîû])")
-TEMPORAL_ACTION_RE = re.compile(r"\b(?P<action>imzalandı|kuruldu|toplandı|başladı|sona erdi|gerçekleşti)\b", re.I)
-TEMPORAL_CONTEXT_RISK_RE = re.compile(r"\b(?:devam ederken|sonrasında|sırasında|öncesinde|esnasında)\b", re.I)
+DATE_SUFFIX_RE = r"(?:['’](?:de|da|te|ta|nde|nda))?"
 
 
 def _id(prefix: str, *parts: str) -> str:
@@ -62,7 +67,7 @@ def _eligible(chunk: dict) -> bool:
 
 
 def _node_type(text: str) -> NodeType:
-    if re.search(r"\bantlaşma(sı)?\b", text, re.I):
+    if re.search(r"\bantlaşma(sı)?\b", text, re.IGNORECASE):
         return NodeType.ANTLASMA_BELGE
     if EVENT_RE.search(text):
         return NodeType.OLAY_SAVAS
@@ -87,6 +92,12 @@ def _normalize_layout_ocr(text: str) -> str:
     return " ".join(LINE_END_HYPHEN_RE.sub("", text).split())
 
 
+def _complete_sentences(text: str) -> list[str]:
+    """Keep sentence-level evidence intact; a 520-char crop may cut a claim."""
+    return [sentence for sentence in SENTENCE_RE.split(text)
+            if sentence.endswith((".", "!", "?")) and len(sentence) <= 520]
+
+
 def _explicit_relations(text: str) -> list[tuple[str, str, RelationType, str]]:
     """Extract only cue-marked relations from one source sentence.
 
@@ -101,7 +112,7 @@ def _explicit_relations(text: str) -> list[tuple[str, str, RelationType, str]]:
         (ACTOR_RE, "action", "actor", RelationType.AKTORUDUR),
         (AFTER_RE, "second", "first", RelationType.KRONOLOJIK_SONRASIDIR),
     )
-    for sentence in SENTENCE_RE.split(text):
+    for sentence in _complete_sentences(text):
         sentence = " ".join(sentence.split())
         for pattern, left_name, right_name, relation in patterns:
             for match in pattern.finditer(sentence):
@@ -123,12 +134,13 @@ def _event_titles(sentence: str) -> list[str]:
     for match in EVENT_TITLE_RE.finditer(sentence):
         title = " ".join(match.group("event").split())
         if (12 <= len(title) <= 96 and len(title.split()) <= 8
+                and title not in {"Dünya Savaşı", "Askerî Darbesi"}
                 and "[" not in title and "]" not in title and title not in result):
             result.append(title)
     return result
 
 
-def _event_year_action(sentence: str, title: str, year: str, *, title_count: int) -> str | None:
+def _event_year_action(sentence: str, title: str, year: str) -> str | None:
     """Return a direct event--year action, otherwise reject the association.
 
     A sentence may mention a war as background and give the date of a second
@@ -136,32 +148,44 @@ def _event_year_action(sentence: str, title: str, year: str, *, title_count: int
     therefore requires a direct action verb or an immediate parenthesized
     year, and refuses ambiguous multi-title sentences without that evidence.
     """
-    title_match = re.search(re.escape(title), sentence)
-    year_match = re.search(rf"(?<!\d){re.escape(year)}(?!\d)", sentence)
-    if title_match is None or year_match is None:
-        return None
-    left, right = sorted((title_match.end(), year_match.end()))
-    gap_start, gap_end = sorted((title_match.end(), year_match.start()))
-    gap = sentence[gap_start:gap_end]
-    distance = abs(title_match.start() - year_match.start())
-    action_matches = list(TEMPORAL_ACTION_RE.finditer(sentence))
-    nearby = [match for match in action_matches
-              if min(abs(match.start() - title_match.end()), abs(match.start() - year_match.end())) <= 70]
-    if TEMPORAL_CONTEXT_RISK_RE.search(gap):
-        return None
-    if re.search(rf"\(\s*{re.escape(year)}\s*\)", sentence[title_match.end():title_match.end() + 45]):
-        return "dated"
-    if distance > 85 or not nearby:
-        return None
-    # If another named event competes in the same sentence, an unambiguous
-    # verb must appear after this title/year pair rather than merely nearby.
-    if title_count > 1 and not any(match.start() >= max(title_match.end(), year_match.end()) for match in nearby):
-        return None
-    action = nearby[0].group("action").casefold()
-    return {
-        "imzalandı": "signed", "kuruldu": "founded", "toplandı": "convened",
-        "başladı": "started", "sona erdi": "ended", "gerçekleşti": "occurred",
-    }.get(action)
+    # A year elsewhere in the sentence can belong to another event. Bind it
+    # only to a directly adjacent named event, never to a nearby unrelated verb.
+    title_pattern = re.escape(title)
+    year_pattern = rf"(?<!\d){re.escape(year)}(?!\d)"
+    for match in re.finditer(year_pattern, sentence):
+        before = sentence[max(0, match.start() - 16):match.start()]
+        after = sentence[match.end():match.end() + 85]
+        if re.search(r"\d{4}\s*[-–/]\s*$", before) or re.match(r"\s*[-–/]\s*\d{4}", after):
+            continue  # A range is not a unique event year.
+        # 1928'de imzalanan Paris Sözleşmesi; 1915'te Birinci Kanal Harekâtı.
+        following = re.match(
+            rf"{DATE_SUFFIX_RE}\s+(?:(imzalanan|kurulan|başlayan|toplanan)\s+)?{title_pattern}\b",
+            after, re.IGNORECASE,
+        )
+        if following:
+            trailing = after[following.end():]
+            finite = re.match(r"(?:['’][a-zçğıöşü]+)?\s+(imzalandı|kuruldu|toplandı|başladı|sona erdi|gerçekleşti)\b",
+                              trailing, re.IGNORECASE)
+            if finite:
+                return {"imzalandı": "signed", "kuruldu": "founded",
+                        "toplandı": "convened", "başladı": "started",
+                        "sona erdi": "ended", "gerçekleşti": "occurred"}[finite.group(1).casefold()]
+            return {"imzalanan": "signed", "kurulan": "founded",
+                    "başlayan": "started", "toplanan": "convened"}.get(
+                        (following.group(1) or "").casefold(), "dated")
+        # An immediately parenthesized year, or a title followed by a dated
+        # finite action, is also unambiguous.
+        preceding = sentence[max(0, match.start() - len(title) - 8):match.start()]
+        if re.search(rf"{title_pattern}\s*\(\s*$", preceding, re.IGNORECASE):
+            return "dated"
+        if re.search(rf"{title_pattern}(?:['’][a-zçğıöşü]+)?\s*$", preceding, re.IGNORECASE):
+            action = re.match(rf"{DATE_SUFFIX_RE}\s+(imzalandı|kuruldu|toplandı|başladı|sona erdi|gerçekleşti)\b",
+                              after, re.IGNORECASE)
+            if action:
+                return {"imzalandı": "signed", "kuruldu": "founded",
+                        "toplandı": "convened", "başladı": "started",
+                        "sona erdi": "ended", "gerçekleşti": "occurred"}[action.group(1).casefold()]
+    return None
 
 
 def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
@@ -218,7 +242,8 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
         for chunk in book.get("index", {}).get("chunks", []):
             if selected >= limit or not _eligible(chunk):
                 continue
-            text = _normalize_layout_ocr(str(chunk["text"]))[:520]
+            full_text = _normalize_layout_ocr(str(chunk["text"]))
+            text = full_text[:520]
             atom_id = _id("atom", checksum, str(chunk["id"]))
             if atom_id in seen_atoms:
                 continue
@@ -266,7 +291,7 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
             # The former can form a natural spoken question; the latter stays
             # available for retrieval/context but is filtered by the draft
             # quality gate if it is sentence-shaped.
-            for sentence in SENTENCE_RE.split(text):
+            for sentence in _complete_sentences(full_text):
                 sentence = " ".join(sentence.split())
                 if not sentence:
                     continue
@@ -279,7 +304,7 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
                                           section_id=section_key[1], label=title, quote=sentence,
                                           relation=RelationType.DONEMINDE_OLMUSTUR)
                     for year in years:
-                        action = _event_year_action(sentence, title, year, title_count=len(titles))
+                        action = _event_year_action(sentence, title, year)
                         if action is None:
                             continue
                         year_id = year_node(checksum=checksum, year=year, source_id=source_id,
@@ -293,7 +318,7 @@ def build(corpus: dict, *, limit: int = 240) -> KnowledgeGraph:
                             extraction_method=f"source_verbatim_named_event_year_{action}",
                             review_status="agent_source_traceable",
                         ))
-            for left, right, relation, quote in _explicit_relations(text):
+            for left, right, relation, quote in _explicit_relations(full_text):
                 left_id = claim_node(checksum=checksum, chunk=chunk, source_id=source_id,
                                      section_id=section_key[1], label=left, quote=quote, relation=relation)
                 right_id = claim_node(checksum=checksum, chunk=chunk, source_id=source_id,

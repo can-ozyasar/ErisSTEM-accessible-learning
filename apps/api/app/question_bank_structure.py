@@ -76,7 +76,7 @@ class Choice(BaseModel):
 
 class QuestionVisual(BaseModel):
     id: str
-    kind: Literal["photo", "map", "diagram", "table", "unknown"] = "unknown"
+    kind: Literal["photo", "map", "diagram", "table", "vector_graphic", "unknown"] = "unknown"
     label: str | None = None
     source: SourceBox
     caption: str | None = None

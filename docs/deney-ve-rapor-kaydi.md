@@ -758,3 +758,343 @@ değerlendirmesi runtime’da yapılmıyor. Cevap anahtarı alanı runtime Pydan
 
 `ddcc4ce` sonrasında tam test paketi **561 geçti**; yalnız Starlette/httpx
 deprecation uyarısı kaldı. Gerçek MEB grafiği insan onayı olmadan açılmıyor.
+
+### 2026-11 — Deneme soru havuzu ve koçluk kalitesi düzeltmesi
+
+Önceki 119 soruluk `ayt-deneme-history-candidates-v2.json` sayısı tarih sorusu
+sayısı olarak kullanılmamalı. Çıkarıcı 25–34 soru numarasını deneme boyunca
+Tarih-1 sanmış; aynı numaralar matematik testinde de bulunduğu için 55 kayıt
+yanlış test sayfalarından gelmiş. PDF'deki basılı **AYT Türk Dili ve Edebiyatı–
+Sosyal Bilimler-1** başlığı artık ayrıca doğrulanıyor. İlk başlık filtresi 64
+aday buldu. Sağ sütun soru numaralarının sayfa ortasına göre belirlenmesiyle
+kaçırılan 57 aday daha çıkarıldı. Private
+`ayt-deneme-history-candidates-v9.json` 121 yapısal metin adayı,
+PDF kesiti incelemesine ayrılmış 27 yatay şık düzeni ve kapsam dışına alınmış
+2 görsel soru içeriyor. Yatay şıklar A–E olarak yeniden ayrıştırıldı; satır
+düzeyindeki kaynak koordinatları nedeniyle PDF incelemesi sürüyor. Bu sayı,
+kanıt ve koçluk onayı ya da kitaptaki bütün tarih sorularının çıkarıldığı
+anlamına gelmiyor. Adayların 71'inde seçilen altı üniteden biriyle sözcük
+eşleşmesi var, 50'sinde bölüm incelemesi gerekiyor; eşleşme kesin kapsam
+etiketi değildir. Cevap anahtarı ve çözümler okunmadı.
+
+Sekiz koçluk taslağı kaynağındaki 109 benzersiz soru grubu yeni özel denetimden
+geçirildi. Kaynak kimliği ve alıntı corpus metniyle ayrıca karşılaştırılınca
+**85 grup reddedildi, 24 grup anlamsal/PDF incelemesi bekliyor,
+otomatik eğitim onayı 0.** Nedenler birbiriyle örtüşüyor: 73 grupta yapay ve
+tekrarlanan koçluk kalıbı, 12 grupta yeni doğrulanmış soru havuzunda bulunmayan
+transkripsiyon, 11 grupta corpus metninde birebir bulunmayan kısaltılmış
+alıntı, 1 grupta çelişen taslak sürümü. 50 grupta olası OCR bölünmesi,
+19 grupta düşük sözcük örtüşmesi ayrıca inceleme uyarısıdır. Sözcük örtüşmesi
+kanıt doğruluğu sayılmıyor: Hz. Ömer sorusuna Ömer Hayyam alıntısı verilmesi
+somut karşı örnektir. Private `teacher-coaching-group-quality-audit-v7.json`
+alıntı, soru ve kaynak kimlikleriyle inceleme sırasını saklar; Git'e girmez.
+
+Bu düzeltme önceki pilotların yapısal olarak çalıştığı sonucunu değiştirmez;
+pedagojik kalite ve tarihsel doğruluk iddiasını geri çeker. 120 eğitim grubuna
+ulaşmak için 121 yapısal adayın kapsam, transkripsiyon ve kaynak uygunluğunu
+PDF üzerinden doğrulamak ve her biri için altı özgül koçluk turunu yazmak
+gerekiyor. Eksik veya kapsam dışı sorular başka onaylı kaynaklardan tamamlanır.
+Bu kapıdan
+önce yeni QLoRA eğitimi kalite deneyi olarak başlatılmaz.
+
+AYT metin koçluğu kapsamı daha sonra yalnız görsel veri içermeyen sorularla
+sınırlandı. Harita, tablo, resim, grafik veya şema içeren kayıtlar üretim ve
+eğitim havuzundan çıkarılır. Son çıkarımda üç soru
+`out_of_scope_visual_question` olarak ayrıldı; 27 metin sorusunun yatay
+şıkları PDF üzerinden hâlâ incelenecek. Bu karar sınav muafiyeti iddiası
+olarak kullanılmaz. ÖSYM 2026-YKS sıkça sorulan sorularının 68. maddesinde
+görsel soruların yalnız okuyucu yardımı talep eden görme engelli adaylara
+sorulmadığı belirtilir; kapsam kararımız bu koşuldan daha geniş bir ürün
+tercihidir. Resmî metnin MEB kopyası:
+https://shgal.meb.k12.tr/meb_iys_dosyalar/58/01/965140/dosyalar/2026_03/69aa85bacc372219364007_2026_YKS_SIK%C3%87A_SORULAN_SORULAR.pdf?CHK=9e05ae56367f90deebc7de49a006b18c
+
+### 7 Kasım 2026: Graf kaynaklı soru sayısının kapsam denetimi
+
+Önceki `autonomous-graph-qlora-research-v9` manifestindeki 180 soru grubu,
+grafın tüm 10–12. sınıf ve özet kaynaklarındaki mekanik adaylarıydı; seçilen
+altı 12. sınıf bölümünde 180 kaliteli soru bulunduğu anlamına gelmiyordu.
+Bu sayı bir üretim veya kalite başarısı olarak kullanılmayacak. Eski tarih–olay
+çıkarıcısı aynı cümledeki başka olayın yılını veya fiilini yanlış olaya
+bağlayabiliyordu: Sykes–Picot Antlaşması için 1918 yılı ve Bükreş Antlaşması
+için “sona erdi” fiili somut karşı örneklerdi.
+
+Çıkarıcı artık yalnız doğrudan bitişik tarih–olay kalıplarını ilişki adayı
+yapıyor; cümleyi 520 karakterde keserek yarım alıntı üretmiyor. Graf kaynaklı
+QLoRA dışa aktarımı hedef kapsam manifestindeki MEB checksum'ı ve altı sayfa
+aralığıyla sınırlandırılabiliyor. Private
+`autonomous-graph-target-scope-audit-v2.json`, aynı corpus'a bağlı yeni
+`autonomous-research-graph-v12.json` üzerinde 71 taslak, 13 mekanik geçiş,
+58 mekanik ret kaydediyor. Bu 13 kayıt yalnız öğretmen/tarih inceleme
+kuyruğudur; bazı şıklar hâlâ yapay ve tarihsel uygunlukları doğrulanmadı.
+İlk ajan inceleme kartında şıklar eksikti; v2 kartı A–E şıklarını ve PDF
+koordinatlarını da içeriyor. Bağımsız tarih öğretmeni ajanı 13 PDF kesitini
+ve tüm şıkları kör biçimde yeniden inceledi: 12 taslakta kaynağın desteklediği
+tek şık var, fakat 5 tarih sorusunun sayısal çeldiricileri zayıf; 8 taslakta
+parçalı/karışık türde şık veya OCR/dil kusuru var. Beşi yeniden şıklandırma
+ve insan öğretmen incelemesine bırakıldı, yedisi yeniden yazılmalı, biriyse
+kaynak-fakt denetimine takıldı. Private
+`autonomous-graph-target-scope-history-teacher-audit-v2.json` ajan kararıdır;
+insan öğretmen onayı değildir.
+**Üretime hazır soru sayısı 0; bu graf taslaklarından QLoRA başlatılmadı.**
+Sonraki veri üretimi, altı hedef bölümdeki gerçek soruların PDF transkripsiyonu,
+şık doğruluğu ve kaynak ilişkisi denetiminden ilerlemeli; otomatik graf
+sayısını 120'ye tamamlamak kalite ölçütü olamaz.
+
+Koçluk grubu denetiminde eski transkripsiyonlar, aynı PDF'nin yeni temiz
+aday havuzunda bulunmayan soru kimliklerini artık geri getiremiyor. Private
+`teacher-coaching-group-quality-audit-v8.json` altı aşamanın yanıtlarını da
+inceleme kartına ekliyor. 109 grupta 85 mekanik ret ve 24 semantik inceleme
+gereği sürüyor; eğitim için otomatik uygun görülen grup yok. Bağımsız tarih
+öğretmeni ajanı 24 grubun tümünü altı aşamalı koçluk ve kaynak uygunluğu
+açısından kör inceledi: altı aşama 24/24 mevcut, fakat 17 grupta genel şablon
+dili, 9 grupta OCR/transkripsiyon riski ve kaynak kapsamasında önemli boşluklar
+buldu. **Eğitime veya çalışma zamanına açılan grup 0.** Private
+`teacher-coaching-group-history-teacher-audit-v8.json` ajan ön incelemesidir;
+V8 kartlarında PDF kırpım koordinatı bulunmadığı için doğrudan PDF kesiti
+onayı değildir. Cevap anahtarı veya çözüm kullanılmadı.
+
+Deneme soru keşfinde ayrıca bölüm kimlikleriyle anahtar sözcükler ters
+eşleşmişti: `2.4` Doğu/Güney, `2.5` Batı Cephesi olmalıydı. `3.2` siyasi
+inkılaplar yerine dış politika sözcükleriyle aranıyordu. Resmî kapsam
+başlıklarına göre düzeltildi; genel `Osmanlı`, `meclis`, `eğitim` sözcükleri
+aday işaretlemek için kaldırıldı. Sonraki denetimde sözcük sınırı ve yalnız
+soru kökü üzerinden eşleşme eklendi: `II. Dünya Savaşı` artık `I. Dünya
+Savaşı` diye işaretlenmiyor, şıklardaki çeldirici konu adları bölüm önerisini
+etkilemiyor. Şemaya gönderme yapan ek soru kapsam dışına alındı. Private
+`ayt-deneme-history-candidates-v12.json` sonucunda 150 olası Tarih-1 kaydı
+**120 metin adayı, 27 PDF düzen incelemesi ve 3 görsel kapsam dışı** olarak
+ayrıldı. 120 metin adayından 15'i sözcüksel bölüm önerisi taşıyor; bu sayı
+doğrulanmış bölüm etiketi veya üretime hazır soru sayısı değildir.
+
+### 7 Kasım 2026: Koçluk kayıtlarında PDF kaynak izi kapısı
+
+Önceki 24 anlamsal inceleme adayının PDF kesitiyle doğrulanabilirliği ayrıca
+denetlendi. `audit_teacher_coaching_groups.py` artık soru ve kaynak parçasının
+checksum, sayfa ve koordinatlarını özel inceleme kartına koyuyor; gerçek soru
+PDF'si yerelde bulunmuyorsa veya soru kesit koordinatı yoksa grubu reddediyor.
+Soru kutusuna gömülü görsel de metin kökünde açık gönderme olmasa bile kapsam
+dışı sayılıyor. Aynı 109 grupta yeni özel
+`teacher-coaching-group-quality-audit-v9.json` sonucu **102 ret, 7 PDF'li
+anlamsal inceleme adayı, 0 eğitim onayı** oldu. 29 grupta soru PDF'si elde
+yok veya eski soru kimliği mevcut PDF'yle eşleşmiyor; 38 grupta soru kesiti
+koordinatı eksik. Sayılar örtüşebilir. Bu kontrol, 120 üretim sorusuna
+ulaşıldığı iddiasını desteklemez. Yedi aday PDF kesiti ve altı koçluk turuyla
+bağımsız tarih öğretmeni ajanına yeniden verildi. Ajan 7 soru ve 8 kanıt PDF
+kesitini görsel olarak karşılaştırdı: 4 revizyon, 3 ret, 0 eğitim onayı.
+`teacher-coaching-group-history-teacher-audit-v9.json` yalnız ajan kararlarını
+taşır. Bir kayıt aynı PDF soru kesitinin ikinci soru kimliğiyle tekrarıydı;
+ayrıca iki grup seçilen altı bölüm dışındaydı. Kaynak kapsaması özellikle
+birleşik ve olumsuz köklü sorularda seçenekleri ayırmaya yetmedi.
+Soru checksum+sayfa+bbox tekrarını otomatik reddeden yeni kapıyla
+`teacher-coaching-group-quality-audit-v10.json` sonucu **103 ret, 6 anlamsal
+inceleme adayı, 0 eğitim onayı** oldu. Ajanın V9 kararı bu altı aday için de
+onay vermiyor. Çözüm anahtarı ve çözüm metni kullanılmadı.
+
+### 8 Kasım 2026: Üç olaylı soruda kanıt demeti onarımı
+
+AYT tarama testinin Çanakkale, Kut’ül-Amâre ve Medine sonuçlarını karşılaştıran
+tek sorusunda önce yalnız Çanakkale alıntısı bağlıydı. Kaynak checksum'ı,
+sayfası ve koordinatıyla üç ayrı MEB atomu seçildi; soru ve üç kaynak PDF
+kesiti görsel olarak kontrol edildi. Çanakkale kesiti zaferi, Kut kesiti
+İngiliz kuvvetlerini yenmeyi, Medine kesiti ise savunma sonrası teslimi açıkça
+belirtiyor. Ajanın dosyaya yazdığı altı tur taslağı, alıntıların corpus'ta
+birebir bulunması için yeniden denetlendi; OCR satır bölünmesine denk gelen
+tek alıntı daha kısa birebir alıntıyla değiştirildi. Private
+`q5-coaching-revision-candidate-v1.json` altı tur ve üç kaynak kimliğini taşır;
+denetimde mekanik ret yok, sözcük örtüşmesi uyarısı var. Ajanın son turu
+kullanım sınırına takıldığından ve kaynak onayı hâlâ açıkça `false` olduğundan
+**eğitim/runtime onayı verilmedi**.
+
+İlk iki koçluk turu tarihsel iddia içermeden soru kökünü anlamaya ve öğrencinin
+hatırladığını ortaya çıkarmaya yöneliyor. Veri sözleşmesi artık bu iki turda
+boş kaynak listesine izin veriyor; kanıtla bağ kurma ve sonraki dört turda bir
+veya iki birebir kaynak alıntısını zorunlu tutuyor. Bu, ilk ipucunda kanıt
+metninin cevabı gereksiz yere ifşa etmesini azaltmayı amaçlayan tasarım
+değişikliğidir; öğrenme etkisi veya cevap ifşası için insan değerlendirmesi
+henüz yapılmadı.
+
+### 8 Kasım 2026: Graf soru üreticisinde cevap sızıntısı ve şık denetimi
+
+Hedef altı bölümün V2 denetimindeki 71 taslağın 13'ü yalnız mekanik kontrolden
+geçmişti; tarih öğretmeni ajanının PDF ve şık incelemesinde bunların hiçbiri
+üretime uygun bulunmadı. Üretici, desteklemediği ilişki türlerinde doğru hedef
+düğümü soru köküne yazan genel bir şablon kullanıyordu. Tarih şıklarını da
+gerçek kaynak yıllarından değil, doğru yıla sabit sayılar ekleyerek üretiyordu.
+Genel şablon kaldırıldı; mekanik kapı doğru cevabın kökte geçmesini, tekrar
+eden şıkları ve bozuk şık uçlarını reddediyor. Tarih çeldiricileri yalnız aynı
+hedef sayfa bölümündeki açık olay–yıl ilişkilerinden seçiliyor; yeterli dört
+alternatif yoksa beş şıklı soru üretilmiyor. Başka ilişki türlerinden veya
+inceleme dışı yıl kenarlarından şık havuzu doldurulmuyor.
+Tarih çeldiricilerinde ayrıca aynı olay fiili (örneğin imzalanma) aranıyor.
+Doğru hedef, görünür kökte bulunmasa bile `question_terms` üzerinden aramaya
+taşınıyordu; bu örtülü cevap sızıntısı kaldırıldı. Kalite kapısı doğru hedefi
+artık yalnız özel taslaktaki cevap konumundan denetliyor.
+
+Aktör sorularında çekimlenmiş fiile “eylemini gerçekleştiren taraf” eklenmesi
+de doğal olmayan kök üretiyordu; bu kalıp ayrıca reddediliyor. Private
+`autonomous-graph-target-scope-audit-v3.json` aynı graf ve kapsamda
+18 aday, **0 mekanik geçiş, 18 mekanik ret, 0 üretim onayı** kaydetti. Beş
+yıllık olay–yıl seçeneği
+oluşturacak sayıda ayrı kaynaklı yıl, bu altı bölümdeki mevcut yüksek güvenli
+çıkarımda yok. Bu sonuç, graf tersine üretimin tek başına 120 nitelikli soru
+sağlamadığını gösteriyor. İzlenecek yol gerçek metin sorularının PDF kesitli
+transkripsiyonunu ve çoklu MEB kanıtını denetleyerek soru gruplarını artırmak;
+graf üretimini yalnız ayrıca incelenen taslak kaynağı olarak tutmak. Kaggle
+QLoRA için veri kapısı kapalıdır.
+
+### 8 Kasım 2026: Deneme sorularında tam kitap bölüm önceliklendirmesi
+
+AYT tüm dersler deneme PDF'sinden çıkarılan 120 metin sorusunun yalnız 15'inde
+eski sözcüksel hedef bölüm önerisi vardı; 105 soru bölüm etiketi olmadan
+bekliyordu. `triage_ayt_deneme_sections.py` soru kökünü, aynı checksum'a bağlı
+12. sınıf MEB kitabının 32 bölümündeki 1.620 temiz atom/bağlam adayıyla
+BM25 üzerinden karşılaştırıyor. Hedef altı bölüm, kitabın diğer bölümleriyle
+birlikte yarışıyor; bütün sorular zorla hedefe atanmaz. Her öneri puanı,
+belge kimliği ve PDF sayfasıyla özel inceleme raporunda tutuluyor. Şıklar,
+cevap anahtarı ve çözüm sorguya girmez. Görsel sorular reddedilir; rapor soru
+metnini, cevabı veya kaynak alıntısını kopyalamaz.
+
+Private `ayt-deneme-full-book-section-triage-v1.json` 120 soru için bölüm
+önerisi üretti; 40 soruda ilk bölüm, 73 soruda ilk üç bölüm içinde hedef altı
+bölümden biri var. Bu **73 uygun soru** anlamına gelmez: ilk 20 sorunun gözle
+denetiminde Hz. Ömer ve Büyük Selçuklu gibi açık kapsam dışı sorular da hedef
+önerisi aldı. Önceden tarih öğretmeni ajanıyla etiketlenmiş 12 farklı resmî
+AYT sorusunda aynı yöntem ilk bölümde 8/12, ilk üçte 9/12 eşleşti. Bu küçük
+ve yalnız hedef-pozitif kontrol, özgüllüğü veya üretim başarısını kanıtlamaz.
+Rapor yalnız PDF kesitiyle bölüm incelemesinin sırasını belirler; QLoRA ve
+öğrenci RAG kapıları kapalıdır.
+
+Graf öğretmen aday denetimi de sertleştirildi: doğrudan veya çoklu-hop ilişki
+önerisi için kenarın kaynak kimliği, checksum, sayfa ve koordinatı bulunmalı;
+birebir kaynak alıntısı her iki uç düğüm etiketini de taşımalı. Önceki
+`validate_generated_draft` yalnız uçlardan biri alıntıda geçse dahi `direct`
+aday sonucu verebiliyordu. Bu onarım gerçek tarihsel doğrulamanın yerine
+geçmez; yanlış ilişki etiketli fakat iki terimi aynı cümlede taşıyan kayıt
+hâlâ PDF/öğretmen incelemesi gerektirir.
+
+### 8 Kasım 2026: Birleşik şık kutularının kaynak koordinatı onarımı
+
+Deneme PDF'sindeki 27 çoktan seçmeli soru, A–E şıklarını doğru ayırmış olsa
+da aynı satırdaki şıklara tek ortak PDF kutusu vermişti. `extract_ayt_deneme_history_candidates.py`
+artık PDF sözcük koordinatlarında her şık etiketini ve ona ait sözcükleri
+buluyor; beş şıkkın tamamının metni çıkarılan şıkla birebir eşleşmeden
+geometri onarımını kabul etmiyor. Şüpheli durumda soru inceleme kuyruğunda
+kalıyor. Private `ayt-deneme-history-candidates-v13.json` sonucu **147 metin
+adayı, 27 doğrulanmış şık-kutusu onarımı, 0 düzen kuyruğu, 3 görsel kapsam dışı**.
+Onarılan 27 sorunun beşer kutusu benzersiz ve soru kutusu içinde; bu yalnız
+transkripsiyon altyapısı denetimidir, soru çözümü veya konu onayı değildir.
+
+V13 için tam-kitap önceliklendirmesi `ayt-deneme-full-book-section-triage-v2.json`
+dosyasında 147 sorudan 94'ünü ilk üçte hedef bölüm adayı olarak gösterdi.
+Bağımsız tarih öğretmeni ajanı önceki V12'nin ilk-sırada-hedef görünen 40
+sorusunun PDF kesitini ayrıca inceledi: **17 gerçekten hedef kapsamda, 23
+kapsam dışında**. Kapsam içindeki 17 sorunun 13'ünde BM25 ilk sıradaki bölüm
+etiketi doğruydu. Bu örneklemde ilk-sırada-hedef filtresinin kesinliği 17/40;
+bu yüzden 94 sayısı onaylı soru havuzu olarak kullanılmaz. Ajan iki parser
+bölütleme uyarısı ve bir tarihsel iddia denetimi işaretledi; cevap anahtarı
+ve çözüm açmadı. Kaynak izli 17 soru özel
+`ayt-deneme-reviewed-scope-pool-v1.json` havuzuna taşındı ve 12. sınıf MEB
+atom/bağlam indeksinde öneri üretildi. `ayt-deneme-reviewed-scope-evidence-queue-v1.json`
+çıktısında doğru bölüm ilk 3 kanıt önerisi içinde 15/17, ilk 12 içinde 16/17;
+bu yalnız **bölüm erişimi**, çözüm için yeterli/doğru kanıt ölçüsü değil.
+PDF kesitiyle kanıt ve altı koçluk turu incelemesi tamamlanana kadar QLoRA
+ve öğrenci RAG kapıları kapalıdır.
+
+Onarılmış 27 sorunun ikinci bağımsız PDF/şık denetiminde tamamının sözcük
+kutuları doğru bulundu; 6 soru hedef bölümde, 21'i kapsam dışı. İlk 40 ile
+birlikte **67 incelenmiş soruda 23 hedef bölüm adayı** oluştu. İki ajan
+incelemesi kaynak checksum'ı ve soru/şık kutuları doğrulanarak private
+`ayt-deneme-reviewed-scope-pool-v2.json` içinde birleştirildi. Bu 23 soru için
+atom/bağlam önerisi `ayt-deneme-reviewed-scope-evidence-queue-v2.json` dosyasına
+üretildi; doğru bölüm ilk üç öneride 21/23, ilk 12'de 22/23. Bunlar hâlâ
+**kanıt yeterliliği veya tarihsel doğruluk oranı değildir**. Kalan 80 deneme
+sorusu da PDF üzerinden bağımsız incelendi: 6 hedef bölümde, 74 kapsam dışı;
+iki basılı kaynak anomalisi işaretlendi. Böylece 147 metin sorusunun tamamı
+inceleme kapsamına girdi ve **29 hedef bölüm adayı** çıktı. Üç PDF inceleme
+dosyası kaynak kimliği, soru kutusu ve şık/parça koordinatları doğrulanarak
+private `ayt-deneme-reviewed-scope-pool-v3.json` içinde birleştirildi.
+`ayt-deneme-reviewed-scope-evidence-queue-v3.json` 29 soru için MEB kanıt
+adaylarını içeriyor: öğretmen bölüm etiketi ilk öneride 20/29, ilk üçte 25/29,
+ilk on ikide 28/29. Bu bölüm eşleşmesi, şıkları çözmeye yetecek kaynak
+bulunduğunu göstermez. 120 kaliteli grup hedefi için deneme PDF'si tek başına
+yeterli değildir; diğer soru kaynakları ve kanıt incelemesi devam etmelidir.
+
+Şık eleme sınıfındaki önceki kaynak kontrolü de kaynak alıntısı içindeki
+herhangi bir sözcüğün soru köküyle, herhangi bir sözcüğün şıkla örtüşmesini
+"destek" sayabiliyordu. Yeni kontrol, sorunun köküyle bir kenar ucunun,
+şıkta kökten farklı olan sözcükle diğer kenar ucunun eşleşmesini ve aynı
+alıntının iki ucu birebir taşımasını zorunlu tutuyor. Kaynakta adı geçen ama
+o sorudaki ilişkiye bağlanmayan şık artık bu basit örtüşmeyle elenmiyor.
+Bu da otomatik tam çözüm doğruluğu kanıtı değil; gerçek soru testinde yanlış
+eleme ve çekimserlik ayrıca ölçülecek.
+
+### 8 Kasım 2026: Deneme kanıtının PDF kesiti ve kapsam denetimi
+
+Bağımsız tarih öğretmeni ajanı 29 hedef bölüm adayı için MEB PDF'sindeki
+348 ilk-12 öneri izini inceledi. Özel
+`ayt-deneme-evidence-teacher-review-v1.json` dağılımı **17 doğrudan,
+8 sınırlı çıkarım, 3 yetersiz ve 1 kaynakla çelişkili**. Son kararların
+hiçbiri üretim veya QLoRA onayı değildir; cevap anahtarı ve çözüm açılmadı.
+1921 Ankara Antlaşması'nın Hatay'ı Türkiye'ye bıraktığı önermesini taşıyan
+`d11:p300:q32` sorusu MEB sayfa 93 ile çeliştiğinden eğitim adayı olamaz.
+
+`audit_deneme_evidence_review.py`, öğretmen etiketlerinin soru havuzuna ve
+şifre özetiyle sabitlenmiş iki PDF'ye bağlılığını, her kanıtın sayfa/kesitini,
+alıntının kesitte kesintisiz bulunmasını ve hedef bölümün sayfa aralığını
+ayrı denetler. 29 soruda **4 alıntı kesiti** sütunlar arası PDF metni
+karıştığı için kesintisiz alıntı üretmedi. **10 sorunun** en az bir kanıtı
+atanan bölüm sayfaları dışında; bunların bir kısmı ilgili komşu bölümde,
+bir kısmı farklı ünitede. Ayrıca 4 kısa alıntı için iddiayı taşıyıp
+taşımadığı ayrı kontrol gerektiriyor. Bu sayılar birbirine eklenerek
+"uygun soru" hesaplanamaz; uyarılar aynı soruda çakışabilir.
+
+Kaynak kitap PDF sayfa 113 hâlâ `3.2.5. 1924 Anayasası` başlığını taşıyor;
+mevcut bölüm indeksi ve kapsam manifesti `3.2` bölümünü sayfa 112'de
+bitiriyordu. Bu bir **belge yapısı çıkarım hatasıydı**: 12. sınıf kitabındaki
+basılı sayfa ile fiziksel PDF sayfası arasında +1 fark var. İçindekiler
+başlıklarını PDF'deki en az üç bağımsız bölüm başlığıyla eşleştiren kalibrasyon
+eklendi. Yeniden üretilmiş private `multi-history-rag-recalibrated-with-summary-v5.json`
+ve `ayt-target-scope-manifest-v3.json` artık `3.2` için PDF sayfa 110–113'ü
+kapsıyor. 29 sorunun aynı metin/kesitlerini koruyan havuz v4 ve kaynak öneri
+kuyruğu v4 yeni corpus checksum'ına bağlandı. Öğretmen bölümü ilk 1/3/12
+öneri içinde eski indekste 20/25/28, yeni indekste 21/27/29 soruda göründü;
+bu **bölüm erişimi**, kanıt yeterliliği veya tarihsel doğruluk değildir.
+Denetimde bölüm dışı kaynak kullanan soru sayısı 10'dan 9'a indi. Sayfa
+148 ve 154 farklı bölümler olduğundan mevcut altı bölüm kapsamına sessizce
+katılmadı. Eski corpus checksum'ına bağlı graf, onay ve önbellek yeni sürüme
+aktarılmış kabul edilemez; tekrar üretilip gözden geçirilmeleri gerekir.
+Araştırma grafı yeni corpus ile v13 olarak tekrar üretildi: 2475 kaynak
+atomu, 5378 düğüm ve 5044 kenar; kaynak checksum'ı yeni sürüme uyuyor.
+Üreticideki ikinci onarım, actor/cause/result kenarlarında yalnız aynı PDF
+cümlesindeki açık bağlaç ve virgül yapısından kısa konuşma uçları çıkarmaya,
+tarih kenarlarında ise açık olay adını hedef yılın yakınında aramaya başladı.
+Altı hedef bölümde üretilen 40 adayın **12'si mekanik kalite kapısını geçti**
+(9 tarih–olay, 3 aktör–olay); 28 adayda genel, uzun veya kesik uç sorunları
+kaldı. Gerçek kaynak alıntısı dışında metin veya sentetik yıl eklenmedi.
+Bu 12 kayıt yalnız öğretmen PDF kesiti ve tarihsel anlam inceleme kuyruğuna
+adaydır; üretim ve QLoRA kapıları kapalıdır. Üretici testleri 15/15 geçti.
+
+Yeni denetim otomatik tarihsel doğruluk kararı vermez. Kesit uyarısı olmayan
+15 doğrudan/sınırlı-çıkarım etiketi bile nihai öğretmen onayı ve şık düzeyi
+kanıt denetimi olmadan eğitim verisi sayılmayacak. 120 üretim-hazır soru,
+altı koçluk turu ve kapalı test henüz tamamlanmadı; bu nedenle QLoRA
+eğitimi başlatılmadı.
+
+| 2026-11 | Concept-based QLoRA readiness onarımı ve pilot koçluk denetimi | Exporter/readiness rastgele grup sıralaması yerine transitif kavram bileşeni bölmesini kullanıyor; kavram anahtarları sunucuda yalnız onaylı soru grafındaki ilişki uçlarından türetiliyor ve server-attested provenance alanıyla doğrulanıyor. Kanıt parçası kimlikleri provenance olarak kalıyor; geniş chunk kavram kabul edilmiyor. Bağımsız tarih öğretmeni ajanı pilot v7 içinden 34 benzersiz grup/204 tekil turu inceledi | 12 doğrudan, 18 sınırlı çıkarım ve 4 yetersiz kanıt kararı çıktı; buna rağmen 34 grubun hiçbiri alıntı provenance, hedef ünite ve görsel bağımsızlık koşullarının tümünü birlikte geçmedi. Ajan incelemesi insan öğretmen onayı değildir; cevap anahtarı ve çözüm açılmadı | Son kodla tam API testleri 621/621 geçti; concept/readiness/route hedef testleri 14/14 geçti. 120 onaylı grup/720 tur yok; üç bölüme sızıntısız ayrılamayan kümelerde readiness kapalı. Kaggle/runtime/QLoRA kapalı. Private inceleme özeti `teacher-coaching-34-groups-independent-review-v1.json` |
+
+| 2026-11 | v7 araştırma pilotunun kalan grupları | 80 benzersiz grubun önceki denetimde olmayan 46 grubu aynı cevap anahtarsız tarih öğretmeni ajanı rubriğiyle incelendi; train 33/dev 13, tümünde altı aşama var | 16 direct, 24 bounded inference, 6 insufficient; buna rağmen 0 kabul. 46/46 görsel bağımsızlık kararı eksik, 46/46 pilot JSONL satırında kaynak provenance pointer yok, 36/46 hedef altı ünite doğrulanmamış, 35 şablon tekrarı, 25 OCR/kesit sorunu, 33 erken turda uzun kanıt dökümü riski | Önceki 34 ile v7'nin 80/80 grubu denetlendi. Cevap anahtarı/çözüm yok; Kaggle/runtime/QLoRA kapalı. Private `teacher-coaching-v7-remaining-independent-review-v1.json` |
+| 2026-11 | Graf soru üretiminde anlamsal tekrar kontrolü | Soru üreticisi aynı ilişki konusu ve aynı yanıtı farklı kaynak kenarlarından tekrar oluşturduğunda fingerprint ile tekilleştiriyor; kapsamlı v13 graf üretimi yeniden çalıştırıldı | Aynı antlaşma/yıl sorusunun farklı kitap veya sayfalardan birden fazla grup olması eğitimde sahte çeşitlilik ve train-test sızıntısı yaratabilirdi | 39 adayda 7 tekrar atıldı, 13 benzersiz mekanik/source-pass aday kaldı; 107/120 açık var. Eğitim satırı ve Kaggle paketi yazılmadı. Özet private `ayt-graph-candidate-production-run-v2.json` |
+| 2026-11 | Dört Dörtlük AYT Tarih özel aday havuzu ve çıkarıcı regresyonu | Yalnız izin listeli dört test sayfa aralığından 163 soru/kırpım inceleme paketi çıkarıldı; vektör tablo ve aynı satırdaki ayrı soru-numara blokları için ortak soru çıkarıcısı düzeltildi | İlk crop kontrolünde sonraki soru kökü önceki soruya karışıyor, vektör çizimli tablo ise resim olmadığı için kapsam filtresini geçiyordu. Watermark false positive'i de görüldü; vektör tablo için aynı sütunda örtüşen çizim grubu koşulu eklendi | Ajan incelemesi 163/163 transkripsiyonu exact buldu; 135 kapsam adayı, 23 kapsam dışı, 5 belirsiz. Yedi adayın çıkarım uyarısı nedeniyle yalnız 128 temiz soru retrieval'a geçti. Cevap/çözüm sayfaları okunmadı; yerel/private kaldı, Kaggle/runtime/QLoRA kapalı. `dort-dortluk-target-candidates-v1.json` |
+| 2026-11 | Dört Dörtlük soruları için dört kaynaklı MEB BM25 keşif tabanı | 128 temiz soru, cevap anahtarına bakmadan 10./11./12. sınıf MEB kitapları ve AYT konu özetine sorgulandı; gerçek bölüm başlığına bağlı dar konu havuzu eklendi | Eski başlık filtresi genel “Osmanlı Devleti” ile alakasız 11. sınıf bölümlerini hedef alt bölüme karıştırıyordu. Başlıklar gerçek 12. sınıf ve özet bölüm isimlerine göre düzeltildi | 768 önerinin 343'ü hedef alt bölümde, 425'i başka bölümden. Kök-terim kapsamı 66/768; otomatik kabul eşiği değil. PDF checksum/koordinat/metin kontrolü 767 kartta geçti; bir görsel kırpım incelemesi bekliyor. p50/p95 retrieval 4,25/7,85 ms. Bağımsız agent incelemesi başladı; onaylı soru/kanıt/eğitim örneği yok. `dort-dortluk-meb-evidence-proposals-v1.json` |
+| 2026-11 | Kör kanıt denetimi ve tarihsel bölüm alias'ı | İki agent 128×6=768 v1 kartı ve 128 demeti cevap anahtarı/çözüm olmadan inceledi. Kartlar: 11 direct, 252 partial, 505 irrelevant; düzeltme sonrası demetler: 11 direct, 1 bounded inference, 94 insufficient, 22 wrong; tutarlılık kapısı geçti | p229:q2 Anzak sorusunun doğrudan cevabı 11. sınıf kitabında var, ancak “1908–1918...” bölüm başlığı hedef kapsamla eşleşmiyordu. Kaynak özel alias eklendi; v2 top-6'da s.292 kanıtı çıktı ve agent spot-check bunu direct doğruladı | Alias 15 soruyu etkiledi; yeni top-6'ların 90 kesiti v2 kör incelemesine verildi. Tam v2 sonucu bekleniyor. İnsan onayı 0, Kaggle/runtime/QLoRA kapalı. `dort-dortluk-evidence-review-v1/validation-summary-v1-amended.json`, `dort-dortluk-meb-evidence-proposals-v2.json` |
+| 2026-11 | Şık bazlı RRF kanıt keşfi (v3, ajan denetimi tamamlandı) | BM25 soru bütünü + kök + her şıkkı ayrı arayıp RRF ile birleştiriyor; doğru seçenek varsayılmıyor. İki ajan 128×6 kartı ve demetleri cevap anahtarı/çözüm olmadan inceledi. | Kartlar 11 direct / 286 partial / 471 irrelevant; demetler 11 direct / 2 bounded inference / 86 insufficient / 29 wrong. v2'deki 15 destekli grup v3'te 13 oldu: 11 aynı, üç eski destek kayboldu, bir yeni bounded inference oluştu. Ajanlar daha önce aynı soru-kaynak çiftlerini gördüğü için bu bağımsız kapalı test değildir. | PDF/kırpım yapısı 768/768, demet tutarlılığı geçti. p50 13,97 ms, p95 25,89 ms, max 81,97 ms. V3 ürün yoluna alınmadı. Kaynak onaylı grup/QLoRA turu 0; Kaggle/runtime/QLoRA kapalı. `dort-dortluk-evidence-review-v3-claimwise/validation-summary-v3-claimwise.json` |
+| 2026-11 | Altı hedef ünite soru kapasitesi | Dört Dörtlük temiz havuzu 128 soruyu 1.3/2.1/2.4/2.5/3.1/3.2 bölümlerine 15/23/4/12/28/46 olarak eşledi. Önceki üç kaynakta 55 tekil aday vardı; tam metinle eşleşen 5 soru çift sayılmayacak. | Toplam ham aday sayısı 120'yi aşsa da 2.4 ünitesinde görünen 17 aday 20'şer denge hedefinin gerisinde; en az 3 ayrı aday gerekiyor. Bölüm eşlemesi ve kaynak uygunluğu hâlâ onaysız. | Aday kapasitesi, kabul edilmiş eğitim verisi değildir. 120 onaylı grup ve 720 koçluk turu yok; QLoRA kapısı kapalı. |
+| 2026-11 | Graf tabanlı 18 adayın bağımsız tarih öğretmeni ajanı incelemesi | Cevap etiketleri ve çözümler olmadan PDF/corpus provenance, soru dili, kanıt ilişkisi ve crop imkanı değerlendirildi | Kaynak alıntısının checksum/page ile izlenebilmesi tek başına pedagojik ve kanıtsal yeterlilik sağlamıyor; aynı olay farklı sayfalardan tekrarlanıyordu | 18 taslak, 13 benzersiz grup, 5 tekrar; kabul 0, koçluk seti 0. 2.1 yok. İnsan öğretmen onayı sayılmaz. Private `teacher-graph-18-dedup-coaching-review-v1.json` |
+| 2026-11 | PDF metin normalizasyonu ve konu dışı kanıt yuvası | Caption filtresi paragraf içi `(Görsel N)` atfını artık tüm blok için risk saymıyor; PDF satır-sonu soft hyphen + boşluk temizleniyor. Öğretmen öneri kuyruğu top-12’de 8 konu-içi / 4 konu-dışı adaya yer ayırıyor. | 12. sınıf kitabı s.78’deki Paris/San Remo paragrafı yeni checksum corpus v6’da clean aday oldu; q229:q4’te ilk 12’ye girdi. Sorudaki konferans karışıklığı olasılığı nedeniyle destek kabul edilmedi. 128×12=1.536 önerinin PDF koordinat/metin provenance denetimi geçti; 629 yeni crop imzası bağımsız incelemede | Corpus v5: 2.505 chunk / 5.007 atom; v6: 2.811 / 5.256. Candidate retrieval p50/p95 95,48/211,00 ms; kalite sonucu değildir. V6 delta incelemesi sürüyor; onaylı grup/koçluk örneği 0, Kaggle/QLoRA/runtime kapalı. `multi-history-rag-recalibrated-with-summary-v6.json`, `dort-dortluk-meb-evidence-proposals-v6-cross-section-quota.json`, `dort-dortluk-source-integrity-v6-cross-section-quota.json` |
+| 2026-11 | Önceki destekli AYT sorularının şık bazlı yeniden denetimi | 13 v3 adayının her A–E seçeneği, kökteki bileşik iddia ve en fazla üç parçalık kanıt demeti cevap anahtarı/çözüm olmadan yeniden karşılaştırıldı | Önceki 13 destekli demetten yalnız 8 direct + 2 bounded soruda seçenek tekilleşti; 3 soru insufficient, 0 wrong. Önceki “13 destekli” sayısı kanıtı tek şıkta ayırmıyordu | Seçilmiş altküme; tüm 128 soruya genellenmez. Bu sınıflandırma nihai v6 incelemesinin yerine geçmez. Onay/Kaggle/QLoRA kapalı. `independent-option-evidence-audit-b-v1.json` |
+| 2026-11 | V6 çapraz-bölüm kuyruğu, bağımsız ikinci tur ve kaynak-ID denetimi | Aynı 128 soru V4 (18 direct, 2 bounded) ve V6 ilk geçişi (35 direct, 3 bounded) karşılaştırıldı. İlk destekli 38 demet ikinci agent tarafından yeniden denetlendi | p229:q4 konferansları karıştırdığı için insufficient; p244:q7 nedensellik directten bounded’e. p261:q3/q6, p262:q8/q11 ve p267:q5 kaynak ilişkisi eksikliği yüzünden insufficient; p262:q12 ve p265:q3 bounded. p266:q8 yanlış seçenek/kaynak uyumsuzluğu olarak kaldı. Son ara dağılım 27 direct, 5 bounded, 95 insufficient, 1 wrong | Alıntı denetimi yedi eski chunk ID’yi aynı checksum/sayfada güncel corpus ID’lerine bağladı; p262:q11’de destek kararına rağmen alıntı yoktu ve kayıt insufficient oldu. Sonuç kör retrieval metriği değildir; ajan incelemesi öğretmen onayı değildir. Kabul edilmiş eğitim grubu 0, Kaggle/runtime/QLoRA kapalı. Private `adjudicated-summary-v2.json`, `option-citation-audit-v3.json`; birleştirme/denetim kodu testli. |
+
+| 2026-11 | V7 top-24 yeni kanıt kesitleri ve bağımsız kör tekrar | V6'da karara bağlanmamış 89 soru için top-24 aday havuzu, soru başına 12 yeni PDF kesiti (1.068 toplam) ile iki ajan tarafından görsel incelendi | İlk delta adjudication: 3 direct, 2 bounded, 84 insufficient; 5 destek adayı. Ayrı 10 soruluk pakette 120/120 kesit görsel denetlendi; önceki destekli beş adayın tamamı yeniden desteklendi (3 direct, 2 bounded), dört kontrol yetersiz kaldı. Bir ek Halkçılık bounded kararı, kaynak ikinci ilkeyi kanıtlamadığı için konservatif biçimde insufficient'a indirildi. Örneklem önceki destek adaylarıyla zenginleştirildiğinden 5/5 genel precision değildir | A/B raporları cevap anahtarı ve çözüm olmadan incelendi; bağımsız tekrar raporunda da bu veriler kapalı. Denetim 120 crop ID, checksum/sayfa, görsel dosya varlığı ve kapalı bayrakları doğruladı. V7 paket/özet testleri 16/16 ve bu tur yeniden çalıştırılan üç hedefli test 13/13 geçti; tam API suite 652/652 önceki turda geçmişti. Yeni script için Ruff, compileall, CLI audit ve `git diff --check` geçti. İnsan öğretmen onayı 0; öğrenci runtime, Kaggle ve QLoRA kapalı. Top-24 delta ile 89 sorunun 84'ünde yeterli yeni kanıt bulunmadı; soru/ünite kapsamı ve kaynak evreni tekrar eşlenmeden fine-tune yok. Private rapor `dort-dortluk-evidence-review-v7-independent-blind-audit/adjudicated-summary.json`; denetim `audit_dort_dortluk_v7_independent_review.py` |
+| 2026-11 | Delta incelemesinin yöntem denetimi ve birleşik top-24 pilotu | Önceki delta paketi yalnız yeni 12 adayı gösterdiği için eski kanıtlar tam demet içinde yeniden tartılmıyordu; 89 soru için eski+ yeni top-24 paket üretildi | İlk 9 soruda iki ajan 7/9 aynı karar verdi; p231:q2 direct/bounded etiketi ayrımı, p231:q5 ilk insufficient kararı rank 5'te duran Sofya ataşemiliterliği alıntısını kaçırdı. Daha ayrıntılı V8 ablation sonucu bir sonraki satırdadır | `--include-previous` ve test ile tam 24 kesit/paket doğrulandı. 89 soruluk ajan incelemesi tamamlandı; V7 yetersiz etiketleri kesin sonuç değil. Öğretmen onayı, runtime, Kaggle, QLoRA kapalı. Private pack `dort-dortluk-evidence-review-v8-combined-top24/` |
+| 2026-11 | V9 top-48 genişletme ve birleşik kanıt denetimi | V8'deki 56 insufficient grup için aynı V6 corpus üzerinde claimwise RRF top-48 üretildi. Top-24'te bulunmayan 24 crop/soru delta paketi (1.344 crop) tanı için saklandı; asıl inceleme 48'li birleşik pakette eski 24 + yeni 24 kesiti gösteriyor (2.688 crop, agent A 30, B 26). Ek olarak temiz transkripsiyon checksum'ıyla eşleşen 56 orijinal soru sayfası görseli pakete bağlandı. | İki ajan 56/56 soru sayfasını ve 2.688/2.688 crop'u görsel kontrol etti; tüm sorular text-only, okunamayan görsel yok. Provenance denetimi sonrası 5 direct / 51 insufficient / 0 bounded / 0 wrong; citation issue 0. 51 yetersiz kaydın 30'unda top-48 içinde en az bir kısmen ilgili aday, 21'inde ilgili aday yok olarak işaretlendi; bu tam corpus yokluğu demek değildir. p242:q7 ve p253:q6 tüm seçenekleri ayırt etmeyen eksik kanıt nedeniyle direct'ten insufficient'a indirildi. | Bu, aynı sorular için V6 corpus'ta üretilen top-48 demet denetimidir; tam kitap corpus recall/precision veya insan öğretmen onayı değildir. Cevap anahtarı/çözümler kullanılmadı; Kaggle/runtime/QLoRA kapalı. Çoklu eşleştirme sorusunda dört ilişkiyi üç benzersiz chunk destekledi; inceleme aracı bu nedenle yalnız tanısal alıntı sınırını 5'e çıkardı. Runtime ve QLoRA sınırları değişmedi. Private `dort-dortluk-evidence-review-v9-top48-combined/adjudicated-summary-v1.json`; hazırlayıcı ve audit Ruff'tan, hedef testler 15/15 geçti. |
+| 2026-11 | V10 seçenek-rezervi, atom katmanı boşluğu ve V11 birleşik retrieval deneyi | V9'da insufficient olan 51 soru için seçenek-rezervli top-48 slate üretildi; 178 yeni PDF kesiti iki bağımsız ajan tarafından cevap anahtarı/çözüm olmadan incelendi. Sonra yeni `partial` görünen 23 soru için eski-yeni ilgili kesitler tekrar birlikte denetlendi. | V10 delta: 23 partial, 27 irrelevant, 0 direct, 0 unreadable; p267:q6'da crop alıntısı indeks metninde yoktu, bu yüzden kaynak-metni hizalama kusuru olarak bloklandı. Birleşik seçilmiş altküme: 1 direct, 2 bounded, 20 insufficient; 56 crop ve 31 indeks-eşleşen alıntı validator’dan geçti. Bu örneklem partial vakalardan seçildiği için genel retrieval başarısı değildir. Kuyruğun `evidence_atoms` katmanını hiç taramadığı görülünce atom+bağlam V11 deneyi kuruldu; 51 soruda 902 yeni fiziksel kesit üretildi. | Aynı sütundaki, bitmemiş paragraf devamlarını güvenli biçimde birleştiren atom çıkarımı ve regresyon testi eklendi. V11 yalnız kör PDF inceleme kuyruğudur; runtime, Kaggle, QLoRA ve insan öğretmen onayı kapalı. |

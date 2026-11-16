@@ -50,6 +50,35 @@ def terms(value: str) -> list[str]:
     return [word for word in TOKENS.findall(fold(value)) if len(word) > 2 and word not in STOP]
 
 
+def _printed_page_offset(pdf, section_rows: list[dict]) -> int:
+    """Calibrate a textbook TOC against actual section headings in the PDF.
+
+    A MEB book may number its printed pages differently from physical PDF
+    pages. Require three independent, exact heading sightings with a strong
+    majority for one offset; an ambiguous book keeps its unshifted review
+    index rather than accepting a guessed page correction.
+    """
+    offsets: Counter[int] = Counter()
+    for section in section_rows:
+        if section["id"].startswith("summary."):
+            continue
+        needle = re.sub(r"[^a-zçğıöşü0-9]", "", fold(f"{section['id']}. {section['title']}"))
+        if len(needle) < 10:
+            continue
+        matches = []
+        for page_index in range(max(15, section["start"] - 4),
+                                min(pdf.page_count, section["start"] + 3)):
+            page_text = re.sub(r"[^a-zçğıöşü0-9]", "", fold(pdf[page_index].get_text()))
+            if needle in page_text:
+                matches.append(page_index + 1 - section["start"])
+        if len(matches) == 1:
+            offsets[matches[0]] += 1
+    if not offsets:
+        return 0
+    offset, count = offsets.most_common(1)[0]
+    return offset if count >= 3 and count / sum(offsets.values()) >= 0.75 else 0
+
+
 def _word_toc_sections(pdf) -> list[dict]:
     """Recover TOC rows whose title and page number are separate PDF blocks.
 
@@ -223,6 +252,11 @@ def sections(pdf) -> list[dict]:
     for item in result:
         unique.setdefault(item["id"], item)
     result = sorted(unique.values(), key=lambda item: item["start"])
+    if not summary_sections:
+        offset = _printed_page_offset(pdf, result)
+        for item in result:
+            item["start"] += offset
+        assessment_pages = [page + offset for page in assessment_pages]
     for index, item in enumerate(result):
         next_section = result[index + 1]["start"] - 1 if index + 1 < len(result) else pdf.page_count
         next_assessment = next((page - 1 for page in assessment_pages if page > item["start"]), None)
@@ -234,7 +268,11 @@ def sections(pdf) -> list[dict]:
 
 
 def _clean(value: str) -> str:
-    return re.sub(r"\s+", " ", value.replace("\xad", "").replace("\xa0", " ")).strip()
+    # PDF line wrapping commonly stores a soft hyphen immediately before the
+    # line break. Remove it and following whitespace to reconstruct the word.
+    value = value.replace("\xa0", " ")
+    value = re.sub(r"\xad\s*", "", value)
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _candidate(text: str, bbox: list[float], page_height: float) -> bool:
@@ -323,6 +361,31 @@ def _union_bbox(left: list[float], right: list[float]) -> list[float]:
             round(max(left[2], right[2]), 2), round(max(left[3], right[3]), 2)]
 
 
+def _is_terminal_lesson_sentence(text: str) -> bool:
+    return bool(re.search(r'[.!?…][”’"\')\]]*$', text.strip()))
+
+
+def _same_column_continuation(left: dict, right: dict) -> bool:
+    """Return true only for a visually adjacent unfinished prose continuation.
+
+    Tagged PDFs can divide one printed paragraph into two overlapping text
+    blocks.  A small negative y-gap is allowed because font boxes commonly
+    overlap by a few points.  A following bullet is deliberately excluded:
+    adjacent list items are separate claims, even if the first item happens
+    to have lost its final punctuation in extraction.
+    """
+    if _is_terminal_lesson_sentence(left["text"]):
+        return False
+    if re.match(r"^\s*[•·▪‣]", right["text"]):
+        return False
+    left_box, right_box = left["bbox"], right["bbox"]
+    horizontal_overlap = max(0.0, min(left_box[2], right_box[2]) - max(left_box[0], right_box[0]))
+    minimum_width = min(left_box[2] - left_box[0], right_box[2] - right_box[0])
+    same_column = abs(left_box[0] - right_box[0]) <= 24 and horizontal_overlap >= .75 * minimum_width
+    vertical_gap = right_box[1] - left_box[3]
+    return same_column and -3 <= vertical_gap <= 12
+
+
 def evidence_atoms(blocks: list[dict], *, checksum: str, page_number: int,
                    page_height: float, section: dict) -> tuple[list[dict], Counter]:
     """Create short, coordinate-backed evidence atoms from one PDF page.
@@ -333,13 +396,36 @@ def evidence_atoms(blocks: list[dict], *, checksum: str, page_number: int,
     """
     atoms, exclusions = [], Counter()
     previous_heading: dict | None = None
-    for item in sorted(blocks, key=lambda block: (block["bbox"][1], block["bbox"][0])):
+    ordered = sorted(blocks, key=lambda block: (block["bbox"][1], block["bbox"][0]))
+    consumed: set[int] = set()
+    for position, item in enumerate(ordered):
+        if position in consumed:
+            continue
         text, bbox, layout = item["text"], item["bbox"], item["layout"]
         if _heading(text, layout):
             previous_heading = item
             continue
         if not _atom_candidate(text, bbox, page_height):
             continue
+        source_segments = [{"bbox": bbox, "text": text}]
+        fact = item
+        next_position = position + 1
+        # Keep a paragraph continuation in one candidate only when geometry
+        # makes the join reversible and unambiguous.  This repairs cases such
+        # as a bullet ending in “1929 Dünya” followed by “Ekonomik Buhranı’nı”
+        # without joining neighbouring bullets or columns.
+        while next_position < len(ordered) and _same_column_continuation(fact, ordered[next_position]):
+            successor = ordered[next_position]
+            if _heading(successor["text"], successor["layout"]):
+                break
+            source_segments.append({"bbox": successor["bbox"], "text": successor["text"]})
+            fact = {**successor, "text": f"{fact['text']} {successor['text']}",
+                    "bbox": _union_bbox(fact["bbox"], successor["bbox"])}
+            consumed.add(next_position)
+            next_position += 1
+            if _is_terminal_lesson_sentence(fact["text"]):
+                break
+        text, bbox = fact["text"], fact["bbox"]
         heading = previous_heading
         same_column = heading and abs(heading["bbox"][0] - bbox[0]) <= 24
         vertically_adjacent = heading and 0 <= bbox[1] - heading["bbox"][3] <= 42
@@ -350,6 +436,8 @@ def evidence_atoms(blocks: list[dict], *, checksum: str, page_number: int,
             heading_text = heading["text"]
         else:
             atom_text, atom_bbox, method, heading_text = text, bbox, "standalone_fact", None
+        if len(source_segments) > 1:
+            method = f"{method}_continuation"
         layout_for_review = {**layout, "heading_attached": bool(heading_text)}
         pre_review = source_review_recommendation(atom_text, layout_for_review)
         if pre_review["decision"] == "do_not_use":
@@ -361,6 +449,7 @@ def evidence_atoms(blocks: list[dict], *, checksum: str, page_number: int,
             "section_id": section["id"], "section_title": section["title"],
             "page": page_number, "bbox": atom_bbox, "text": atom_text,
             "heading": heading_text, "extraction_method": method,
+            "source_segments": source_segments,
             "review_status": "candidate", "quality": chunk_quality(atom_text),
             "layout": layout_for_review, "pre_review": pre_review,
         })
@@ -382,6 +471,32 @@ _REVIEW_CAPTION = re.compile(
     r"\b(?:mezardan\s+çıkarılan|modeli?\s*\(yaklaşık))", re.IGNORECASE
 )
 
+_EXPLICIT_VISUAL_LABEL = re.compile(
+    r"^\s*(?:Görsel|Fotoğraf|Resim|Harita|Tablo|Şekil)\s+"
+    r"\d+(?:[.:]\d+)?(?:\s*[:–—-]\s*|\s+)\S", re.IGNORECASE
+)
+_CAPTION_DATE = re.compile(r"\byaklaşık\s+M[ÖS]\b", re.IGNORECASE)
+
+
+def is_visual_caption(text: str) -> bool:
+    """Return true for caption-like blocks without dropping prose that cites a figure.
+
+    MEB lesson paragraphs often end with references such as ``(Görsel 2.10)``.
+    A word-presence check incorrectly labels the entire paragraph as a caption.
+    Explicitly labelled blocks are captions; museum/object descriptions are
+    treated as captions only when they are short, caption-shaped fragments.
+    """
+    cleaned = _clean(text)
+    if _EXPLICIT_VISUAL_LABEL.match(cleaned):
+        return True
+    if not (_REVIEW_CAPTION.search(cleaned) or _CAPTION_DATE.search(cleaned)):
+        return False
+    words = terms(cleaned)
+    # Caption descriptions are compact fragments. A full explanatory lesson
+    # paragraph can mention a museum, object, or photograph without becoming
+    # visually dependent, so require a caption-sized block.
+    return len(words) <= 22
+
 
 def chunk_quality(text: str) -> dict:
     """Explainable PDF quality metadata. It is a review aid, never approval."""
@@ -390,7 +505,7 @@ def chunk_quality(text: str) -> dict:
     # legitimate suffixes and word starts create the same pattern.  Keep OCR
     # diagnosis for line-aware audits; do not penalize source eligibility here.
     ocr = False
-    caption = bool(_CAPTIONISH.search(text)) if "_CAPTIONISH" in globals() else False
+    caption = is_visual_caption(text)
     return {"text_quality": "review_required" if warnings or ocr or caption else "clean",
             "visual_or_caption_risk": caption or "gorsel_aciklama_olabilir" in warnings,
             "instruction_risk": "etkinlik_yonergesi_olabilir" in warnings,
@@ -402,7 +517,7 @@ def candidate_review_warnings(text: str) -> list[str]:
     warnings = []
     if _REVIEW_INSTRUCTION.search(text):
         warnings.append("etkinlik_yonergesi_olabilir")
-    if _REVIEW_CAPTION.search(text):
+    if is_visual_caption(text):
         warnings.append("gorsel_aciklama_olabilir")
     return warnings
 
@@ -622,9 +737,6 @@ if __name__ == "__main__":
 # Evidence proposal is intentionally separate from production retrieval. It ranks
 # unapproved PDF passages for a teacher to inspect; it never changes approval.
 _OCR_FRAGMENT = re.compile(r"\b\w{3,}\s+[a-zçğıöşü]{1,2}\w{2,}\b", re.IGNORECASE)
-_CAPTIONISH = re.compile(r"(?:museum|müzesi|görsel|fotoğraf|yaklaşık m[ös])", re.IGNORECASE)
-
-
 def _overlap(left: set[str], right: set[str]) -> float:
     return len(left & right) / max(1, len(left))
 
@@ -666,7 +778,7 @@ def recommend_evidence(index: dict, question: str, choices: list[str], topic: st
         title = _overlap(set(terms(topic or "")), title_terms)
         warnings = candidate_review_warnings(item["text"])
         ocr = bool(_OCR_FRAGMENT.search(item["text"]))
-        caption = bool(_CAPTIONISH.search(item["text"]))
+        caption = is_visual_caption(item["text"])
         quality_penalty = (0.12 if ocr else 0.0) + (0.20 if caption else 0.0) + (0.25 if warnings else 0.0)
         score = (0.34 * bm25 + 0.24 * entity + 0.15 * question_coverage +
                  0.05 * choice_coverage + 0.10 * title + 0.22 * verified_coverage)

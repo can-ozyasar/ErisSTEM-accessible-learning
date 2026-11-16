@@ -29,6 +29,18 @@ Plan cevap anahtarı, doğru şık veya öğrencinin kişisel verisini taşımaz
 4. Bir parça birden fazla iddiayı kapsıyorsa tek kartta bütün `claim_ids` saklanır. Böylece ilişki grafiğinde varsayım yerine açık kanıt kapsamı görülür.
 5. İnceleme kuyruğu için sabit üç kart sınırı yoktur. Varsayılan öğrenci demeti `primary + relation/context + isteğe bağlı contrast` ile en fazla üç karttır; gerçekten bağımsız üçüncü ilişki gerektiği insan incelemesiyle gösterilirse dört karta çıkar. QLoRA dışa aktarımında yine yalnız iki kısa alıntı kullanılır: önce `primary + relation`, ilişki yoksa `primary + context`.
 
+V9 top-48 tanısında soru grubu başına en fazla beş alıntı tutuldu; bu yalnız
+inceleme raporunun kanıt kapsamını ölçmek içindir. 56 text-only sorunun 5'i
+aday demetinde yeterli görüldü. Bir eşleştirme sorusunda dört ayrı ilişki
+gerekirken üç kaynak parçası yeterli oldu; bir parça iki ilişkiyi birlikte
+kanıtladı. Bu bulgu, runtime için üç kart varsayımını otomatik genişletmez.
+Yetersiz kalan 51 sorunun 30'unda top-48 içinde kısmen ilgili parça vardı,
+21'inde inceleyenler ilgili parça işaretlemedi. Bu, tüm kitaplarda kaynak
+yok demek değil; ilk grup için ilişki/şık kapsamı, ikinci grup için retrieval
+kapsamı ayrıca araştırılmalıdır.
+Soruya göre gerekli kanıt planı ve öğretmen doğrulaması olmadan öğrenci demeti
+veya QLoRA örnekleri büyütülmez.
+
 `contrast` ilk ipucuna veya QLoRA bağlamına girmez. Öğrenci kendi tercihini gösterdikten sonraki şık eleme aşamasında kullanılabilir.
 
 ## Kaynak ve insan denetimi

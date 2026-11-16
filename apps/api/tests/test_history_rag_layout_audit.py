@@ -51,6 +51,7 @@ def test_holdout_is_disjoint_and_deterministic():
 
 def test_holdout_evaluation_rejects_tampering_and_handles_no_labels():
     from copy import deepcopy
+
     from app.pipeline.history_rag_audit import create_sample
     from app.pipeline.history_rag_layout_audit import evaluate_holdout
     index = {'source_checksum': 'abc', 'chunks': [

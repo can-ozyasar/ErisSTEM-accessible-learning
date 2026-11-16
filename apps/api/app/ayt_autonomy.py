@@ -8,9 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import re
+import unicodedata
 from collections import defaultdict
 from enum import Enum
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -24,6 +25,7 @@ from .ayt_knowledge_graph import (
     RetrievalResult,
     WeightedGraphSearch,
 )
+from .question_scope import AccessibilityAndScopeFilter
 
 
 class StrictModel(BaseModel):
@@ -151,19 +153,24 @@ class ConceptSplit(StrictModel):
 
 
 _TOKEN_RE = re.compile(r"[0-9A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]+")
-_NEGATIVE_RE = re.compile(r"\b(değildir|değil|olamaz|söylenemez|ulaşılamaz|yanlıştır|hangisi.*?dışında)\b", re.I)
-_CHRONOLOGY_RE = re.compile(r"\b(önce|sonra|kronolojik|sıralama|ilk|son|ardından|öncelik)\b", re.I)
-_INFERENCE_RE = re.compile(r"\b(çıkarılabilir|ulaşılabilir|gösterir|neden|sonuç|amaç|beklenir|yorum)\b", re.I)
+_NEGATIVE_RE = re.compile(r"\b(değildir|değil|olamaz|söylenemez|ulaşılamaz|yanlıştır|hangisi.*?dışında)\b", re.IGNORECASE)
+_CHRONOLOGY_RE = re.compile(r"\b(önce|sonra|kronolojik|sıralama|ilk|son|ardından|öncelik)\b", re.IGNORECASE)
+_INFERENCE_RE = re.compile(r"\b(çıkarılabilir|ulaşılabilir|gösterir|neden|sonuç|amaç|beklenir|yorum)\b", re.IGNORECASE)
 
 _DRAFT_OCR_FRAGMENT_RE = re.compile(
     r"\b(?:istan|atlan|nort|tıriti|organizeyşın|dar|ön|pa)\s+"
     r"(?:bul|tik|lantik|besi|cülüğünde|rtisinin)\b",
-    re.I,
+    re.IGNORECASE,
 )
 _TRUNCATED_DATE_RELATION_RE = re.compile(r"\b\d{1,2}\s+[A-Za-zÇĞİÖŞÜçğıöşü]+\s+[12]\s+ile\s+\d{4}\b")
 _LINEBREAK_WORD_RE = re.compile(r"[A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû]{2,}-\s+[a-zçğıöşüâîû]")
-_GENERIC_ENDPOINT_START_RE = re.compile(r"^(?:bu|şu|o|ancak|ayrıca|ve|ile|da|de|bir|yüzyılda)\b", re.I)
-_INCOMPLETE_ENDPOINT_END_RE = re.compile(r"\b(?:ile|ve|için|arasında|tarafından|amacıyla|nedeniyle|sonucunda)$", re.I)
+_GENERIC_ENDPOINT_START_RE = re.compile(r"^(?:bu|şu|o|ancak|ayrıca|ve|ile|da|de|bir|yüzyılda)\b", re.IGNORECASE)
+_INCOMPLETE_ENDPOINT_END_RE = re.compile(r"\b(?:ile|ve|için|arasında|tarafından|amacıyla|nedeniyle|sonucunda)$", re.IGNORECASE)
+_EVENT_LABEL_RE = re.compile(
+    r"(?P<label>(?:[A-ZÇĞİÖŞÜI][A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû0-9’'().\-]+\s+){1,6}"
+    r"(?:Antlaşması|Savaşı|Savaşları|Cephesi|Kongresi|Harekâtı|Harekatı|Muharebesi|"
+    r"Anayasası|Genelgesi|Meclisi|İnkılabı|İlanı|Kaldırılması))\b"
+)
 
 
 class GeneratedDraftQualityGate:
@@ -176,7 +183,10 @@ class GeneratedDraftQualityGate:
     malformed five-choice items.
     """
 
-    _temporal = {RelationType.DONEMINDE_OLMUSTUR.value, RelationType.KRONOLOJIK_SONRASIDIR.value}
+    _temporal: ClassVar[set[str]] = {
+        RelationType.DONEMINDE_OLMUSTUR.value,
+        RelationType.KRONOLOJIK_SONRASIDIR.value,
+    }
 
     @staticmethod
     def _endpoint_issues(value: str, *, temporal_source: bool = False) -> list[str]:
@@ -207,26 +217,44 @@ class GeneratedDraftQualityGate:
                              and stem.endswith((" hangi yılda imzalanmıştır?", " hangi yılda kurulmuştur?",
                                                 " hangi yılda başlamıştır?", " hangi yılda sona ermiştir?",
                                                 " hangi yılda gerçekleşmiştir?")))
-        relation_template = stem.startswith("Kaynağa göre ") and stem.endswith(" arasındaki ilişki hangisidir?")
         natural_relation_template = {
             RelationType.SEBEBIDIR.value: stem.endswith(" durumunun nedenlerinden hangisidir?"),
             RelationType.SONUCUDUR.value: stem.endswith(" durumunun sonuçlarından hangisidir?"),
             RelationType.AMACIDIR.value: stem.endswith(" uygulamasının amacı aşağıdakilerden hangisidir?"),
             RelationType.AKTORUDUR.value: stem.endswith(" eylemini gerçekleştiren taraf hangisidir?"),
         }.get(draft.relation_type, False)
-        if not (temporal_template or relation_template or natural_relation_template):
+        if not (temporal_template or natural_relation_template):
             issues.append("unsupported_question_template")
         if len(stem) > 235:
             issues.append("spoken_stem_too_long")
+        if not AccessibilityAndScopeFilter().evaluate({
+            "stem": stem,
+            "choices": [choice.model_dump(mode="json") for choice in question.choices],
+        }).eligible:
+            issues.append("visual_question_out_of_scope")
         if _TRUNCATED_DATE_RELATION_RE.search(stem):
             issues.append("truncated_date_in_stem")
         if _DRAFT_OCR_FRAGMENT_RE.search(stem) or "[" in stem or "]" in stem:
             issues.append("ocr_artifact_in_stem")
+        if (draft.relation_type == RelationType.AKTORUDUR.value
+                and re.search(r"\b(?:kuruldu|atıldı|yapıldı|başlatıldı|imzalandı|"
+                              r"gerçekleşti|sona erdi) eylemini gerçekleştiren taraf hangisidir\?$",
+                              stem, re.IGNORECASE)):
+            issues.append("actor_stem_has_finite_verb")
         if len(question.choices) != 5 or {choice.label for choice in question.choices} != {"A", "B", "C", "D", "E"}:
             issues.append("invalid_choice_set")
         if not any(choice.label == draft.answer_label for choice in question.choices):
             issues.append("missing_private_answer_position")
-        endpoints = question.question_terms[:2]
+        answer = next((choice.text.strip() for choice in question.choices
+                       if choice.label == draft.answer_label), "")
+        if answer and answer.casefold() in stem.casefold():
+            issues.append("answer_leaked_in_stem")
+        if len({choice.text.strip().casefold() for choice in question.choices}) != len(question.choices):
+            issues.append("duplicate_choice_text")
+        for choice in question.choices:
+            if not re.fullmatch(r"\d{4}", choice.text.strip()):
+                issues.extend(self._endpoint_issues(choice.text))
+        endpoints = [question.question_terms[0], answer] if question.question_terms and answer else []
         if len(endpoints) != 2:
             issues.append("missing_relation_endpoints")
         else:
@@ -240,6 +268,8 @@ class GeneratedDraftQualityGate:
         quote = " ".join(draft.source_quote.split())
         if len(quote) < 24 or _DRAFT_OCR_FRAGMENT_RE.search(quote) or _LINEBREAK_WORD_RE.search(quote):
             issues.append("source_quote_quality_risk")
+        if quote.endswith((",", ";", ":")) or not quote.endswith((".", "!", "?", "”", "’")):
+            issues.append("source_quote_incomplete")
         return DraftQualityReview(question_id=draft.id, accepted=not issues,
                                   issues=sorted(set(issues)))
 
@@ -313,30 +343,37 @@ class QuestionAnalyzerAndEliminator:
                                  reason="Benzer aday bulundu ancak soru-şık ilişkisini açıkça destekleyen kenar yok.",
                                  node_ids=nodes, edge_ids=edges, score=best.score)
 
-    def _edge_terms(self, edge_id: str) -> set[str]:
+    def _edge_endpoint_match(self, edge_id: str, query_terms: set[str],
+                             choice_terms: set[str]) -> bool:
         edge = self._edges.get(edge_id)
         if edge is None:
-            return set()
-        endpoints = [self.search.nodes[node_id] for node_id in (edge.from_node, edge.to_node)
-                     if node_id in self.search.nodes]
-        text = " ".join([edge.quote, *(node.label + " " + node.description for node in endpoints)])
-        return set(_terms(text))
+            return False
+        source = self.search.nodes.get(edge.from_node)
+        target = self.search.nodes.get(edge.to_node)
+        if (source is None or target is None or not edge.source_ids
+                or not edge.source_checksum or edge.page is None or edge.bbox is None):
+            return False
+        quote = " ".join(edge.quote.split()).casefold()
+        if not all(" ".join(node.label.split()).casefold() in quote for node in (source, target)):
+            return False
+        left, right = set(_terms(source.label)), set(_terms(target.label))
+        specific_choice = choice_terms - query_terms
+        return bool((left & query_terms and right & specific_choice)
+                    or (right & query_terms and left & specific_choice))
 
     def _edge_supports_choice(self, edge_ids: list[str], query_terms: set[str], choice_terms: set[str]) -> bool:
         for edge_id in edge_ids:
             edge = self._edges.get(edge_id)
-            terms = self._edge_terms(edge_id)
             if (edge and edge.relation != RelationType.CELISIR_TAVIZDIR
-                    and len(terms & query_terms) >= 1 and len(terms & choice_terms) >= 1):
+                    and self._edge_endpoint_match(edge_id, query_terms, choice_terms)):
                 return True
         return False
 
     def _edge_is_relevant_contradiction(self, edge_id: str, query_terms: set[str],
                                         choice_terms: set[str]) -> bool:
         edge = self._edges.get(edge_id)
-        terms = self._edge_terms(edge_id)
         return bool(edge and edge.relation == RelationType.CELISIR_TAVIZDIR
-                    and len(terms & query_terms) >= 1 and len(terms & choice_terms) >= 1)
+                    and self._edge_endpoint_match(edge_id, query_terms, choice_terms))
 
     def analyze_and_eliminate(self, question: QuestionItem, *, top_k: int = 3) -> EliminationResult:
         analysis = self.analyze(question)
@@ -383,7 +420,8 @@ class HistoryTeacherValidatorAgent:
         edge_ids = set(self.edges)
         direct = next((hit for hit in all_hits
                        if hit.score >= 0.55
-                       and any(edge_id in edge_ids for edge_id in hit.supporting_edge_ids)
+                       and any(edge_id in edge_ids and self._edge_has_verbatim_claim(self.edges[edge_id])
+                               for edge_id in hit.supporting_edge_ids)
                        and self._direct_overlap(question, hit.node_id)), None)
         if direct is not None:
             source_ids = list(dict.fromkeys(direct.source_ids))[:8]
@@ -429,12 +467,10 @@ class HistoryTeacherValidatorAgent:
                 question_id=draft.id, decision="insufficient",
                 rationale="Taslak, kaynak alıntılı onaylı ilişki kenarıyla birebir eşleşmiyor.",
             )
-        quote_terms = set(_terms(edge.quote))
-        endpoint_terms = set(_terms(source.label)) | set(_terms(target.label))
-        if not endpoint_terms or not (quote_terms & endpoint_terms):
+        if not self._edge_has_verbatim_claim(edge):
             return TeacherValidation(
                 question_id=draft.id, decision="insufficient",
-                rationale="İlişki kenarının alıntısı iki düğümden en az birini açıkça taşımıyor.",
+                rationale="İlişki alıntısı iki düğümü de birebir taşımıyor veya kaynak izi eksik.",
             )
         return TeacherValidation(
             question_id=draft.id, decision="direct", evidence_node_ids=[source.id, target.id],
@@ -442,6 +478,15 @@ class HistoryTeacherValidatorAgent:
             rationale="Tersine üretilen soru, iki onaylı düğüm ve kaynak alıntılı tek ilişki kenarıyla doğrudan destekleniyor.",
             reviewer_kind="rule_based_teacher_candidate_v1",
         )
+
+    def _edge_has_verbatim_claim(self, edge: Edge) -> bool:
+        source = self.nodes.get(edge.from_node)
+        target = self.nodes.get(edge.to_node)
+        if (source is None or target is None or not edge.source_ids
+                or not edge.source_checksum or edge.page is None or edge.bbox is None):
+            return False
+        quote = " ".join(edge.quote.split()).casefold()
+        return all(" ".join(node.label.split()).casefold() in quote for node in (source, target))
 
     def validate_with_retry(self, question: QuestionItem, analyzer: QuestionAnalyzerAndEliminator,
                             *, max_attempts: int = 3) -> TeacherValidation:
@@ -488,7 +533,6 @@ class HistoryTeacherValidatorAgent:
     def _connected_bundle(self, question: QuestionItem, retrieval: RetrievalResult) -> tuple[list[str], list[str]]:
         query = set(_terms(" ".join([question.stem, question.topic, *question.question_terms,
                                       *(choice.text for choice in question.choices)])))
-        candidates: list[str] = []
         for chain in retrieval.chains:
             chain_candidates: list[str] = []
             for hit in chain.hits:
@@ -512,6 +556,7 @@ class HistoryTeacherValidatorAgent:
                     current = selected[-1]
                     link = next((edge for edge in self.edges.values()
                                  if edge.confidence >= self.min_edge_confidence
+                                 and self._edge_has_verbatim_claim(edge)
                                  and ((edge.from_node == current and edge.to_node in remaining)
                                       or (edge.to_node == current and edge.from_node in remaining))), None)
                     if link is None:
@@ -525,34 +570,185 @@ class HistoryTeacherValidatorAgent:
         return [], []
 
 
+class QuestionAnalysisDecision(StrictModel):
+    """Traceable result of scope, elimination, and evidence validation."""
+
+    question_id: str
+    eligible: bool
+    scope_reasons: list[str] = Field(default_factory=list, max_length=8)
+    format_tags: list[str] = Field(default_factory=list, max_length=3)
+    analysis: QuestionAnalysis | None = None
+    elimination: EliminationResult | None = None
+    evidence_validation: TeacherValidation | None = None
+
+
+class QuestionAnalyzerAndValidator:
+    """One entry point that cannot analyze out-of-scope visual questions."""
+
+    def __init__(self, search: WeightedGraphSearch, graph: KnowledgeGraph,
+                 scope_filter: AccessibilityAndScopeFilter | None = None):
+        self.search = search
+        self.graph = graph
+        self.scope_filter = scope_filter or AccessibilityAndScopeFilter()
+        self.eliminator = QuestionAnalyzerAndEliminator(search)
+        self.teacher_validator = HistoryTeacherValidatorAgent(graph)
+
+    def evaluate(self, question: QuestionItem, *, section_id: str | None = None,
+                 page: int | None = None, source_checksum: str | None = None,
+                 top_k: int = 3) -> QuestionAnalysisDecision:
+        scope = self.scope_filter.evaluate(
+            question.model_dump(mode="json"), section_id=section_id, page=page,
+            source_checksum=source_checksum,
+        )
+        if not scope.eligible:
+            return QuestionAnalysisDecision(
+                question_id=question.id, eligible=False,
+                scope_reasons=list(scope.reasons), format_tags=list(scope.format_tags),
+            )
+        elimination = self.eliminator.analyze_and_eliminate(question, top_k=top_k)
+        evidence = self.teacher_validator.validate(question, elimination)
+        return QuestionAnalysisDecision(
+            question_id=question.id, eligible=True,
+            scope_reasons=list(scope.reasons), format_tags=list(scope.format_tags),
+            analysis=elimination.analysis, elimination=elimination,
+            evidence_validation=evidence,
+        )
+
+
 class GraphToQuestionGenerator:
     """Generate private drafts only from approved relation edges."""
 
-    def __init__(self, graph: KnowledgeGraph):
+    def __init__(self, graph: KnowledgeGraph, *, source_checksum: str | None = None,
+                 page_ranges: list[tuple[int, int]] | None = None,
+                 source_page_ranges: dict[str, list[tuple[int, int]]] | None = None):
         self.graph = graph
+        self._page_ranges = page_ranges
+        self._source_page_ranges = source_page_ranges or {}
+        self.semantic_duplicates_collapsed = 0
         self.nodes = {node.id: node for node in graph.approved_nodes()}
-        self.edges = [edge for edge in graph.approved_edges() if edge.from_node in self.nodes and edge.to_node in self.nodes]
+        self.edges = [
+            edge for edge in graph.approved_edges()
+            if edge.from_node in self.nodes and edge.to_node in self.nodes
+            and (self._edge_in_scope(edge) if self._source_page_ranges else
+                 (source_checksum is None or edge.source_checksum == source_checksum)
+                 and (page_ranges is None or edge.page is not None
+                      and any(start <= edge.page <= end for start, end in page_ranges))
+            )
+        ]
+
+    def _edge_in_scope(self, edge: Edge) -> bool:
+        ranges = self._source_page_ranges.get(edge.source_checksum or "", [])
+        return edge.page is not None and any(start <= edge.page <= end for start, end in ranges)
+
+    def _ranges_for_edge(self, edge: Edge) -> list[tuple[int, int]]:
+        if self._source_page_ranges:
+            return self._source_page_ranges.get(edge.source_checksum or "", [])
+        return self._page_ranges or []
+
+    @staticmethod
+    def _normalize_fingerprint(value: str) -> str:
+        normalized = unicodedata.normalize("NFKC", value).casefold()
+        return " ".join(re.sub(r"[^\w\s]", " ", normalized).split())
+
+    @staticmethod
+    def _source_relation_phrases(edge: Edge) -> dict[str, str] | None:
+        """Extract short spoken endpoints from one source-bound sentence.
+
+        Graph extraction keeps broad spans for provenance.  This pass narrows
+        only around an explicit relation cue; it never invents text outside
+        the quoted PDF sentence.
+        """
+        quote = re.sub(
+            r"(?<=[A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû])-\s+(?=[a-zçğıöşüâîû])", "", edge.quote,
+        )
+        quote = " ".join(quote.split()).strip(" \"“”‘’")
+        if not quote.endswith((".", "!", "?")):
+            return None
+        if edge.relation == RelationType.AKTORUDUR:
+            match = re.search(
+                r"(?P<subject>[^.;,]{3,120}),\s*(?P<actor>[^.;,]{3,100})\s+tarafından\s+"
+                r"(?P<action>[^.;]{3,180})[.!?]$", quote, re.IGNORECASE,
+            )
+            if not match:
+                return None
+            subject = " ".join(match.group("subject").split()).strip(" :")
+            actor = " ".join(match.group("actor").split()).strip(" :")
+            action = " ".join(match.group("action").split()).strip(" :")
+            if (not 2 <= len(subject.split()) <= 12 or not 1 <= len(actor.split()) <= 8
+                    or not 1 <= len(action.split()) <= 16
+                    or re.search(r"\b(?:amacıyla|nedeniyle|sonucunda)\b", action, re.IGNORECASE)):
+                return None
+            return {"subject": subject, "answer": actor, "action": action}
+        if edge.relation == RelationType.SEBEBIDIR:
+            match = re.search(
+                r"(?P<cause>[^.;]{12,180})\s+(?:nedeniyle|sebebiyle|yüzünden|dolayı)\s+"
+                r"(?P<effect>[^.;]{8,180})[.!?]$", quote, re.IGNORECASE,
+            )
+            if not match:
+                return None
+            return {"subject": " ".join(match.group("effect").split()).strip(" :"),
+                    "answer": " ".join(match.group("cause").split()).strip(" :")}
+        if edge.relation == RelationType.SONUCUDUR:
+            match = re.search(
+                r"(?P<cause>[^.;]{12,180})\s+sonucunda\s+(?P<effect>[^.;]{8,180})[.!?]$",
+                quote, re.IGNORECASE,
+            )
+            if not match:
+                return None
+            return {"subject": " ".join(match.group("cause").split()).strip(" :"),
+                    "answer": " ".join(match.group("effect").split()).strip(" :")}
+        return None
+
+    @staticmethod
+    def _source_temporal_phrase(edge: Edge, target_label: str) -> str | None:
+        """Find a compact named event near the edge's source year.
+
+        ``explicit_year`` graph edges often preserve an entire paragraph as
+        their source endpoint.  A date question is allowed only when a named
+        event ending (Antlaşması, Cephesi, Harekâtı, ...) occurs close to the
+        exact year in that same quote.  Ambiguous paragraphs stay review-only.
+        """
+        if edge.relation != RelationType.DONEMINDE_OLMUSTUR:
+            return None
+        year = target_label.strip()
+        if not re.fullmatch(r"\d{4}", year):
+            return None
+        if year is None:
+            return None
+        quote = re.sub(
+            r"(?<=[A-Za-zÇĞİÖŞÜçğıöşüÂÎÛâîû])-\s+(?=[a-zçğıöşüâîû])", "", edge.quote,
+        )
+        quote = " ".join(quote.split())
+        year_positions = [match.start() for match in re.finditer(rf"(?<!\d){year}(?!\d)", quote)]
+        if len(year_positions) != 1:
+            return None
+        candidates = []
+        for match in _EVENT_LABEL_RE.finditer(quote):
+            label = " ".join(match.group("label").split()).strip(" ,;:-")
+            if re.search(r"\b(?:19|20)\d{2}\b", label) or len(label.split()) > 8:
+                continue
+            if abs(match.start() - year_positions[0]) <= 110:
+                candidates.append(label)
+        return candidates[0] if len(candidates) == 1 else None
 
     def generate(self, *, limit: int = 40) -> list[GeneratedQuestionDraft]:
         if limit < 1:
             raise ValueError("limit pozitif olmalı")
+        self.semantic_duplicates_collapsed = 0
         drafts: list[GeneratedQuestionDraft] = []
         used: set[tuple[str, str, str]] = set()
-        relation_labels = {
-            RelationType.ALT_KONUSUDUR: "alt konusudur",
-            RelationType.SEBEBIDIR: "sebebidir",
-            RelationType.SONUCUDUR: "sonucudur",
-            RelationType.AMACIDIR: "amacıdır",
-            RelationType.DONEMINDE_OLMUSTUR: "döneminde gerçekleşmiştir",
-            RelationType.KRONOLOJIK_SONRASIDIR: "kronolojik olarak sonrasıdır",
-            RelationType.AKTORUDUR: "aktörüdür",
-            RelationType.COGRAFYASIDIR: "coğrafyasıdır",
-            RelationType.KAPSAMINDADIR: "kapsamındadır",
-            RelationType.ILKESIYLE_ILISKILIDIR: "ilkesiyle ilişkilidir",
-            RelationType.CELISIR_TAVIZDIR: "çelişir veya taviz niteliğindedir",
-            RelationType.BENZERIDIR_PARALELDIR: "benzer veya paraleldir",
+        used_question_fingerprints: set[tuple[str, str, str]] = set()
+        supported_templates = {
+            RelationType.DONEMINDE_OLMUSTUR, RelationType.SEBEBIDIR,
+            RelationType.SONUCUDUR, RelationType.AMACIDIR, RelationType.AKTORUDUR,
         }
-        relation_choices = [relation for relation in RelationType if relation in relation_labels]
+        def section_key(edge: Edge) -> str:
+            edge_ranges = self._ranges_for_edge(edge)
+            if edge.page is not None and edge_ranges:
+                for start, end in edge_ranges:
+                    if start <= edge.page <= end:
+                        return f"{edge.source_checksum}:pages:{start}-{end}"
+            return self.nodes[edge.from_node].metadata.section_id or ""
         def importance(edge: Edge) -> tuple[float, float, str]:
             left = self.nodes[edge.from_node].metadata.node_weight
             right = self.nodes[edge.to_node].metadata.node_weight
@@ -565,7 +761,7 @@ class GraphToQuestionGenerator:
         # actor evidence.
         by_relation: dict[RelationType, list[Edge]] = defaultdict(list)
         for edge in sorted(self.edges, key=importance):
-            if edge.relation != RelationType.KAPSAMINDADIR:
+            if edge.relation in supported_templates:
                 by_relation[edge.relation].append(edge)
         ordered_edges: list[Edge] = []
         while any(by_relation.values()):
@@ -575,46 +771,116 @@ class GraphToQuestionGenerator:
         # A natural content question needs content alternatives, not five
         # relation labels.  All option phrases are still source-verbatim graph
         # endpoints; only the one backed by the current edge is correct.
-        target_pool: dict[RelationType, list[str]] = defaultdict(list)
+        target_pool: dict[tuple[RelationType, str, str, str], list[str]] = defaultdict(list)
+        supported_targets: dict[tuple[str, RelationType], set[str]] = defaultdict(set)
+        natural_by_edge = {edge.id: self._source_relation_phrases(edge) for edge in self.edges}
+        temporal_by_edge = {
+            edge.id: self._source_temporal_phrase(edge, self.nodes[edge.to_node].label)
+            for edge in self.edges
+        }
+        temporal_action_by_edge = {
+            edge.id: next((value for value in ("signed", "founded", "convened", "started", "ended", "occurred")
+                           if value in (edge.extraction_method or "")), "dated")
+            for edge in self.edges
+        }
         for edge in self.edges:
-            target = self.nodes[edge.to_node].label
+            if (edge.relation == RelationType.DONEMINDE_OLMUSTUR
+                    and not ((edge.extraction_method or "").startswith("source_verbatim_named_event_year_")
+                             or temporal_by_edge.get(edge.id))):
+                continue
+            target_node = self.nodes[edge.to_node]
+            natural = natural_by_edge.get(edge.id)
+            target = temporal_by_edge.get(edge.id) or (natural or {}).get("answer", target_node.label)
+            if edge.relation == RelationType.DONEMINDE_OLMUSTUR:
+                target = target_node.label
+            supported_targets[(edge.from_node, edge.relation)].add(target)
+            action = ((edge.extraction_method or "").rsplit("_", 1)[-1]
+                      if edge.relation == RelationType.DONEMINDE_OLMUSTUR else "")
+            if edge.relation == RelationType.DONEMINDE_OLMUSTUR:
+                action = "dated"
+            edge_ranges = self._ranges_for_edge(edge)
+            pool_section = ("temporal_scope" if edge.relation == RelationType.DONEMINDE_OLMUSTUR
+                            and len(edge_ranges) >= 3 else section_key(edge))
+            pool_key = (edge.relation, target_node.node_type.value, pool_section, action)
             if (edge.relation != RelationType.KAPSAMINDADIR
                     and not GeneratedDraftQualityGate._endpoint_issues(target)
-                    and target not in target_pool[edge.relation]):
-                target_pool[edge.relation].append(target)
+                    and target not in target_pool[pool_key]):
+                target_pool[pool_key].append(target)
         for edge in ordered_edges:
             # A generated item must point to a source quote with traceable PDF
             # provenance. A structural edge without a checked quote is skipped.
             if (len(edge.quote.strip()) < 12 or not edge.source_ids
                     or not edge.source_checksum or edge.page is None or edge.bbox is None):
                 continue
+            if (edge.relation == RelationType.DONEMINDE_OLMUSTUR
+                    and not ((edge.extraction_method or "").startswith("source_verbatim_named_event_year_")
+                             or temporal_by_edge.get(edge.id))):
+                continue
             key = (edge.from_node, edge.to_node, edge.relation.value)
             if key in used:
+                self.semantic_duplicates_collapsed += 1
                 continue
             used.add(key)
             source = self.nodes[edge.from_node]
             target = self.nodes[edge.to_node]
-            correct_relation = relation_labels[edge.relation]
+            natural = natural_by_edge.get(edge.id)
+            question_terms = [source.label]
             # Deterministic option order varies by edge, reducing answer-position
             # leakage while leaving the private key only on the draft wrapper.
             labels = ("A", "B", "C", "D", "E")
             rotation = int(hashlib.sha256(edge.id.encode()).hexdigest()[:4], 16) % len(labels)
             answer_index = rotation
+            temporal_source = temporal_by_edge.get(edge.id)
             if edge.relation == RelationType.DONEMINDE_OLMUSTUR and re.fullmatch(r"\d{4}", target.label):
-                year = int(target.label)
-                offsets = (-24, -12, 9, 18)
-                distractors = [str(year + offset) for offset in offsets]
+                # A subject linked to several years needs a more specific
+                # action/event cue before it can yield a single-answer item.
+                if len(supported_targets[(edge.from_node, edge.relation)]) != 1:
+                    continue
+                # Dates must be real alternatives supported by other graph
+                # events in the same section, not invented numeric offsets.
+                action = "dated"
+                temporal_pool_section = ("temporal_scope" if len(self._ranges_for_edge(edge)) >= 3
+                                         else section_key(edge))
+                pool_key = (edge.relation, target.node_type.value, temporal_pool_section, action)
+                distractors = [value for value in target_pool[pool_key]
+                               if value not in supported_targets[(edge.from_node, edge.relation)]
+                               and re.fullmatch(r"\d{4}", value)]
+                if len(distractors) < 4:
+                    continue
+                distractors = distractors[:4]
                 correct_value = target.label
-                action = (edge.extraction_method or "").rsplit("_", 1)[-1]
                 temporal_verb = {
                     "signed": "imzalanmıştır", "founded": "kurulmuştur",
                     "convened": "toplanmıştır", "started": "başlamıştır",
                     "ended": "sona ermiştir", "occurred": "gerçekleşmiştir",
                     "dated": "gerçekleşmiştir",
-                }.get(action, "gerçekleşmiştir")
-                stem = f"Kaynağa göre {source.label} hangi yılda {temporal_verb}?"
+                }.get(temporal_action_by_edge.get(edge.id, "dated"), "gerçekleşmiştir")
+                stem = f"Kaynağa göre {temporal_source or source.label} hangi yılda {temporal_verb}?"
+                question_terms = [temporal_source or source.label]
+            elif natural is not None and edge.relation in {
+                    RelationType.AKTORUDUR, RelationType.SEBEBIDIR, RelationType.SONUCUDUR,
+            }:
+                natural_subject = natural["subject"]
+                correct_value = natural["answer"]
+                pool_key = (edge.relation, target.node_type.value, section_key(edge), "")
+                candidates = [value for value in target_pool[pool_key] if value != correct_value]
+                if len(candidates) < 4:
+                    continue
+                distractors = candidates[:4]
+                template = {
+                    RelationType.SEBEBIDIR: f"Kaynağa göre {natural_subject} durumunun nedenlerinden hangisidir?",
+                    RelationType.SONUCUDUR: f"Kaynağa göre {natural_subject} durumunun sonuçlarından hangisidir?",
+                    RelationType.AKTORUDUR: (
+                        f"Kaynağa göre \"{natural_subject}\" cümlesinde {natural['action']} "
+                        "eylemini gerçekleştiren taraf hangisidir?"
+                    ),
+                }
+                stem = template[edge.relation]
+                question_terms = [natural_subject]
             else:
-                candidates = [value for value in target_pool[edge.relation] if value != target.label]
+                pool_key = (edge.relation, target.node_type.value, section_key(edge), "")
+                known_answers = supported_targets[(edge.from_node, edge.relation)]
+                candidates = [value for value in target_pool[pool_key] if value not in known_answers]
                 if len(candidates) < 4:
                     continue
                 distractors = candidates[:4]
@@ -625,7 +891,17 @@ class GraphToQuestionGenerator:
                     RelationType.AMACIDIR: f"Kaynağa göre {source.label} uygulamasının amacı aşağıdakilerden hangisidir?",
                     RelationType.AKTORUDUR: f"Kaynağa göre {source.label} eylemini gerçekleştiren taraf hangisidir?",
                 }
-                stem = template.get(edge.relation, f"Kaynağa göre {source.label} ile {target.label} arasındaki ilişki hangisidir?")
+                stem = template[edge.relation]
+                question_terms = [source.label]
+            natural = natural_by_edge[edge.id]
+            fingerprint_subject = (temporal_source if temporal_source else
+                                   natural["subject"] if natural else source.label)
+            fingerprint = (edge.relation.value, self._normalize_fingerprint(fingerprint_subject),
+                           self._normalize_fingerprint(correct_value))
+            if fingerprint in used_question_fingerprints:
+                self.semantic_duplicates_collapsed += 1
+                continue
+            used_question_fingerprints.add(fingerprint)
             option_texts = distractors[:answer_index] + [correct_value] + distractors[answer_index:]
             choices = [QuestionChoice(label=label, text=value)
                        for label, value in zip(labels, option_texts)]
@@ -634,7 +910,9 @@ class GraphToQuestionGenerator:
                 stem=stem,
                 choices=choices,
                 topic=source.metadata.unit_title or "",
-                question_terms=[source.label, target.label, correct_relation],
+                # Only terms already visible in the public stem may enter
+                # retrieval. The private correct target must not bias search.
+                question_terms=question_terms,
             )
             drafts.append(GeneratedQuestionDraft(
                 id=question.id, runtime_question=question, answer_label=labels[answer_index],
@@ -701,8 +979,8 @@ class ConceptBasedDataSplitter:
             # A component is indivisible: concept leakage is more damaging
             # than a perfectly exact ratio. Prefer the bucket that incurs the
             # smallest overflow, then the closest target size.
-            def assignment_cost(name: str) -> tuple[float, float, str]:
-                projected = len(buckets[name]) + len(items)
+            def assignment_cost(name: str, group_size: int = len(items)) -> tuple[float, float, str]:
+                projected = len(buckets[name]) + group_size
                 return (max(0.0, projected - targets[name]), abs(projected - targets[name]), name)
 
             destination = min(buckets, key=assignment_cost)

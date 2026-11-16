@@ -19,6 +19,7 @@ from .question_bank_visual_proposals import proposal as visual_proposal
 
 QUESTION_START = re.compile(r"^([1-9][0-9]?)\.\s*(.*)$")
 CHOICE_START = re.compile(r"^([A-E])\)\s*(.*)$")
+INLINE_CHOICE = re.compile(r"(?<![A-Za-z0-9])([A-E])\)\s*")
 STATEMENT_START = re.compile(r"^(I|II|III|IV|V)\.\s*(.*)$")
 BLANK_MARKER = re.compile(r"-{4,}|_{3,}|\.{5,}")
 TEST_HEADING = re.compile(r"^(Kavrama|Geliştirme|Vip|VİP|Tarama)\s+Testi\s*-\s*(\d{1,2})$", re.IGNORECASE)
@@ -170,6 +171,18 @@ def _column(line, midpoint):
     return 0 if (line.bbox[0] + line.bbox[2]) / 2 < midpoint else 1
 
 
+def _visual_order_key(line: Line):
+    """Sort separately emitted spans on one visual row from left to right.
+
+    Some PDFs put a bold question number in its own text block. Its top edge
+    can differ from the stem by a few hundredths of a point; exact y sorting
+    then moves the stem before its number and leaks it into the previous item.
+    A 2pt row bucket is far smaller than normal line spacing and restores
+    page reading order for these baseline-aligned spans.
+    """
+    return (round(line.bbox[1] / 2), line.bbox[0])
+
+
 def _source(page_number, bbox, checksum):
     return {"page": page_number, "bbox": bbox, "source_checksum": checksum}
 
@@ -185,7 +198,7 @@ def _part(part_id, kind, lines, page_number, checksum, blank_start):
             "source": _source(page_number, _box(lines), checksum), "blanks": blanks}
 
 
-def _parse_question(lines, images, page_number, column, checksum):
+def _parse_question(lines, images, page_drawings, page_number, column, checksum, midpoint, page_width):
     start = lines[0]
     match = QUESTION_START.match(start.text.strip())
     number = int(match.group(1))
@@ -198,8 +211,23 @@ def _parse_question(lines, images, page_number, column, checksum):
     body = []
     choices: dict[str, list[Line]] = {}
     current_choice = None
+    inline_choice_layout = False
     for line in content:
         stripped = line.text.strip()
+        inline_labels = list(INLINE_CHOICE.finditer(stripped))
+        if (len(inline_labels) > 1 and inline_labels[0].start() == 0
+                and [match.group(1) for match in inline_labels]
+                == sorted({match.group(1) for match in inline_labels})):
+            # The PDF text layer merged several printed option cells into one
+            # line. Keep the whole line as each source box and require PDF
+            # review of the individual cell positions before use.
+            inline_choice_layout = True
+            for index, marker in enumerate(inline_labels):
+                end = inline_labels[index + 1].start() if index + 1 < len(inline_labels) else len(stripped)
+                value = stripped[marker.end():end].strip()
+                current_choice = marker.group(1)
+                choices.setdefault(current_choice, []).append(Line(value, line.bbox, line.bold))
+            continue
         option = CHOICE_START.match(stripped)
         if option:
             current_choice = option.group(1)
@@ -282,8 +310,8 @@ def _parse_question(lines, images, page_number, column, checksum):
         if value:
             options.append({"label": label, "text": value,
                             "source": _source(page_number, _box(option_lines), checksum)})
-    x0 = 0 if column == 0 else 320
-    x1 = 320 if column == 0 else 641
+    x0 = 0 if column == 0 else midpoint
+    x1 = midpoint if column == 0 else page_width
     y0 = start.bbox[1]
     y1 = max(line.bbox[3] for line in lines)
     visuals = []
@@ -302,6 +330,45 @@ def _parse_question(lines, images, page_number, column, checksum):
                         "label": label,
                         "source": _source(page_number, tuple(round(z, 2) for z in b), checksum),
                         "caption": None, "description": suggested[1] if suggested else None,
+                        "description_reviewed": False})
+    # Some PDFs draw tables as a small group of overlapping vector rectangles.
+    # Requiring a nested pair avoids treating page decorations, glyph outlines,
+    # and shapes from the adjacent column as question content.
+    vector_candidates = []
+    for drawing in page_drawings:
+        b = drawing["rect"]
+        area = max(0, b.width) * max(0, b.height)
+        if (area < 2500 or b.x0 < x0 or b.x1 > x1
+                or b.y0 < y0 or b.y1 > y1):
+            continue
+        if any(
+            (intersection := b & pymupdf.Rect(image["bbox"]))
+            and area > 0
+            and intersection.width * intersection.height / area >= 0.5
+            for image in relevant_images
+        ):
+            # Skip vector borders/backgrounds that only frame an already
+            # detected bitmap. The bitmap itself remains the visual signal.
+            continue
+        vector_candidates.append(b)
+
+    vector_regions = []
+    for index, first in enumerate(vector_candidates):
+        first_area = first.width * first.height
+        for second in vector_candidates[index + 1:]:
+            second_area = second.width * second.height
+            smaller_area = min(first_area, second_area)
+            overlap = first & second
+            overlap_area = overlap.width * overlap.height if overlap else 0
+            if smaller_area and overlap_area / smaller_area >= 0.8:
+                union = first | second
+                if not any(union == existing for existing in vector_regions):
+                    vector_regions.append(union)
+    for index, b in enumerate(vector_regions, 1):
+        visuals.append({"id": f"{question_id}-vector-visual-{index}",
+                        "kind": "vector_graphic", "label": None,
+                        "source": _source(page_number, tuple(round(z, 2) for z in b), checksum),
+                        "caption": None, "description": None,
                         "description_reviewed": False})
     issues = []
     if any("\x07" in line.text for line in lines):
@@ -330,6 +397,8 @@ def _parse_question(lines, images, page_number, column, checksum):
         issues.append("choice_table_review_required")
     if unlabeled_horizontal_cells:
         issues.append("horizontal_choice_cells_review_required")
+    if inline_choice_layout:
+        issues.append("inline_choice_layout_review_required")
     if any(part["blanks"] for part in parts):
         issues.append("blank_review_required")
     payload = {"id": question_id, "number": number, "question_type": question_type,
@@ -348,16 +417,19 @@ def extract_page(page, page_number: int, checksum: str):
     midpoint = page.rect.width / 2
     lines = page_lines(page)
     images = [block for block in page.get_text("dict")["blocks"] if block["type"] == 1]
+    page_drawings = [{"rect": pymupdf.Rect(drawing["rect"])} for drawing in page.get_drawings()]
     results = []
     for column in (0, 1):
         ordered = sorted((line for line in lines if _column(line, midpoint) == column),
-                         key=lambda line: (line.bbox[1], line.bbox[0]))
+                         key=_visual_order_key)
         starts = [index for index, line in enumerate(ordered)
                   if QUESTION_START.match(line.text.strip())
-                  and (line.bbox[0] < 70 if column == 0 else 325 <= line.bbox[0] <= 360)]
+                  and (line.bbox[0] < 70 if column == 0
+                       else midpoint <= line.bbox[0] <= midpoint + 50)]
         for pos, index in enumerate(starts):
             end = starts[pos + 1] if pos + 1 < len(starts) else len(ordered)
-            results.append(_parse_question(ordered[index:end], images, page_number, column, checksum))
+            results.append(_parse_question(ordered[index:end], images, page_drawings, page_number, column,
+                                           checksum, midpoint, page.rect.width))
     # On two-column test pages, read the left column to its end before the right.
     return sorted(results, key=lambda item: (item["question"]["source"]["bbox"][0],
                                              item["question"]["source"]["bbox"][1]))

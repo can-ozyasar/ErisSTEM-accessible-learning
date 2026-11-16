@@ -47,11 +47,19 @@ from .knowledge_architecture import (
 )
 from .learning_operations import LearningOperationsStore, LearningRecord
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
+from .pipeline.tutor_qlora_readiness import assess as assess_tutor_readiness
 from .question_bank_extract import extract_book
 from .question_bank_structure import Question, navigation_units, question_audio_segments
 from .tutor_authoring import create_drafts, infer_error_type, review_draft
 from .tutor_coach import CoachContext, coach
-from .tutor_dataset import CASES, TutorReviewInput, review_id, validate_review_payload
+from .tutor_dataset import (
+    CASES,
+    CONCEPT_KEYS_SOURCE,
+    TutorReviewInput,
+    derive_concept_keys,
+    review_id,
+    validate_review_payload,
+)
 from .yks_selection import ExamTag, rank_scope
 
 SOURCE = Path("/private/question-bank/vip-9-sinif-tarih-soru-bankasi.pdf")
@@ -360,9 +368,12 @@ def question_bank_router(store: LearningOperationsStore):
         groups = {item["question_id"] for item in reviewed}
         complete = {question_id for question_id in groups
                     if {item["case"] for item in reviewed if item["question_id"] == question_id} == set(CASES)}
+        readiness = assess_tutor_readiness(reviewed)
         return {"approved_questions": len(questions), "direct_evidence_questions": len(evidence_reviewed), "approved_examples": len(reviewed),
                 "complete_question_groups": len(complete), "required_questions": 120,
-                "required_examples": 720, "ready_for_qlora_export": len(complete) >= 120,
+                "required_examples": 720, "ready_for_qlora_export": readiness["status"] == "ready",
+                "readiness_blocking_reasons": readiness["blocking_reasons"],
+                "question_group_splits": readiness["selected_split_question_groups"],
                 "notice": "Her soru altı koçluk durumuyla incelenir. Kaggle örnekleri kısa, onaylı soru ve MEB kanıtı içerir; cevap anahtarı içermez."}
 
     def tutor_sources(question):
@@ -616,6 +627,13 @@ def question_bank_router(store: LearningOperationsStore):
         except ValueError as error:
             raise HTTPException(422, str(error)) from error
         payload = item.model_dump(exclude={"expected_revision"})
+        # Derive anti-leakage concepts from this question's approved graph.
+        # Evidence chunk IDs are provenance, not concepts; a broad shared
+        # paragraph must not merge unrelated historical events into one split.
+        # Never trust concept labels supplied by the client.
+        graph = store.get(_graph_id(question_id)) or {}
+        payload["concept_keys"] = derive_concept_keys(graph)
+        payload["concept_keys_source"] = CONCEPT_KEYS_SOURCE if payload["concept_keys"] else ""
         payload.update({"source_checksum": index["source_checksum"], "question_text": " ".join(part.text for part in question.parts)})
         agent = store.get(f"tutor-agent-review:{question_id}:{case}")
         if agent:

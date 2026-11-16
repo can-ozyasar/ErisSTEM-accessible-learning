@@ -15,6 +15,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 from ..question_bank_extract import extract_book
+from ..question_scope import AccessibilityAndScopeFilter
 
 SCHEMA = "history-tutor-question-queue-v1"
 
@@ -28,12 +29,12 @@ def _topic(context: dict) -> str:
 def _eligibility(candidate: dict, topic: str) -> list[str]:
     question, issues = candidate["question"], list(candidate.get("issues", []))
     blockers = list(issues)
-    if question.get("question_type") != "multiple_choice":
-        blockers.append("multiple_choice_değil")
-    if question.get("visuals"):
+    scope = AccessibilityAndScopeFilter().evaluate(question, issues=issues)
+    if any(reason in {"embedded_visual", "referenced_visual", "structured_table"}
+           for reason in scope.reasons):
         blockers.append("görsel_betimleme_gerekli")
-    if any(part.get("blanks") for part in question.get("parts", [])):
-        blockers.append("boşluk_deneti̇mi_gerekli")
+    if question.get("question_type") != "multiple_choice" and "fill_in_the_blank" not in scope.format_tags:
+        blockers.append("multiple_choice_değil")
     if topic == "Başlık eşleşmedi":
         blockers.append("konu_başlığı_yok")
     if topic.casefold() in {"ünite tarama testi", "tarama testi"}:

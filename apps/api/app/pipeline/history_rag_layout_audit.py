@@ -17,11 +17,11 @@ import pymupdf
 from ..history_rag import _clean, candidate_review_warnings, load_index
 from .history_rag_audit import BAD, LABELS, evaluate
 
-INSTRUCTION = re.compile(r'\b(?:adım|etkinlik|yönerge|dereceli puanlama|performans görevi|öz değerlendirme|değerlendirme formu|karekod|öğrencinin|öğretmeniniz|sınıf arkadaş|puanlama anahtarı)\w*', re.I)
-CAPTION = re.compile(r'\b(?:görsel|fotoğraf|resim|harita|tablo)\s*\d|\bmüzesi\b|\bmuseum\b', re.I)
-RUBRIC = re.compile(r'\b(?:zihin haritası|görseller metni|seçtiği orta çağ|puanlama anahtarı|değerlendirme sistemi|ölçüt(?:ler)?|sunulmuştur|araştırmada bazı görseller)\b', re.I)
-CITATION = re.compile(r'\b(?:s\.\s*\d+|(?:19|20)\d{2}\s*,\s*s\.)', re.I)
-REFERENCE = re.compile(r'\b(?:kaynakça|erişim tarihi|yayınevi|isbn)\b', re.I)
+INSTRUCTION = re.compile(r'\b(?:adım|etkinlik|yönerge|dereceli puanlama|performans görevi|öz değerlendirme|değerlendirme formu|karekod|öğrencinin|öğretmeniniz|sınıf arkadaş|puanlama anahtarı)\w*', re.IGNORECASE)
+CAPTION = re.compile(r'\b(?:görsel|fotoğraf|resim|harita|tablo)\s*\d|\bmüzesi\b|\bmuseum\b', re.IGNORECASE)
+RUBRIC = re.compile(r'\b(?:zihin haritası|görseller metni|seçtiği orta çağ|puanlama anahtarı|değerlendirme sistemi|ölçüt(?:ler)?|sunulmuştur|araştırmada bazı görseller)\b', re.IGNORECASE)
+CITATION = re.compile(r'\b(?:s\.\s*\d+|(?:19|20)\d{2}\s*,\s*s\.)', re.IGNORECASE)
+REFERENCE = re.compile(r'\b(?:kaynakça|erişim tarihi|yayınevi|isbn)\b', re.IGNORECASE)
 TERMINAL = re.compile(r'[.!?…][”’"\')\]]*$')
 LOWER_START = re.compile(r'^[a-zçğıöşü]')
 
@@ -40,22 +40,31 @@ def analyze(item: dict, page) -> dict:
             value = ''.join(span['text'] for span in line['spans']).strip()
             if rect.y0 >= box.y1 and rect.y0 - box.y1 <= 35 and rect.x1 >= box.x0 and rect.x0 <= box.x1:
                 nearby.append(value)
-            if rect.get_area() and intersection.get_area() / rect.get_area() >= .8:
-                if value:
-                    lines.append(value)
+            if rect.get_area() and intersection.get_area() / rect.get_area() >= .8 and value:
+                lines.append(value)
     text = item['text'].strip()
     flags = []
     soft_breaks = [line for line in lines[:-1] if line.endswith('\xad')]
     if soft_breaks or any(re.search(r'[\wçğıöşüÇĞİÖŞÜ]-\s*$', line) for line in lines[:-1]):
         flags.append('satir_sonu_tire_kontrolu')
-    # Reconstruct only when the selected lines reproduce the exact indexed text.
-    # A visible hyphen can be lexical (e.g. Perge-Side); never silently remove it.
+    # Suggest a reconstruction only if the indexed text matches the PDF lines
+    # with the soft-hyphen boundary represented as a space. A visible hyphen can
+    # be lexical (e.g. Perge-Side); never silently remove it.
     proposed = None
-    if soft_breaks and _clean(' '.join(lines)) == text:
-        joined = lines[0]
+    if soft_breaks:
+        source_with_boundary_space = lines[0]
+        reconstructed = lines[0]
         for line in lines[1:]:
-            joined = joined[:-1] + line if joined.endswith('\xad') else joined + ' ' + line
-        proposed = _clean(joined)
+            if source_with_boundary_space.endswith('\xad'):
+                source_with_boundary_space = source_with_boundary_space[:-1] + ' ' + line
+                reconstructed = reconstructed[:-1] + line
+            else:
+                source_with_boundary_space += ' ' + line
+                reconstructed += ' ' + line
+        if _clean(source_with_boundary_space) == _clean(text):
+            proposed = _clean(reconstructed)
+        else:
+            flags.append('pdf_ve_indeks_metni_farkli')
     if LOWER_START.search(text) or not TERMINAL.search(text):
         flags.append('parca_siniri_kontrolu')
     if INSTRUCTION.search(text):
@@ -73,7 +82,9 @@ def analyze(item: dict, page) -> dict:
     return {'chunk_id': item.get('chunk_id', item.get('id')), 'page': item['page'],
             'source_line_count': len(lines), 'flags': flags,
             'line_end_hyphens': [line for line in lines[:-1] if line.endswith('\xad') or re.search(r'[\wçğıöşüÇĞİÖŞÜ]-\s*$', line)],
-            'proposed_soft_hyphen_text': proposed}
+            'proposed_soft_hyphen_text': proposed,
+            'soft_hyphen_proposal_matches_index': (proposed == _clean(text)
+                                                   if proposed else None)}
 
 
 def holdout(index: dict, development: dict, seed: int, per_section: int) -> dict:

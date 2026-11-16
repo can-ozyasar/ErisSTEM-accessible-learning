@@ -4,11 +4,18 @@ from pathlib import Path
 import pymupdf
 import pytest
 
-from app.question_bank_extract import Line, _answer_key_lines, extract_book, extract_page
+from app.question_bank_extract import (
+    Line,
+    _answer_key_lines,
+    _visual_order_key,
+    extract_book,
+    extract_page,
+)
 from app.question_bank_structure import Question, navigation_units
 from app.question_bank_visual_proposals import SOURCE_CHECKSUM
 
 BOOK = Path(__file__).parents[3] / "data/soru_bankasi/vip-9-sinif-tarih-soru-bankasi.pdf"
+DORT_DORTLUK = Path(__file__).parents[3] / "data/private/ogm-supplementary-v1/dort-dortluk-ayt-tarih.pdf"
 pytestmark = pytest.mark.skipif(not BOOK.is_file(), reason="Local copyrighted source not installed")
 
 
@@ -110,3 +117,21 @@ def test_answer_key_detection_uses_repeated_cells_in_a_margin():
              for index, (number, letter) in enumerate([(1, "C"), (2, "A"), (3, "D"), (4, "E")])]
     isolated = Line("1-A", (80, 300, 110, 312), False)
     assert _answer_key_lines([isolated, *cells], 800) == {1, 2, 3, 4}
+
+
+def test_separate_question_number_span_precedes_same_row_stem_span():
+    number = Line("3.", (36.28, 597.533, 48.10, 610.530), True)
+    stem = Line("Mustafa Kemal'in komuta ettiği Türk askerine", (56.12, 597.509, 267.53, 610.530), True)
+    assert sorted([stem, number], key=_visual_order_key) == [number, stem]
+
+
+@pytest.mark.skipif(not DORT_DORTLUK.is_file(), reason="Private OGM source not installed")
+def test_dort_dortluk_separates_question_number_stem_and_vector_table():
+    with pymupdf.open(DORT_DORTLUK) as pdf:
+        items = {item["question"]["number"]: item for item in extract_page(pdf[228], 229, "a" * 64)}
+    q2 = items[2]["question"]
+    q3 = items[3]["question"]
+    assert len(q2["parts"]) == 1
+    assert "Mustafa Kemal" not in " ".join(part["text"] for part in q2["parts"])
+    assert "Mustafa Kemal" in " ".join(part["text"] for part in q3["parts"])
+    assert items[1]["question"]["visuals"]

@@ -19,6 +19,7 @@ from ..ayt_autonomy import (
     SplitRecord,
 )
 from ..ayt_knowledge_graph import KnowledgeGraph
+from ..question_scope import AccessibilityAndScopeFilter
 from ..tutor_dataset import CASES
 
 
@@ -86,7 +87,8 @@ def _rows_for_draft(draft: dict) -> list[dict]:
     return output
 
 
-def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict[str, list[dict]], dict, list[dict], list[dict]]:
+def build(graph_payload: dict, *, scope: dict, limit: int = 40,
+          seed: int = 42) -> tuple[dict[str, list[dict]], dict, list[dict], list[dict]]:
     # The research-graph file carries top-level operational metadata
     # (research_only, review status). KnowledgeGraph itself is intentionally
     # strict, so pass only its immutable graph fields into the model.
@@ -101,48 +103,106 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
     # an OCR layout pattern. Search a wider private pool before deciding that
     # the target count is unavailable; the quality gate still decides every
     # individual record.
-    candidates = GraphToQuestionGenerator(graph).generate(limit=max(limit * 6, limit))
-    reviews = [GeneratedDraftQualityGate().review(draft) for draft in candidates]
-    drafts = [draft for draft, review in zip(candidates, reviews) if review.accepted][:limit]
-    if len(drafts) != limit:
-        accepted = sum(review.accepted for review in reviews)
-        raise ValueError(
-            f"Konuşulabilir ve kaynak izli {limit} taslak üretilemedi; "
-            f"{len(candidates)} adayın yalnız {accepted} tanesi kalite kapısından geçti"
+    if graph.corpus_checksum != scope["source_binding"]["corpus_checksum"]:
+        raise ValueError("Hedef kapsam ve graf corpus checksum'ı uyuşmuyor")
+    bindings = scope.get("source_bindings")
+    if bindings:
+        source_page_ranges = {
+            binding["source_checksum"]: [(section["start"], section["end"])
+                                         for section in binding["sections"]]
+            for binding in bindings
+        }
+        allowed_section_ids = [section["section_id"] for binding in bindings
+                               for section in binding["sections"]]
+    else:
+        source_checksum = scope["source_binding"]["meb_source_checksum"]
+        page_ranges = [(section["book_page_range"]["start"], section["book_page_range"]["end"])
+                       for section in scope["sections"]]
+        source_page_ranges = {source_checksum: page_ranges}
+        allowed_section_ids = [section["section_id"] for section in scope["sections"]]
+    scope_filter = AccessibilityAndScopeFilter(
+        target_section_ids=allowed_section_ids,
+        source_page_ranges=source_page_ranges,
+    )
+    # Exhaust the finite source graph. A rejected candidate is logged and the
+    # loop continues; exhaustion is reported as a shortage instead of silently
+    # fabricating questions or hanging in an unbounded while loop.
+    generator = GraphToQuestionGenerator(graph, source_page_ranges=source_page_ranges)
+    candidates = generator.generate(limit=max(len(graph.edges), 1))
+    quality_gate = GeneratedDraftQualityGate()
+    scope_rejections: Counter[str] = Counter()
+    quality_rejections: Counter[str] = Counter()
+    validation_rejections: Counter[str] = Counter()
+    teacher_validator = HistoryTeacherValidatorAgent(graph)
+    drafts = []
+    validations = []
+    for draft in candidates:
+        scope_result = scope_filter.evaluate(
+            {"stem": draft.runtime_question.stem,
+             "choices": [choice.model_dump(mode="json") for choice in draft.runtime_question.choices]},
+            page=draft.page, source_checksum=draft.source_checksum,
         )
-    validations = [HistoryTeacherValidatorAgent(graph).validate_generated_draft(draft) for draft in drafts]
-    rejected = [validation.question_id for validation in validations if validation.decision != "direct"]
-    if rejected:
-        raise ValueError(f"Öğretmen ajanı {len(rejected)} tersine üretilen taslağı doğrudan kanıtlayamadı")
+        if not scope_result.eligible:
+            scope_rejections.update(scope_result.reasons)
+            continue
+        quality = quality_gate.review(draft)
+        if not quality.accepted:
+            quality_rejections.update(quality.issues)
+            continue
+        validation = teacher_validator.validate_generated_draft(draft)
+        if validation.decision != "direct":
+            validation_rejections[validation.decision] += 1
+            continue
+        drafts.append(draft)
+        validations.append(validation)
+        if len(drafts) == limit:
+            break
     private_drafts = [draft.model_dump(mode="json") for draft in drafts]
-    split = ConceptBasedDataSplitter(seed=seed).split([
-        SplitRecord(id=draft.id, concept_keys=draft.concept_keys, payload={"draft_id": draft.id})
-        for draft in drafts
-    ])
-    groups = {name: rows for name, rows in (("train", split.train), ("dev", split.dev), ("sealed_test", split.test))}
-    by_id = {draft["id"]: draft for draft in private_drafts}
-    rows = {name: [row for item in records for row in _rows_for_draft(by_id[item.id])]
-            for name, records in groups.items()}
+    complete_target = len(private_drafts) == limit
+    if complete_target:
+        split = ConceptBasedDataSplitter(seed=seed).split([
+            SplitRecord(id=draft.id, concept_keys=draft.concept_keys, payload={"draft_id": draft.id})
+            for draft in drafts
+        ])
+        groups = {name: items for name, items in (("train", split.train), ("dev", split.dev), ("sealed_test", split.test))}
+        by_id = {draft["id"]: draft for draft in private_drafts}
+        rows = {name: [row for item in items for row in _rows_for_draft(by_id[item.id])]
+                for name, items in groups.items()}
+    else:
+        groups = {"train": [], "dev": [], "sealed_test": []}
+        rows = {name: [] for name in groups}
     manifest = {
         "schema": "autonomous-graph-qlora-research-pack-v1",
-        "status": "candidate_review_required",
+        "status": "candidate_review_required" if complete_target else "source_pool_exhausted_below_target",
         "review_status": "agent_generated_source_traceable",
         "question_groups": len(private_drafts),
-        "examples": sum(len(value) for value in rows.values()),
+        "target_question_groups": limit,
+        "shortfall": max(0, limit - len(private_drafts)),
+        "source_pool_exhausted": not complete_target,
+        "examples": 0,
+        "draft_coaching_turns_for_private_review": sum(len(value) for value in rows.values()),
         "splits": {name: len(records) for name, records in groups.items()},
         "source_bound": True,
         "teacher_agent_direct_validations": len(validations),
+        "semantic_duplicate_candidates_collapsed": generator.semantic_duplicates_collapsed,
         "deterministic_draft_quality_gate": {
             "candidate_count": len(candidates),
             "accepted_count": len(drafts),
-            "rejected_count": sum(not review.accepted for review in reviews),
+            "scope_rejection_reasons": dict(sorted(scope_rejections.items())),
+            "quality_rejection_reasons": dict(sorted(quality_rejections.items())),
+            "teacher_validation_rejections": dict(sorted(validation_rejections.items())),
             "gate": "deterministic_draft_quality_gate_v1",
         },
         "relation_distribution": dict(sorted(Counter(draft.relation_type for draft in drafts).items())),
         "answer_keys_included": False,
         "human_review_required_before_production": True,
         "training_eligible_without_human_review": False,
+        "kaggle_exported": False,
+        "qlora_block_reason": "120 kaynaklı soru grubu ve 720 onaylı koçluk turu tamamlanmadı",
+        "qlora_enabled": False,
         "corpus_checksum": graph.corpus_checksum,
+        "scope_applied": True,
+        "scope_grade": scope.get("grade"),
         "seed": seed,
         "kaggle_runner": {
             "script": "experiments/kaggle/history_tutor_qwen14b_qlora.py",
@@ -153,7 +213,7 @@ def build(graph_payload: dict, *, limit: int = 40, seed: int = 42) -> tuple[dict
             "sealed_test_uploaded": False,
         },
     }
-    return rows, manifest, private_drafts, [review.model_dump(mode="json") for review in reviews]
+    return rows, manifest, private_drafts, [item.model_dump(mode="json") for item in validations]
 
 
 def _write_jsonl(path: Path, rows: list[dict]) -> None:
@@ -170,18 +230,22 @@ def main() -> None:
     parser.add_argument("--quality-audit-output", type=Path, required=True)
     parser.add_argument("--limit", type=int, default=40)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--scope", type=Path, required=True,
+                        help="Private target-scope manifest; limits graph drafts to its book and pages")
     args = parser.parse_args()
     payload = json.loads(args.graph.read_text(encoding="utf-8"))
-    rows, manifest, drafts, reviews = build(payload, limit=args.limit, seed=args.seed)
-    for name in ("train", "dev"):
-        _write_jsonl(args.kaggle_output / f"{name}.jsonl", rows[name])
-    _write_jsonl(args.sealed_output / "sealed_test.jsonl", rows["sealed_test"])
+    scope = json.loads(args.scope.read_text(encoding="utf-8"))
+    _rows, manifest, drafts, reviews = build(payload, limit=args.limit, seed=args.seed, scope=scope)
+    # These are agent-generated review candidates, not approved training rows.
+    # Keep them private. The reviewed DB exporter is the only Kaggle writer.
     args.private_drafts_output.parent.mkdir(parents=True, exist_ok=True)
     args.private_drafts_output.write_text(json.dumps({"schema": "autonomous-graph-drafts-v1", "drafts": drafts}, ensure_ascii=False, indent=2), encoding="utf-8")
     args.quality_audit_output.parent.mkdir(parents=True, exist_ok=True)
-    args.quality_audit_output.write_text(json.dumps({"schema": "generated-draft-quality-audit-v1", "reviews": reviews}, ensure_ascii=False, indent=2), encoding="utf-8")
-    (args.kaggle_output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps(manifest, ensure_ascii=False))
+    args.quality_audit_output.write_text(json.dumps({"schema": "generated-draft-teacher-validation-v1", "reviews": reviews}, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_path = args.private_drafts_output.parent / "candidate-manifest.json"
+    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(json.dumps({**manifest, "private_manifest": str(manifest_path),
+                      "kaggle_output_written": False, "sealed_output_written": False}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

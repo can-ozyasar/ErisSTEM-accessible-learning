@@ -91,9 +91,9 @@ class TutorReviewInput(BaseModel):
     def stage_evidence_contract(self):
         if len(self.source_ids) != len(self.evidence_quotes):
             raise ValueError("Her kaynak kimliği için bir kısa MEB kanıtı gerekli")
-        is_recall_probe = self.case == "kanitla_bag_kur" and self.grounding_mode == "question_derived_recall"
+        is_recall_probe = self.case in CASES[2:4] and self.grounding_mode == "question_derived_recall"
         if self.grounding_mode == "question_derived_recall" and (not is_recall_probe or self.source_ids):
-            raise ValueError("Soru kökünden hatırlama kipi yalnız kanıtsız üçüncü aşamada kullanılabilir")
+            raise ValueError("Soru kökünden hatırlama kipi yalnız kanıtsız üçüncü ve dördüncü aşamada kullanılabilir")
         if is_recall_probe and self.grounded_in_source:
             raise ValueError("Kaynak alıntısız hatırlama turu kaynak bağlı olarak işaretlenemez")
         if self.case not in CASES[:2] and not self.source_ids and not is_recall_probe:

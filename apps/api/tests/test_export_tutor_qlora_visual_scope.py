@@ -32,5 +32,8 @@ def test_recall_prompt_can_be_source_free_only_with_explicit_recall_mode():
     assert row["grounding_mode"] == "question_derived_recall"
 
     draft["records"][0]["case"] = "siki_sina"
+    assert _canonical_records(draft, {"q1": "Soru metni"})[0]["quotes"] == []
+
+    draft["records"][0]["case"] = "yanlis_cevabi_duzelt"
     with pytest.raises(ValueError, match="hatırlama kipi"):
         _canonical_records(draft, {"q1": "Soru metni"})

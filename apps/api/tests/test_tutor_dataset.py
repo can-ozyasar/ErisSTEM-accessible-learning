@@ -55,8 +55,11 @@ def test_question_derived_recall_may_be_source_free_at_evidence_link_stage():
     validate_review_payload(item, {})
     assert item.approved_quality()
 
-    invalid_stage = {**draft, "case": "siki_sina"}
-    with pytest.raises(ValueError, match="yalnız kanıtsız üçüncü aşamada"):
+    option_probe = {**draft, "case": "siki_sina"}
+    assert TutorReviewInput(**option_probe).approved_quality()
+
+    invalid_stage = {**draft, "case": "yanlis_cevabi_duzelt"}
+    with pytest.raises(ValueError, match="yalnız kanıtsız üçüncü ve dördüncü aşamada"):
         TutorReviewInput(**invalid_stage)
     missing_mode = {key: value for key, value in draft.items() if key != "grounding_mode"}
     with pytest.raises(ValueError, match="kaynak gerekli"):
@@ -102,15 +105,15 @@ def test_export_keeps_120_question_groups_and_short_evidence():
 def test_export_omits_empty_evidence_line_for_opening_stage():
     records = [record(f"question-{number:03d}", case) for number in range(120) for case in CASES]
     for row in records:
-        if row["case"] in CASES[:2] or row["case"] == "kanitla_bag_kur":
+        if row["case"] in CASES[:2] or row["case"] in CASES[2:4]:
             row["source_ids"] = []
             row["evidence_quotes"] = []
-            if row["case"] == "kanitla_bag_kur":
+            if row["case"] in CASES[2:4]:
                 row["grounding_mode"] = "question_derived_recall"
                 row["grounded_in_source"] = False
     rows, _ = export_rows(records)
     examples = [row for split in rows.values() for row in split]
-    source_free = set(CASES[:2]) | {"kanitla_bag_kur"}
+    source_free = set(CASES[:4])
     assert all("MEB kanıtı:" not in row["prompt"] for row in examples if row["case"] in source_free)
     assert all("MEB kanıtı:" in row["prompt"] for row in examples if row["case"] not in source_free)
 

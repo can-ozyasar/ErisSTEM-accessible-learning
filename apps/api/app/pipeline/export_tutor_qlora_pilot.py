@@ -55,11 +55,11 @@ def _canonical_records(payload: dict, questions: dict[str, str]) -> list[dict]:
         grounding_mode = row.get("grounding_mode", "source_evidence")
         if case not in CASES or not isinstance(response, str) or not response.strip():
             raise ValueError("Pilot koçluk aşaması veya yanıtı geçersiz")
-        recall_probe = case == "kanitla_bag_kur" and grounding_mode == "question_derived_recall"
+        recall_probe = case in CASES[2:4] and grounding_mode == "question_derived_recall"
         if grounding_mode not in {"source_evidence", "question_derived_recall"}:
             raise ValueError("Pilot kanıtlama kipi geçersiz")
         if grounding_mode == "question_derived_recall" and (not recall_probe or source_ids or quotes):
-            raise ValueError("Soru kökünden hatırlama kipi yalnız kanıtsız üçüncü aşamada kullanılabilir")
+            raise ValueError("Soru kökünden hatırlama kipi yalnız kanıtsız üçüncü ve dördüncü aşamada kullanılabilir")
         allowed_evidence_counts = {0, 1, 2} if case in CASES[:2] or recall_probe else {1, 2}
         if len(source_ids) not in allowed_evidence_counts or len(source_ids) != len(quotes):
             raise ValueError("Pilot kanıt sayısı koçluk aşamasıyla uyumlu olmalı")

@@ -612,11 +612,12 @@ Taslak ve denetim kayıtları private
 `agent-coaching-pilot-a/` ile `agent-coaching-pilot-b/` altında kalır.
 
 Üretim verisi halen **120 grupluk hedefe ulaşmamıştır** ve Kaggle QLoRA
-başlatılmamıştır. `question_derived_recall` kipi, yalnız üçüncü aşamadaki
-kaynak alıntısız hatırlama sorusuna izin verir; kip kullanıldığında yeni kişi,
-tarih veya olay bilgisi eklenmemesi istemde belirtilir. Kaynak bağlı açıklama
-sonraki aşamalarda sürer. Bu istisna üretici ve bağımsız ajan incelemesiyle
-onaylanır; diğer aşamalardaki kaynak zorunluluğunu gevşetmez.
+başlatılmamıştır. `question_derived_recall` kipi, üçüncü ve dördüncü
+aşamalardaki kaynak alıntısız hatırlama/şık sınama sorularına izin verir; kip
+kullanıldığında yeni kişi, tarih veya olay bilgisi eklenmemesi istemde
+belirtilir. Kaynak bağlı açıklama sonraki aşamalarda sürer. Bu istisna
+üretici ve bağımsız ajan incelemesiyle onaylanır; diğer aşamalardaki kaynak
+zorunluluğunu gevşetmez.
 
 ## 17 Kasım 2026: Altı bölüm aday havuzu denetimi
 

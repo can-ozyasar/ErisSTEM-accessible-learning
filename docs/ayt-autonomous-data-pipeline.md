@@ -600,13 +600,20 @@ tur, ilk dört tur kuralı içinde iki doğru olayı zafer ölçütüyle eşleş
 cevabı fiilen açığa çıkarıyor. Sonraki revizyon açık seçenek adı kullanmasa da
 yalnız ölçütü karşılayan iki olaya ait kanıtları göstererek aynı cevabı dolaylı
 biçimde belirginleştirdi ve yine reddedildi. Bu bulguya göre üçüncü tur, nötr
-hatırlama sorusuna dönüştürülecek; kaynak kanıtı öğrenci denemesinden sonraki
-geri bildirimde kullanılacak. Diğer turlar doğal ve yaş düzeyine uygun; son iki
-tur öğrenci denemesinden sonra uygun. Grubun tek bölümden gelmesi ve insan
-öğretmen onayının bulunmaması da ayrı kabul engelleridir. Taslak ve denetim kayıtları private
+hatırlama sorusuna dönüştürüldü; kaynak kanıtı öğrenci denemesinden sonraki
+geri bildirimde kullanılacak. Güncel prompt/durum uyumu ve sızıntı olmaması
+ikinci ajan tarafından doğrulandı. Kullanıcı bu projedeki içerik onaylarını
+öğretmen rolündeki ajanlara devretmiştir; üretici ajandan bağımsız ikinci ajan
+incelemesi kabul kapısıdır, ayrıca insan öğretmen onayı beklenmez. Bu ajan
+incelemesi, gerçek bir sınıf öğretmeninin insan değerlendirmesi olarak
+raporlanmayacaktır. Bu nedenle bir grup kaynak ve koçluk incelemesini geçti;
+ancak bu **1/120 adaydır**, üretim kümesi veya QLoRA-ready export değildir.
+Taslak ve denetim kayıtları private
 `agent-coaching-pilot-a/` ile `agent-coaching-pilot-b/` altında kalır.
 
-Bu pilot üretim verisi değildir: halen **0 QLoRA için kabul edilmiş grup**
-vardır ve Kaggle eğitimi başlatılmamıştır. Önce exact-source kırpımları ve
-koçluk tur sözleşmesi düzeltilmeli, ikinci ajan tekrar incelemeli; ardından
-aynı kalite kapısı tüm 120 soru/720 tur için uygulanmalıdır.
+Üretim verisi halen **120 grupluk hedefe ulaşmamıştır** ve Kaggle QLoRA
+başlatılmamıştır. `question_derived_recall` kipi, yalnız üçüncü aşamadaki
+kaynak alıntısız hatırlama sorusuna izin verir; kip kullanıldığında yeni kişi,
+tarih veya olay bilgisi eklenmemesi istemde belirtilir. Kaynak bağlı açıklama
+sonraki aşamalarda sürer. Bu istisna üretici ve bağımsız ajan incelemesiyle
+onaylanır; diğer aşamalardaki kaynak zorunluluğunu gevşetmez.

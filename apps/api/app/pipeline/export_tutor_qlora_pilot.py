@@ -52,9 +52,15 @@ def _canonical_records(payload: dict, questions: dict[str, str]) -> list[dict]:
         source_ids = row.get("source_ids") or [item.get("source_id") for item in evidence]
         quotes = row.get("evidence_quotes") or [item.get("quote") for item in evidence]
         response = row.get("guide_response", row.get("coach_response", ""))
+        grounding_mode = row.get("grounding_mode", "source_evidence")
         if case not in CASES or not isinstance(response, str) or not response.strip():
             raise ValueError("Pilot koçluk aşaması veya yanıtı geçersiz")
-        allowed_evidence_counts = {0, 1, 2} if case in CASES[:2] else {1, 2}
+        recall_probe = case == "kanitla_bag_kur" and grounding_mode == "question_derived_recall"
+        if grounding_mode not in {"source_evidence", "question_derived_recall"}:
+            raise ValueError("Pilot kanıtlama kipi geçersiz")
+        if grounding_mode == "question_derived_recall" and (not recall_probe or source_ids or quotes):
+            raise ValueError("Soru kökünden hatırlama kipi yalnız kanıtsız üçüncü aşamada kullanılabilir")
+        allowed_evidence_counts = {0, 1, 2} if case in CASES[:2] or recall_probe else {1, 2}
         if len(source_ids) not in allowed_evidence_counts or len(source_ids) != len(quotes):
             raise ValueError("Pilot kanıt sayısı koçluk aşamasıyla uyumlu olmalı")
         if any(not isinstance(value, str) or not value.strip() or len(value) > 520 for value in quotes):
@@ -72,7 +78,7 @@ def _canonical_records(payload: dict, questions: dict[str, str]) -> list[dict]:
             "group_id": question_id, "case": case, "error_type": row.get("error_type", "genel"),
             "question": row.get("question_text", questions[question_id]),
             "learner_state": row.get("learner_state", row.get("student_assumption", "Öğrenci bağlantıyı kurmaya çalışıyor.")),
-            "quotes": quotes, "completion": response,
+            "quotes": quotes, "grounding_mode": grounding_mode, "completion": response,
         })
     return output
 
@@ -100,6 +106,8 @@ def build(drafts: list[dict], transcriptions: dict) -> tuple[dict[str, list[dict
                 "Koçluk durumu: " + row["case"], "Hata türü: " + row["error_type"],
                 "Soru: " + row["question"], "Öğrenci: " + row["learner_state"],
             ]
+            if row["grounding_mode"] == "question_derived_recall":
+                prompt_lines.append("Yalnız soru ve öğrencinin ifadesinden hareketle hatırlama sorusu sor; yeni tarih, kişi veya olay bilgisi ekleme.")
             if row["quotes"]:
                 prompt_lines.append("MEB kanıtı: " + " ".join(row["quotes"]))
             prompt = "\n".join([*prompt_lines, "Koç:"])

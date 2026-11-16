@@ -46,6 +46,23 @@ def test_question_analysis_can_ask_without_evidence_but_later_stages_cannot():
         validate_review_payload(TutorReviewInput(**later), {})
 
 
+def test_question_derived_recall_may_be_source_free_at_evidence_link_stage():
+    draft = {key: value for key, value in record("question-1", "kanitla_bag_kur").items()
+             if key != "question_text"}
+    draft.update({"source_ids": [], "evidence_quotes": [], "grounding_mode": "question_derived_recall",
+                  "grounded_in_source": False, "expected_revision": 0})
+    item = TutorReviewInput(**draft)
+    validate_review_payload(item, {})
+    assert item.approved_quality()
+
+    invalid_stage = {**draft, "case": "siki_sina"}
+    with pytest.raises(ValueError, match="yalnız kanıtsız üçüncü aşamada"):
+        TutorReviewInput(**invalid_stage)
+    missing_mode = {key: value for key, value in draft.items() if key != "grounding_mode"}
+    with pytest.raises(ValueError, match="kaynak gerekli"):
+        TutorReviewInput(**missing_mode)
+
+
 def test_drafts_use_six_natural_coaching_cases_and_independent_rubric():
     drafts = create_drafts("Bu olay MÖ VI. yüzyılda ne zaman gerçekleşti?", [{"id": "meb-1", "text": "Olay MÖ VI. yüzyılda gerçekleşmiştir."}])
     assert [item["case"] for item in drafts] == list(CASES)
@@ -55,6 +72,10 @@ def test_drafts_use_six_natural_coaching_cases_and_independent_rubric():
 
 def test_export_keeps_120_question_groups_and_short_evidence():
     records = [record(f"question-{number:03d}", case) for number in range(120) for case in CASES]
+    for row in records:
+        if row["case"] == "kanitla_bag_kur":
+            row.update({"source_ids": [], "evidence_quotes": [], "grounding_mode": "question_derived_recall",
+                        "grounded_in_source": False})
     rows, summary = export_rows(records)
     assert summary["question_groups"] == 120
     assert summary["examples"] == 720
@@ -66,21 +87,32 @@ def test_export_keeps_120_question_groups_and_short_evidence():
         for example in examples:
             locations.setdefault(example["group_id"], set()).add(split)
             assert set(example) == {"group_id", "case", "error_type", "prompt", "completion"}
-            assert "MEB kanıtı:" in example["prompt"]
+            if example["case"] == "kanitla_bag_kur":
+                assert "MEB kanıtı:" not in example["prompt"]
+                assert "yeni tarih, kişi veya olay bilgisi ekleme" in example["prompt"]
+            else:
+                assert "MEB kanıtı:" in example["prompt"]
             assert "answer_label" not in example["prompt"]
     assert all(len(value) == 1 for value in locations.values())
+    recalls = [row for examples in rows.values() for row in examples if row["case"] == "kanitla_bag_kur"]
+    assert all("MEB kanıtı:" not in row["prompt"] for row in recalls)
+    assert all("yeni tarih, kişi veya olay bilgisi ekleme" in row["prompt"] for row in recalls)
 
 
 def test_export_omits_empty_evidence_line_for_opening_stage():
     records = [record(f"question-{number:03d}", case) for number in range(120) for case in CASES]
     for row in records:
-        if row["case"] in CASES[:2]:
+        if row["case"] in CASES[:2] or row["case"] == "kanitla_bag_kur":
             row["source_ids"] = []
             row["evidence_quotes"] = []
+            if row["case"] == "kanitla_bag_kur":
+                row["grounding_mode"] = "question_derived_recall"
+                row["grounded_in_source"] = False
     rows, _ = export_rows(records)
     examples = [row for split in rows.values() for row in split]
-    assert all("MEB kanıtı:" not in row["prompt"] for row in examples if row["case"] in CASES[:2])
-    assert all("MEB kanıtı:" in row["prompt"] for row in examples if row["case"] not in CASES[:2])
+    source_free = set(CASES[:2]) | {"kanitla_bag_kur"}
+    assert all("MEB kanıtı:" not in row["prompt"] for row in examples if row["case"] in source_free)
+    assert all("MEB kanıtı:" in row["prompt"] for row in examples if row["case"] not in source_free)
 
 
 def test_concept_split_keeps_shared_and_transitively_shared_concepts_together():

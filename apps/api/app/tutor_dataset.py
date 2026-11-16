@@ -16,6 +16,7 @@ CASES = (
 EARLY_ANSWER_CASES = set(CASES[:4])
 ERROR_TYPES = ("kisi", "tarih", "yer", "kronoloji", "neden_sonuc", "kaynak_yorumu", "asiri_genelleme", "genel")
 CONCEPT_KEYS_SOURCE = "approved_graph_edges_v1"
+GROUNDING_MODES = ("source_evidence", "question_derived_recall")
 
 
 class TutorReviewInput(BaseModel):
@@ -23,6 +24,7 @@ class TutorReviewInput(BaseModel):
     question_id: str = Field(min_length=3, max_length=80)
     case: str
     error_type: str
+    grounding_mode: str = "source_evidence"
     source_ids: list[str] = Field(default_factory=list, max_length=2)
     evidence_quotes: list[str] = Field(default_factory=list, max_length=2)
     # Server-derived from the reviewed evidence graph and source chunks.
@@ -54,6 +56,13 @@ class TutorReviewInput(BaseModel):
             raise ValueError("Bilinmeyen hata türü")
         return value
 
+    @field_validator("grounding_mode")
+    @classmethod
+    def known_grounding_mode(cls, value: str):
+        if value not in GROUNDING_MODES:
+            raise ValueError("Bilinmeyen kanıtlama kipi")
+        return value
+
     @field_validator("source_ids")
     @classmethod
     def unique_sources(cls, value: list[str]):
@@ -82,12 +91,18 @@ class TutorReviewInput(BaseModel):
     def stage_evidence_contract(self):
         if len(self.source_ids) != len(self.evidence_quotes):
             raise ValueError("Her kaynak kimliği için bir kısa MEB kanıtı gerekli")
-        if self.case not in CASES[:2] and not self.source_ids:
+        is_recall_probe = self.case == "kanitla_bag_kur" and self.grounding_mode == "question_derived_recall"
+        if self.grounding_mode == "question_derived_recall" and (not is_recall_probe or self.source_ids):
+            raise ValueError("Soru kökünden hatırlama kipi yalnız kanıtsız üçüncü aşamada kullanılabilir")
+        if is_recall_probe and self.grounded_in_source:
+            raise ValueError("Kaynak alıntısız hatırlama turu kaynak bağlı olarak işaretlenemez")
+        if self.case not in CASES[:2] and not self.source_ids and not is_recall_probe:
             raise ValueError("Kanıtla bağ kurma ve sonraki aşamalarda kaynak gerekli")
         return self
 
     def approved_quality(self) -> bool:
-        return self.approved and self.grounded_in_source and self.simple_turkish and self.age_appropriate and not self.early_answer_disclosed
+        grounded = self.grounded_in_source or self.grounding_mode == "question_derived_recall"
+        return self.approved and grounded and self.simple_turkish and self.age_appropriate and not self.early_answer_disclosed
 
 
 def review_id(question_id: str, case: str) -> str:
@@ -164,6 +179,8 @@ def export_rows(records: Iterable[dict]) -> tuple[dict[str, list[dict]], dict]:
                 f"Koçluk durumu: {case}", f"Hata türü: {item['error_type']}",
                 f"Soru: {item['question_text']}", f"Öğrenci: {item['learner_state']}",
             ]
+            if item.get("grounding_mode") == "question_derived_recall":
+                prompt_lines.append("Yalnız soru ve öğrencinin ifadesinden hareketle hatırlama sorusu sor; yeni tarih, kişi veya olay bilgisi ekleme.")
             if item["evidence_quotes"]:
                 prompt_lines.append("MEB kanıtı: " + " ".join(item["evidence_quotes"]))
             prompt = "\n".join([*prompt_lines, "Koç:"])

@@ -630,8 +630,14 @@ görsel ve kanıt denetimini tamamlamamıştır; ayrıca 29 soru çifti yakın t
 olarak görsel doğrulama bekler.
 
 Bu 29 soru eğitim veya runtime onayı değildir. Atom düzeyindeki alıntı
-provenance kapısı toplu denetimde geçmedi (23 uyarı); kaynak kanıt atomlarının
-durumu `candidate_quote_verified_not_approved` olarak kalır. İlk ek gruplar,
+provenance kapısı toplu denetimde geçmedi (23 uyarı). İkinci ajan bunları 15
+bölüm aralığı uyuşmazlığı (9 soru), 4 kırpım/alıntı sürekliliği ve 4 kısa
+alıntının iddiayı destekleyip desteklemediğinin incelenmesi olarak ayırdı;
+checksum, kimlik veya kopya kimlik uyuşmazlığı yok. Otomatik güvenli düzeltme
+sayısı sıfırdır: bölüm/rol değişikliği uzman incelemesi, kırpım düzeltmesi
+yeniden çıkarım ve görsel kontrol, kısa alıntı kararı anlamsal inceleme ister.
+Kaynak kanıt atomlarının durumu `candidate_quote_verified_not_approved` olarak
+kalır. İlk ek gruplar,
 kesit/alıntı eşleşmesini ve soru-kanıt ilişkisini ayrı ayrı doğrulayarak
 hazırlanacaktır. Böylece soru kırpımının doğru olması, kanıtın soruyu
 desteklediği varsayımına dönüştürülmez.

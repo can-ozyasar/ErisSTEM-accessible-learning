@@ -617,3 +617,21 @@ kaynak alıntısız hatırlama sorusuna izin verir; kip kullanıldığında yeni
 tarih veya olay bilgisi eklenmemesi istemde belirtilir. Kaynak bağlı açıklama
 sonraki aşamalarda sürer. Bu istisna üretici ve bağımsız ajan incelemesiyle
 onaylanır; diğer aşamalardaki kaynak zorunluluğunu gevşetmez.
+
+## 17 Kasım 2026: Altı bölüm aday havuzu denetimi
+
+Bağımsız ajan, sıkı kapsam havuzundaki 29 benzersiz metin sorusunun tamamında
+soru transkripsiyonu ile PDF kırpımının eşleştiğini doğruladı. Kaynak kanıtı
+kararları aday düzeyindedir: 17 doğrudan, 8 sınırlı çıkarım, 3 yetersiz ve 1
+yanlış kanıt. Bölüm dağılımı 1.3: 6; 2.1: 9; 2.4: 4; 2.5: 4; 3.1: 4; 3.2: 2
+sorudur. 3.2'deki iki doğrudan adayın kaynak/bölüm aralığı bayrakları vardır;
+2.4'teki yanlış kanıt adayı dışlanır. Daha geniş 55 soru kapasite sayımı
+görsel ve kanıt denetimini tamamlamamıştır; ayrıca 29 soru çifti yakın tekrar
+olarak görsel doğrulama bekler.
+
+Bu 29 soru eğitim veya runtime onayı değildir. Atom düzeyindeki alıntı
+provenance kapısı toplu denetimde geçmedi (23 uyarı); kaynak kanıt atomlarının
+durumu `candidate_quote_verified_not_approved` olarak kalır. İlk ek gruplar,
+kesit/alıntı eşleşmesini ve soru-kanıt ilişkisini ayrı ayrı doğrulayarak
+hazırlanacaktır. Böylece soru kırpımının doğru olması, kanıtın soruyu
+desteklediği varsayımına dönüştürülmez.

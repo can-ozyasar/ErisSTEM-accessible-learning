@@ -575,3 +575,35 @@ bu metinle birebir eşleşirse kullanılabilecek. Yeni corpus checksum'ı V7'ye
 çıktı; eski V11 sonuçlarıyla karşılaştırılmayacak. İnsan öğretmen onayı gelene
 dek retrieval sonucu öğrenciye, Kaggle'a, runtime'a ve QLoRA'ya açılmayacaktır. Private materyal
 `dort-dortluk-evidence-review-v10-option-reserve-top48-delta/` altında.
+
+## 16 Kasım 2026: Tam checksum'lı kaynak ve koçluk pilot kapısı
+
+Eksik olduğu sanılan 12. sınıf kaynağının resmî OGM/EBA kopyası, MEB'in
+verdiği bağlantıdan private alana indirildi. `inkilap-12-aday-eba.pdf` SHA-256
+değeri `64a392e28af85a936003f25840a7a792ab006ef648ebea7ba34931b9e1421847`
+olup V7 corpus'taki 12. sınıf `source_checksum` ile birebir eşleşiyor. PDF 287
+sayfa olarak açılıyor; private dosya Git'e eklenmedi.
+
+Bu kaynakla AYT Tarama'dan tek bir öğretmen-agent taslağı (1 grup/6 tur)
+hazırlandı. İlk denetim 2/4 erken turda dolaylı cevap ifşası, 6/6 turda aşama
+etiketi uyumsuzluğu ve 4/6 turda ikiden fazla kaynak kullandığını saptadı.
+Doğru checksum'lı EBA PDF'sinden dört atomun kimliği ve alıntısı V7 corpus ile
+eşleştirildi; bağımsız inceleyen dört kaynak kırpımını ve soru kırpımını
+görsel olarak kontrol edip sorunun metin temelli olduğunu doğruladı. Dört
+kırpımın koordinatları ilk ajan tarafından yeniden oluşturulup ayrıca görsel
+kontrol edildi. Koçluk taslağı kanonik altı aşama ve tur başına en fazla iki
+kaynağa uyarlandı. Dışa aktarım şema kontrolünde 6/6 tur geçti; bu içerik
+kalitesi veya öğretmen onayı değildir.
+
+İkinci ajanın bağımsız pedagojik denetimi güncel revizyonu **reddetti**: üçüncü
+tur, ilk dört tur kuralı içinde iki doğru olayı zafer ölçütüyle eşleştirerek
+cevabı fiilen açığa çıkarıyor. Diğer turlar doğal ve yaş düzeyine uygun; son iki
+tur öğrenci denemesinden sonra uygun. Üçüncü tur tekrar yazılıp yeniden
+inceleniyor. Grubun tek bölümden gelmesi ve insan öğretmen onayının bulunmaması
+da ayrı kabul engelleridir. Taslak ve denetim kayıtları private
+`agent-coaching-pilot-a/` ile `agent-coaching-pilot-b/` altında kalır.
+
+Bu pilot üretim verisi değildir: halen **0 QLoRA için kabul edilmiş grup**
+vardır ve Kaggle eğitimi başlatılmamıştır. Önce exact-source kırpımları ve
+koçluk tur sözleşmesi düzeltilmeli, ikinci ajan tekrar incelemeli; ardından
+aynı kalite kapısı tüm 120 soru/720 tur için uygulanmalıdır.

@@ -597,10 +597,13 @@ kalitesi veya öğretmen onayı değildir.
 
 İkinci ajanın bağımsız pedagojik denetimi güncel revizyonu **reddetti**: üçüncü
 tur, ilk dört tur kuralı içinde iki doğru olayı zafer ölçütüyle eşleştirerek
-cevabı fiilen açığa çıkarıyor. Diğer turlar doğal ve yaş düzeyine uygun; son iki
-tur öğrenci denemesinden sonra uygun. Üçüncü tur tekrar yazılıp yeniden
-inceleniyor. Grubun tek bölümden gelmesi ve insan öğretmen onayının bulunmaması
-da ayrı kabul engelleridir. Taslak ve denetim kayıtları private
+cevabı fiilen açığa çıkarıyor. Sonraki revizyon açık seçenek adı kullanmasa da
+yalnız ölçütü karşılayan iki olaya ait kanıtları göstererek aynı cevabı dolaylı
+biçimde belirginleştirdi ve yine reddedildi. Bu bulguya göre üçüncü tur, nötr
+hatırlama sorusuna dönüştürülecek; kaynak kanıtı öğrenci denemesinden sonraki
+geri bildirimde kullanılacak. Diğer turlar doğal ve yaş düzeyine uygun; son iki
+tur öğrenci denemesinden sonra uygun. Grubun tek bölümden gelmesi ve insan
+öğretmen onayının bulunmaması da ayrı kabul engelleridir. Taslak ve denetim kayıtları private
 `agent-coaching-pilot-a/` ile `agent-coaching-pilot-b/` altında kalır.
 
 Bu pilot üretim verisi değildir: halen **0 QLoRA için kabul edilmiş grup**

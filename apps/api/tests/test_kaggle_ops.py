@@ -130,6 +130,34 @@ def test_output_filenames_pattern_matches_only_the_allowlisted_report_names():
     assert not re.fullmatch(pattern, "run-1/audio.wav")
 
 
+def test_ayt_retrieval_rankings_require_rerank_to_stay_inside_rrf_window(tmp_path: Path, monkeypatch):
+    module = kaggle_ops_module()
+    private = tmp_path / "private"
+    private.mkdir()
+    calibration = private / "calibration.json"
+    calibration.write_text(json.dumps({
+        "schema": "ogm-ayt-discovery-calibration-v1", "source_checksum": "a" * 64,
+        "corpus_checksum": "b" * 64, "queries": [{"id": "q"}],
+        "documents": [{"id": "a"}, {"id": "b"}, {"id": "c"}],
+    }), encoding="utf-8")
+    ranking = private / "rankings.json"
+    ranking.write_text(json.dumps({
+        "schema": "ogm-ayt-relation-retrieval-rankings-v1", "source_checksum": "a" * 64,
+        "corpus_checksum": "b" * 64, "ranking_methods": ["bm25", "qwen_dense", "rrf", "rrf_rerank"],
+        "rerank_candidates": 2, "document_count": 3, "query_count": 1,
+        "rankings": {"q": {"bm25": ["a"], "qwen_dense": ["b"], "rrf": ["a", "b", "c"],
+                             "rrf_rerank": ["b", "a"]}},
+        "latencies_by_method_ms": {}, "runtime_enabled": False, "qlora_enabled": False,
+    }), encoding="utf-8")
+    monkeypatch.setattr(module, "private_root", lambda: private)
+    module.validate_ayt_retrieval_rankings(ranking, calibration)
+    payload = json.loads(ranking.read_text(encoding="utf-8"))
+    payload["rankings"]["q"]["rrf_rerank"] = ["c"]
+    ranking.write_text(json.dumps(payload), encoding="utf-8")
+    with pytest.raises(ValueError, match="top-20"):
+        module.validate_ayt_retrieval_rankings(ranking, calibration)
+
+
 def test_symbol_prediction_validation_requires_exactly_the_sealed_input_ids(tmp_path: Path, monkeypatch):
     module = kaggle_ops_module()
     private = tmp_path / "private"
@@ -198,6 +226,8 @@ def test_download_summaries_ignores_kaggle_technical_log_but_keeps_it_out_of_man
         {"filename": "layout_probe_summary.json", "downloaded": False},
         {"filename": "training_data_report.json", "downloaded": False},
         {"filename": "artifact_manifest.json", "downloaded": False},
+        {"filename": "acceptance_report.json", "downloaded": False},
+        {"filename": "resume_checkpoint_manifest.json", "downloaded": False},
     ]
     manifest = json.loads((destination / "download_manifest.json").read_text(encoding="utf-8"))
     assert [item["path"] for item in manifest["files"]] == ["run_metadata.json"]

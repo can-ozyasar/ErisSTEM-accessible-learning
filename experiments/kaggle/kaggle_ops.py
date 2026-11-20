@@ -28,10 +28,13 @@ SUMMARY_FILENAMES = (
     "layout_probe_summary.json",
     "training_data_report.json",
     "artifact_manifest.json",
+    "acceptance_report.json",
+    "resume_checkpoint_manifest.json",
 )
 SYMBOL_PREDICTIONS_FILENAME = "symbol_predictions.json"
 FORMULA_PREDICTIONS_FILENAME = "formula_predictions.json"
 TTS_CANDIDATE_TRANSCRIPTS_FILENAME = "candidate_transcripts.json"
+AYT_RETRIEVAL_RANKINGS_FILENAME = "ayt-qwen-retrieval-rankings-v1.json"
 TTS_AUDIO_ID_PATTERN = re.compile(r"^[A-Za-z0-9._-]+$")
 MAX_TTS_AUDIO_FILES = 200
 MAX_TTS_TRANSCRIPT_CHARS = 8_000
@@ -348,6 +351,137 @@ def download_summaries(kernel: str) -> tuple[Path, list[dict[str, object]]]:
         encoding="utf-8",
     )
     return destination, results
+
+
+def download_tutor_qlora_artifact(kernel: str, artifact_manifest_path: Path) -> Path:
+    """Download and checksum-verify only a declared QLoRA adapter/tokenizer."""
+    manifest_path = private_path(artifact_manifest_path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        files = manifest["files"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("QLoRA artifact manifesti okunamadı") from exc
+    if (manifest.get("schema") != "eristem-tutor-qlora-adapter-artifact-v1" or not isinstance(files, list)
+            or not 1 <= len(files) <= 32):
+        raise ValueError("QLoRA artifact manifesti geçersiz")
+    expected: dict[str, dict] = {}
+    for item in files:
+        path = item.get("path") if isinstance(item, dict) else None
+        if (not isinstance(path, str) or not re.fullmatch(r"(?:adapter|tokenizer)/[A-Za-z0-9_.-]+", path)
+                or not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
+                or not isinstance(item.get("bytes"), int) or not 1 <= item["bytes"] <= 1_000_000_000):
+            raise ValueError("QLoRA artifact dosya sözleşmesi geçersiz")
+        if path in expected:
+            raise ValueError("QLoRA artifact dosyası tekrarlı")
+        expected[path] = item
+    kernel = validate_handle(kernel)
+    destination = output_directory(kernel) / "verified-qlora-adapter"
+    destination.mkdir()
+    suffixes = "|".join(re.escape(name) for name in expected)
+    result = subprocess.run(
+        [kaggle_cli(), "kernels", "output", kernel, "--path", str(destination), "--force", "--quiet",
+         "--file-pattern", rf"^(?:.*/)?(?:{suffixes})$"], text=True, capture_output=True, check=False,
+    )
+    downloaded = [path for path in destination.rglob("*") if path.is_file()]
+    found: dict[str, Path] = {}
+    for path in downloaded:
+        relative = next((name for name in expected if str(path).endswith(name)), None)
+        if relative is None or relative in found:
+            raise RuntimeError("QLoRA artifact indirmesi allowlist dışı veya belirsiz dosya içeriyor")
+        found[relative] = path
+    if result.returncode != 0 or set(found) != set(expected):
+        raise RuntimeError("QLoRA adapter dosyalarının tamamı indirilemedi")
+    for relative, path in found.items():
+        item = expected[relative]
+        if path.stat().st_size != item["bytes"] or sha256(path) != item["sha256"]:
+            raise RuntimeError("QLoRA adapter checksum veya boyutu uyuşmuyor")
+    record = {"schema": "eristem-tutor-qlora-adapter-download-v1", "kernel": kernel,
+              "artifact_manifest_relative_path": str(manifest_path.relative_to(private_root())),
+              "files": [{"path": str(found[name].relative_to(destination)), **expected[name]} for name in sorted(expected)]}
+    (destination / "download_manifest.json").write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
+    return destination
+
+
+def ayt_retrieval_input(calibration_path: Path) -> tuple[set[str], set[str], str, str]:
+    """Read only identities/checksums from the private answer-free input."""
+    path = private_path(calibration_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        queries, documents = payload["queries"], payload["documents"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("AYT retrieval kalibrasyon girdisi okunamadı") from exc
+    forbidden = {"answer", "answer_key", "answer_label", "correct_choice", "worked_explanation"}
+    if payload.get("schema") != "ogm-ayt-discovery-calibration-v1" or forbidden & set(payload):
+        raise ValueError("AYT retrieval kalibrasyon sözleşmesi geçersiz")
+    query_ids = {item.get("id") for item in queries if isinstance(item, dict)}
+    document_ids = {item.get("id") for item in documents if isinstance(item, dict)}
+    if (not query_ids or len(query_ids) != len(queries) or not document_ids or len(document_ids) != len(documents)
+            or not all(isinstance(item, str) for item in query_ids | document_ids)):
+        raise ValueError("AYT retrieval kalibrasyon kimlikleri geçersiz")
+    source_checksum, corpus_checksum = payload.get("source_checksum"), payload.get("corpus_checksum")
+    if not all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+               for value in (source_checksum, corpus_checksum)):
+        raise ValueError("AYT retrieval kalibrasyon checksum'ı geçersiz")
+    return query_ids, document_ids, source_checksum, corpus_checksum
+
+
+def validate_ayt_retrieval_rankings(path: Path, calibration_path: Path) -> None:
+    """Accept only the ID-only RRF/top-20 Qwen benchmark output."""
+    query_ids, document_ids, source_checksum, corpus_checksum = ayt_retrieval_input(calibration_path)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        rankings = payload["rankings"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("AYT retrieval ranking çıktısı okunamadı") from exc
+    required = {"schema", "source_checksum", "corpus_checksum", "ranking_methods", "rerank_candidates",
+                "document_count", "query_count", "rankings", "latencies_by_method_ms",
+                "runtime_enabled", "qlora_enabled"}
+    forbidden = {"answer", "answer_key", "answer_label", "correct_choice", "worked_explanation", "search_text", "text"}
+    methods = ("bm25", "qwen_dense", "rrf", "rrf_rerank")
+    if (not required <= set(payload) or forbidden & set(payload)
+            or payload.get("schema") != "ogm-ayt-relation-retrieval-rankings-v1"
+            or payload.get("source_checksum") != source_checksum or payload.get("corpus_checksum") != corpus_checksum
+            or tuple(payload.get("ranking_methods", ())) != methods
+            or payload.get("runtime_enabled") is not False or payload.get("qlora_enabled") is not False
+            or payload.get("query_count") != len(query_ids) or payload.get("document_count") != len(document_ids)
+            or not isinstance(payload.get("rerank_candidates"), int)
+            or not 1 <= payload["rerank_candidates"] <= 20 or set(rankings) != query_ids):
+        raise ValueError("AYT retrieval ranking sözleşmesi geçersiz")
+    for query_id, ranked in rankings.items():
+        if not isinstance(ranked, dict) or set(ranked) != set(methods):
+            raise ValueError(f"AYT retrieval yöntemleri geçersiz: {query_id}")
+        for method, ids in ranked.items():
+            if not isinstance(ids, list) or len(ids) != len(set(ids)) or not set(ids) <= document_ids:
+                raise ValueError(f"AYT retrieval kimlikleri geçersiz: {query_id}/{method}")
+        if not set(ranked["rrf_rerank"]) <= set(ranked["rrf"][:payload["rerank_candidates"]]):
+            raise ValueError("AYT reranker RRF top-20 penceresi dışına çıktı")
+
+
+def download_ayt_retrieval_rankings(kernel: str, calibration_path: Path) -> Path:
+    """Download exactly one validated, ID-only private retrieval benchmark result."""
+    kernel = validate_handle(kernel)
+    destination = output_directory(kernel)
+    result = subprocess.run(
+        [kaggle_cli(), "kernels", "output", kernel, "--path", str(destination), "--force", "--quiet",
+         "--file-pattern", output_filename_pattern(AYT_RETRIEVAL_RANKINGS_FILENAME)],
+        text=True, capture_output=True, check=False,
+    )
+    files = [path for path in destination.rglob(AYT_RETRIEVAL_RANKINGS_FILENAME) if path.is_file()]
+    _, kernel_slug = kernel.split("/", maxsplit=1)
+    technical_log = f"{kernel_slug}.log"
+    unexpected = [path.name for path in destination.rglob("*") if path.is_file()
+                  and path.name not in {AYT_RETRIEVAL_RANKINGS_FILENAME, technical_log}]
+    if result.returncode != 0 or len(files) != 1 or unexpected:
+        raise RuntimeError("Yalnız doğrulanmış AYT retrieval ranking çıktısı indirilemedi")
+    ranking_path = files[0]
+    validate_ayt_retrieval_rankings(ranking_path, calibration_path)
+    (destination / "download_manifest.json").write_text(json.dumps({
+        "schema": "kaggle-ayt-retrieval-download-v1", "kernel": kernel,
+        "calibration_relative_path": str(private_path(calibration_path).relative_to(private_root())),
+        "file": {"path": str(ranking_path.relative_to(destination)), "sha256": sha256(ranking_path),
+                 "bytes": ranking_path.stat().st_size},
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    return ranking_path
 
 
 def tts_audio_expectations(run_records_path: Path) -> tuple[str, dict[str, str]]:
@@ -906,6 +1040,15 @@ def main() -> int:
     status.add_argument("--kernel", required=True)
     output = commands.add_parser("download-summaries", help="Yalnız izinli içeriksiz özet JSON'larını indirir")
     output.add_argument("--kernel", required=True)
+    qlora_artifact = commands.add_parser("download-tutor-qlora-artifact", help="Checksum doğrulanmış QLoRA adapter ve tokenizer dosyalarını indirir")
+    qlora_artifact.add_argument("--kernel", required=True)
+    qlora_artifact.add_argument("--artifact-manifest", type=Path, required=True)
+    retrieval = commands.add_parser(
+        "download-ayt-retrieval-rankings",
+        help="Yalnız RRF top-20 sözleşmesini geçen AYT retrieval ranking çıktısını indirir",
+    )
+    retrieval.add_argument("--kernel", required=True)
+    retrieval.add_argument("--calibration", type=Path, required=True)
     predictions = commands.add_parser(
         "download-symbol-predictions", help="Yalnız şema-doğrulanmış private sembol tahminlerini indirir"
     )
@@ -954,6 +1097,14 @@ def main() -> int:
     if args.command == "download-summaries":
         destination, attempts = download_summaries(args.kernel)
         print(json.dumps({"status": "download-complete", "output": str(destination), "attempts": attempts}, ensure_ascii=False))
+        return 0
+    if args.command == "download-tutor-qlora-artifact":
+        destination = download_tutor_qlora_artifact(args.kernel, args.artifact_manifest)
+        print(json.dumps({"status": "download-complete", "output": str(destination)}, ensure_ascii=False))
+        return 0
+    if args.command == "download-ayt-retrieval-rankings":
+        ranking_path = download_ayt_retrieval_rankings(args.kernel, args.calibration)
+        print(json.dumps({"status": "download-complete", "rankings": str(ranking_path)}, ensure_ascii=False))
         return 0
     if args.command == "download-symbol-predictions":
         prediction_path = download_symbol_predictions(args.kernel, args.input_manifest)

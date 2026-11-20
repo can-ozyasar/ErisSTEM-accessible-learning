@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <title>ErişSTEM — Rapor 02: Gelişme ve Güncel Durum</title>
+  <style>
+    @page { size: A4; margin: 2.2cm 2.2cm 2cm; }
+    @page:first { margin: 1.8cm 2.2cm; }
+    * { box-sizing: border-box; }
+    body { color: #172033; font-family: "Liberation Serif", Georgia, serif; font-size: 11.2pt; line-height: 1.55; }
+    h1, h2, h3 { color: #0d3174; font-family: "Liberation Sans", Arial, sans-serif; }
+    h1 { font-size: 21pt; line-height: 1.2; text-align: center; margin: 16pt 0 8pt; }
+    h2 { font-size: 14pt; border-bottom: 1.4pt solid #1a5ba8; padding-bottom: 4pt; margin: 20pt 0 9pt; }
+    h3 { font-size: 11.5pt; margin: 13pt 0 4pt; }
+    p { text-align: justify; margin: 0 0 9pt; }
+    ul { margin: 4pt 0 10pt 18pt; padding: 0; }
+    li { margin: 3pt 0; }
+    .cover { min-height: 25.5cm; text-align: center; position: relative; padding-top: 4pt; page-break-after: always; }
+    .logo { width: 112px; height: 150px; object-fit: contain; margin: 0 auto 8pt; display: block; }
+    .university { font-family: "Liberation Sans", Arial, sans-serif; color: #0d3174; font-weight: bold; font-size: 15pt; letter-spacing: .25pt; }
+    .faculty { font-family: "Liberation Sans", Arial, sans-serif; color: #344052; font-size: 11pt; margin-top: 3pt; white-space: nowrap; }
+    .rule { width: 70%; border: 0; border-top: 2px solid #1a5ba8; margin: 38pt auto 28pt; }
+    .report-label { color: #1a5ba8; font-family: "Liberation Sans", Arial, sans-serif; font-size: 12pt; font-weight: bold; letter-spacing: .4pt; }
+    .subtitle { font-family: "Liberation Sans", Arial, sans-serif; font-size: 13pt; color: #3f4a5a; margin: 9pt auto 34pt; white-space: nowrap; }
+    .info { width: 76%; margin: 0 auto; border-collapse: collapse; font-size: 11.5pt; text-align: left; }
+    .info th { color: #0d3174; width: 40%; padding: 7pt 8pt; border-bottom: .5pt solid #c7d5e9; font-family: "Liberation Sans", Arial, sans-serif; }
+    .info td { padding: 7pt 8pt; border-bottom: .5pt solid #c7d5e9; }
+    .date { color: #4c5b71; font-family: "Liberation Sans", Arial, sans-serif; font-size: 10.5pt; margin-top: 30pt; }
+    .toc { page-break-before: always; page-break-after: always; }
+    .toc ol { margin-left: 20pt; }
+    .toc li { padding: 3pt 0; }
+    .box { background: #f2f6fb; border-left: 4px solid #1a5ba8; padding: 10pt 13pt; margin: 12pt 0; }
+    .box p { margin: 0; }
+    table.data { width: 100%; border-collapse: collapse; margin: 10pt 0 14pt; font-size: 10.2pt; }
+    table.data th { background: #0d3174; color: white; padding: 7pt; text-align: left; font-family: "Liberation Sans", Arial, sans-serif; }
+    table.data td { padding: 7pt; border: .5pt solid #b9c7d9; vertical-align: top; }
+    table.data tr:nth-child(even) td { background: #f6f8fb; }
+    .page-break { page-break-before: always; }
+    .small { font-size: 10.1pt; }
+    .refs li { margin-bottom: 7pt; }
+    .done { color: #0c6248; font-weight: bold; }
+    .progress { color: #9a5a00; font-weight: bold; }
+    .blocked { color: #8b2635; font-weight: bold; }
+  </style>
+</head>
+<body>
+  <section class="cover">
+    <img class="logo" src="sau-logo.svg" alt="Sakarya Üniversitesi logosu">
+    <div class="university">SAKARYA ÜNİVERSİTESİ</div>
+    <div class="faculty">Bilgisayar ve Bilişim Bilimleri Fakültesi<br>Bilgisayar Mühendisliği Bölümü</div>
+    <hr class="rule">
+    <div class="report-label">BİTİRME PROJESİ</div>
+    <h1>ErişSTEM</h1>
+    <div class="subtitle">Erişilebilir STEM Öğrenme Platformu<br><strong>Rapor 02: Gelişme ve Güncel Durum</strong></div>
+    <table class="info">
+      <tr><th>Hazırlayan</th><td>Muhammed Can Özyaşar</td></tr>
+      <tr><th>Öğrenci Numarası</th><td>G231210009</td></tr>
+      <tr><th>Danışman</th><td>Prof. Dr. Nejat Yumuşak</td></tr>
+      <tr><th>Akademik Birim</th><td>Bilgisayar ve Bilişim Bilimleri Fakültesi</td></tr>
+      <tr><th>Bölüm</th><td>Bilgisayar Mühendisliği</td></tr>
+    </table>
+    <div class="date">Sakarya, 18 Kasım 2026</div>
+  </section>
+
+  <section class="toc">
+    <h2>İçindekiler</h2>
+    <ol>
+      <li>Giriş ve Raporun Kapsamı</li>
+      <li>Rapor 01 Sonrasında Gerçekleştirilen Çalışmalar</li>
+      <li>Uygulanan Sistem Mimarisi</li>
+      <li>Öğrenci Deneyimi ve Erişilebilirlik</li>
+      <li>Kaynak Bağlı İçerik, Öğretmen Denetimi ve Tarih Desteği</li>
+      <li>Ses Teknolojileri ve Deneysel Çalışmalar</li>
+      <li>Doğrulama, Bulgular ve Sınırlılıklar</li>
+      <li>Sonraki Çalışmalar</li>
+      <li>Sonuç</li>
+      <li>Kaynakça</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>1. Giriş ve Raporun Kapsamı</h2>
+    <p>Rapor 01’de ErişSTEM’in problem tanımı, kapsamı ve planlanan mimarisi açıklanmıştır. Bu raporda Ekim ve Kasım 2026 döneminde yapılan geliştirmeler, alınan teknik kararlar ve henüz tamamlanmamış doğrulama çalışmaları ele alınmaktadır. Planlanan bileşenlerin hangi ölçüde uygulamaya geçtiği ile araştırma ve pilot aşamasında kalan çalışmalar birbirinden ayrılmıştır.</p>
+    <p>Çalışma sonunda kaynak dosyasını doğrudan öğrenciye açmayan, kaynak konumunu koruyan, öğretmen denetimini ayıran ve erişilebilir öğrenme akışları içeren yerel bir prototip oluşturulmuştur. Bunun yanında sentetik öğrenme atölyesi, soru çözme arayüzü, yerel Türkçe seslendirme, sınırlı Braille desteği, belge okuyucusu ve öğretmen inceleme akışı aynı uygulama çatısı altında birleştirilmiştir.</p>
+    <div class="box"><p><strong>Raporlama notu:</strong> Uygulamada çalışan özellikler, gerçek kullanıcılarla doğrulanmış sonuçlar olarak değerlendirilmemektedir. Matematiksel Braille, ekran okuyucu görev başarısı, içerik pedagojisi ve öğrenme etkisi için insan değerlendirmesi gerekmektedir.</p></div>
+
+    <h2>2. Rapor 01 Sonrasında Gerçekleştirilen Çalışmalar</h2>
+    <p>İlk raporda tanımlanan “kaynak işleme – kalite denetimi – öğrenci sunumu” zinciri somut yazılım bileşenlerine ayrılmıştır. Uygulama; web arayüzü, API, yerel işlem hattı ve yerel TTS servisinden oluşan konteyner tabanlı bir geliştirme ortamında çalışmaktadır. Gerçek MEB PDF’leri ve türetilmiş içerikler depo dışında, yetkili yerel ortamda tutulmaktadır; depoda yalnız telif açısından güvenli sentetik örnekler bulunmaktadır.</p>
+    <table class="data small">
+      <thead><tr><th>Rapor 01’deki hedef</th><th>Kasım 2026 durumu</th><th>Not</th></tr></thead>
+      <tbody>
+        <tr><td>Kaynak konumunu koruyan işleme</td><td><span class="done">Uygulandı</span></td><td>Sayfa, koordinat, checksum ve işlem kaydı üzerinden izlenebilirlik sağlandı.</td></tr>
+        <tr><td>Öğretmen inceleme ve yayın akışı</td><td><span class="done">Uygulandı</span></td><td>Düşük güvenli içerik için düzeltme, sürüm/audit kaydı ve onaylayıcıyla yayın akışı oluşturuldu.</td></tr>
+        <tr><td>Erişilebilir öğrenci okuyucusu</td><td><span class="done">Uygulandı</span></td><td>Doğrulanmış metin ve basit tablolar için yapılandırılmış HTML, ses ve odak gezintisi eklendi.</td></tr>
+        <tr><td>Öğrenme atölyesi</td><td><span class="done">Uygulandı</span></td><td>Sentetik kümeler, çember ve uçak etkinlikleriyle rehberli/bağımsız çalışma akışı hazırlandı.</td></tr>
+        <tr><td>Türkçe edebî Braille</td><td><span class="progress">Sınırlı olarak uygulandı</span></td><td>Yalnız doğrulanmış başlık ve paragraflarda Türkçe 1. derece dönüşüm açıktır; matematiksel Braille kapalıdır.</td></tr>
+        <tr><td>Matematik, grafik ve karmaşık tablo erişimi</td><td><span class="progress">Kısmen uygulandı</span></td><td>Yayın kapıları ve konuşma planı çalışılmıştır; gerçek kullanıcı doğrulaması tamamlanmamıştır.</td></tr>
+        <tr><td>Model/fine-tune ile öğrenci koçluğu</td><td><span class="blocked">Öğrenciye kapalı</span></td><td>Yalnız private araştırma ve kalite kapısı hazırlıkları vardır; canlı öğrenci yolunda kullanılmamaktadır.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="page-break">
+    <h2>3. Uygulanan Sistem Mimarisi</h2>
+    <p>Mimari, öğrenciye sunulan yayınlanmış içeriği ham kaynak ve araştırma çıktılarından ayıracak şekilde uygulanmıştır. Yetkili kullanıcı yerel kaynağı seçer ve öğretmen tarafından belirlenen sayfa kapsamıyla işlem kuyruğuna alır. İşleme sonucunda oluşan adaylar kaynak sayfası, konumu ve checksum bilgisiyle ilişkilendirilir. Güven veya şema denetiminden geçmeyen öğeler öğrenci okuma planına eklenmez.</p>
+    <table class="data">
+      <thead><tr><th>Katman</th><th>Uygulanan sorumluluk</th><th>Güvenlik / kalite sınırı</th></tr></thead>
+      <tbody>
+        <tr><td>Yerel kaynak ve işlem hattı</td><td>Yetkili PDF’nin envanteri, seçili sayfaların işlenmesi ve türetilmiş çıktının private alanda tutulması.</td><td>Öğrenci yükleme uç noktası yoktur; gerçek PDF ve sayfa görüntüleri depoya alınmaz.</td></tr>
+        <tr><td>Kalite ve öğretmen katmanı</td><td>Belirsiz formül/tabloyu inceleme, düzeltme, sürümleme ve yayın kararı.</td><td>Güven değeri tek başına yayın kararı değildir; doğrulama ve onay gerekir.</td></tr>
+        <tr><td>API</td><td>Öğrenci, öğretmen, öğrenme atölyesi ve inceleme akışları için kontrollü veri erişimi.</td><td>Geliştirme ortamındaki rol başlığı gerçek kimlik doğrulama değildir; üretim için OIDC gereklidir.</td></tr>
+        <tr><td>Öğrenci arayüzü</td><td>Okuma, dinleme, soru çözme, ilerleme ve erişilebilir tercihlerin sunulması.</td><td>Yalnız yayınlanmış/doğrulanmış içerik gösterilir.</td></tr>
+        <tr><td>Araştırma hattı</td><td>RAG, AYT kanıt havuzu ve QLoRA adaylarının private değerlendirmesi.</td><td>Araştırma çıktısı çalışma zamanı verisine veya öğrenciye aktarılmaz.</td></tr>
+      </tbody>
+    </table>
+    <p>Bu ayrım, hem telif ve gizlilik sınırlarını hem de yanlış içerik riskini azaltmaktadır. Özellikle OCR, VLM veya üretken model çıktısı bir “aday” olarak ele alınmakta; kaynak bağı, tür-özel kalite kontrolleri ve gerektiğinde insan incelemesi olmadan yayınlanmamaktadır.</p>
+
+    <h2>4. Öğrenci Deneyimi ve Erişilebilirlik</h2>
+    <p>Öğrenci alanında giriş, kaynak okuma, soru çözme ve öğrenme atölyesi akışları geliştirildi. Tasarımda klavye ile kullanılabilirlik, odağın görünür ve izlenebilir olması, renk dışı durum işaretleri, yüksek kontrast, metin büyütme ve hareket azaltma tercihleri dikkate alınmıştır. Kaydırmalı menü tasarımında ayrıca görünür ileri/geri düğmeleri ve ok tuşu desteği korunmuştur; mobil ekran okuyucunun kendi etkinleştirme hareketine ek bir çift dokunma şartı getirilmemiştir.</p>
+    <p>Sesli keşif kullanıcı tarafından başlatılır; ses servisi kapalı veya kullanılamaz durumda iken metin ve ekran okuyucu erişimi devam eder. Soru değiştiğinde odak yeni soru başlığına taşınır, seçili seçenek metinsel olarak da belirtilir. Bu kararlar WCAG 2.2 ilkeleri doğrultusunda uygulanmış teknik tasarım kararlarıdır; henüz NVDA, TalkBack, VoiceOver veya gerçek kullanıcılarla tamamlanmış kullanılabilirlik sonucu değildir [1].</p>
+
+    <h3>4.1. Öğrenme atölyesi</h3>
+    <p>Öğrenme atölyesinde kümeler, çember ve uçak konuları için dört aşamalı bir çalışma döngüsü oluşturulmuştur: ön bilgi yoklaması, rehberli çalışma, yardımsız aktarım ve 24 saat sonra gecikmeli deneme. İlk yanıt, uygulama içi yardım kullanımı, geçme ve tamamlama bilgisi kullanıcının tarayıcısında tutulur; ham yanıt, ses veya kimlik kaydedilmez. İçerikler sentetiktir ve resmî sınav ya da öğrenme başarısı ölçümü olarak sunulmamaktadır.</p>
+  </section>
+
+  <section class="page-break">
+    <h2>5. Kaynak Bağlı İçerik, Öğretmen Denetimi ve Tarih Desteği</h2>
+    <p>Belge okuyucusunda yayınlanmış belge listesi, doğrulanmış metin için sıralı okuma planı ve basit tablolar için hücre odaklı gezinme hazırlanmıştır. Başlık ve paragraflar, kaynak metne geri dönüş denetimiyle Türkçe 1. derece edebî Braille görünümüne dönüştürülebilmektedir. Desteklenmeyen karakter veya matematik sembolü bulunduğunda dönüşüm güvenli biçimde kapanır; sistem matematiksel ifadeyi edebî Braille’e zorlamaz.</p>
+    <p>Tarih soru bankası için kaynak-bağlı RAG yaklaşımı uygulanmıştır. Yerel tarih kitabından çıkarılan aday parçalar; konu, PDF sayfası, koordinat ve checksum ile saklanır. Öğretmen, aday metni kaynak görüntüsüyle karşılaştırarak onaylar. Öğrenci yardım istediğinde yalnız soruyla eşleşen konuya ait öğretmen onaylı parçalar üzerinde Türkçe BM25 araması yapılır. Konu veya kanıt bulunmuyorsa sistem cevap üretmez. Doğrulanmış doğru şık öğrenci API’sine taşınmaz; destekçi ilk turda soru kökünü anlamaya, sonraki turda kanıt ile seçenekleri ilişkilendirmeye yönelir.</p>
+    <div class="box"><p><strong>Önemli ilke:</strong> Kaynak gösteren bir aday, otomatik olarak doğru öğretim içeriği sayılmaz. Kaynak eşleşmesi, görsel bağımsızlık, kanıtın soruyla ilişkisi ve öğretmen onayı ayrı kalite kapılarıdır.</p></div>
+
+    <h3>5.1. AYT tarih araştırma hattı</h3>
+    <p>AYT tarih soruları için kaynak bağlı, private bir veri tamamlama hattı oluşturulmuştur. Görsel veri gerektiren sorular metin koçluğu kapsamı dışında tutulmaktadır. Soru kökü ve seçenekler üzerinden yapılan retrieval, kaynak checksum’ı, sayfa ve koordinatla denetlenebilir aday kanıtlar üretir; doğru şık tahmini yapmaz. Kavram ortaklığına göre yapılan grup bölme yaklaşımıyla eğitim, geliştirme ve kapalı test arasında kavram sızıntısının azaltılması hedeflenmiştir.</p>
+    <p>Bu hattın en değerli güncel sonucu, otomatik aday üretiminin eğitim verisi anlamına gelmediğinin gösterilmesidir. Önceki araştırma pilotlarında kaynak izi, görsel bağımsızlık ve pedagojik kalite şartları aynı anda sağlanamadığı için üretim QLoRA verisine kabul edilen grup sayısı sıfırda tutulmuştur. Kod ve denetim raporları hazır olsa da 120 onaylı soru grubu ve her grup için altı nitelikli koçluk turu koşulu sağlanmadan dışa aktarım ve eğitim başlatılmayacaktır.</p>
+
+    <h2>6. Ses Teknolojileri ve Deneysel Çalışmalar</h2>
+    <p>Uygulamanın çalışan ses katmanı, Docker iç ağında çalışan yerel Piper Türkçe motorudur. Doğrulanmış kısa bir tarih bölümü üzerinde yapılan ilk ölçümde ilk sentez 2,486 saniye, aynı metnin WAV önbelleğinden dönüşü 0,003 saniye olarak kaydedilmiştir. Bu ölçüm tek kısa örneğe aittir; farklı metin uzunlukları, ağ ve oynatma başlangıcı için genel gecikme iddiası değildir.</p>
+    <p>Chatterbox V3 ile yapılan private referans ses deneyi, 14 kaynak bağlı değerlendirme biriminde teknik olarak ses üretiminin mümkün olduğunu göstermiştir. İlk otomatik ve tek dinleyicili bulgular yeterli kanıt sayılmamış; aday ses öğrenciye açılmamıştır. Fine-tune hattı ve kalite metrikleri hazırlanmış olsa da eğitim yalnız açık izinli, tek konuşmacılı ses/transkript çiftleriyle; kapalı değerlendirme ve kör dinleyici çalışması sonrasında ele alınacaktır. Kaggle altyapısı canlı öğrenci hizmeti değil, süreli private GPU deneyi olarak sınırlandırılmıştır.</p>
+  </section>
+
+  <section class="page-break">
+    <h2>7. Doğrulama, Bulgular ve Sınırlılıklar</h2>
+    <p>Geliştirme sürecinde API birim testleri, web birim testleri, lint, üretim derlemesi ve tarayıcı senaryoları kullanılmıştır. Öğrenme atölyesinin ilk doğrulamasında 161 API testi, 13 arayüz birim testi ve 4 tarayıcı senaryosu; AYT araştırma hattının Kasım doğrulamasında ise tam API test takımında 621/621 testin geçtiği kaydedilmiştir. Otomatik erişilebilirlik taraması, seçilen ekranlarda ihlal bulmamıştır. Bu kontroller regresyonları yakalamaya yardımcı olur; insanın içerik anlayışını veya ekran okuyucu deneyimini tek başına ölçmez.</p>
+    <table class="data small">
+      <thead><tr><th>Alan</th><th>Mevcut bulgu</th><th>Sınırlılık / yorum</th></tr></thead>
+      <tbody>
+        <tr><td>Yazılım doğrulaması</td><td>Birim, entegrasyon ve tarayıcı testleriyle kritik akışlar denetlendi.</td><td>Test geçmesi, gerçek kullanıcı kabulü anlamına gelmez.</td></tr>
+        <tr><td>Erişilebilirlik</td><td>Klavye, odak, kontrast, metin büyütme ve otomatik axe kontrolleri uygulandı.</td><td>NVDA/TalkBack/VoiceOver ile görev testi ve görme yetersizliği olan kullanıcı pilotu eksiktir.</td></tr>
+        <tr><td>İçerik güvenilirliği</td><td>Kaynak koordinatı, checksum, öğretmen incelemesi ve yayın ayrımı kuruldu.</td><td>Gerçek ders içeriğinin uzman onaylı kapsamı henüz sınırlıdır.</td></tr>
+        <tr><td>TTS</td><td>Yerel Piper çalışır; aday sesler için ölçüm ve dinleme protokolü oluşturuldu.</td><td>Kör dinleyici çalışması ve izinli eğitim verisi tamamlanmadı; aday sesler yayınlanmadı.</td></tr>
+        <tr><td>AYT/QLoRA</td><td>Kaynak bağlı aday üretimi, denetim, sızıntısız split ve kapı mekanizmaları geliştirildi.</td><td>Yeterli insan onaylı veri yoktur; eğitim ve çalışma zamanı kullanımı kapalıdır.</td></tr>
+      </tbody>
+    </table>
+    <p>Bu aşamada elde edilen çıktı, tüm STEM içeriklerini kapsayan tamamlanmış bir çözüm değildir. Proje; Türkçe görme yetersizliği bağlamında seçilmiş öğrenme görevleri için kaynak doğruluğunu, farklı erişim biçimlerini, insan denetimini ve yerel yapay zekâ bileşenlerini bir araya getiren bir prototip ile araştırma altyapısı sunmaktadır.</p>
+
+    <h2>8. Sonraki Çalışmalar</h2>
+    <p>Bir sonraki aşama, yeni özellik eklemekten önce mevcut prototipin insan ve içerik doğrulamasını güçlendirmeye odaklanacaktır. Öncelik sırası aşağıdaki gibidir:</p>
+    <ol>
+      <li>Görme yetersizliği olan yetişkin katılımcılarla, tercih ettikleri yardımcı teknolojiler üzerinden görev temelli pilot gerçekleştirmek; tamamlanma, yardım ihtiyacı, odak kaybı ve geri bildirimi ayrı kaydetmek.</li>
+      <li>Özel eğitim ve alan uzmanlarıyla sentetik atölye içeriklerini, temsil biçimlerini ve soru zorluğunu incelemek.</li>
+      <li>NVDA+Firefox, TalkBack+Chrome ve mümkün olduğunda VoiceOver ile belge okuma, soru çözme, tablo gezinme ve ayar görevlerini değerlendirmek.</li>
+      <li>Matematiksel içerik için doğrulanmış MathML, Türkçe konuşma planı ve uygun matematik Braille standardı üzerinde ayrı kalite kapıları oluşturmak.</li>
+      <li>Öğretmen denetiminden geçmiş kaynak bağlı içerik sayısını artırmak; tablo, grafik ve formül türlerinde Gold ölçüm setleri kurmak.</li>
+      <li>AYT tarih araştırma hattında yeterli insan onaylı grup ve sızıntısız bölüm oluşmadan QLoRA eğitimini başlatmamak; koşullar sağlanırsa kapalı test ve insan incelemesiyle değerlendirmek.</li>
+      <li>Üretim kullanımı düşünülürse OIDC tabanlı kimlik doğrulama, kurum içerik sahipliği ve operasyon kayıtlarını geliştirme ortamından ayrı ele almak.</li>
+    </ol>
+
+    <h2>9. Sonuç</h2>
+    <p>Rapor 01’de tanımlanan ErişSTEM yaklaşımı bu dönemde geliştirme prototipine dönüştürülmüştür. Kaynak konumuna bağlı içerik işleme, öğretmen denetimi, erişilebilir öğrenci arayüzü, yerel Türkçe seslendirme, sınırlı Braille görünümü, sentetik öğrenme atölyesi ve kaynak bağlı tarih desteği uygulamaya alınmıştır. Araştırma bileşenleri için de kullanılmadan önce geçilmesi gereken kalite kontrolleri belirlenmiştir.</p>
+    <p>Bununla birlikte proje, erişilebilirlik başarısını otomatik test veya teknik özellik listesiyle eşitlememektedir. Gerçek kullanıcı görevleri, uzman içerik incelemesi, matematiksel temsil doğrulaması ve kontrollü ses/koçluk değerlendirmesi tamamlanmadan öğrenci yayını kapsamı genişletilmeyecektir. Bu yaklaşım, projenin sonraki raporunda test bulguları, pilot gözlemleri ve açık kalan geliştirme ihtiyaçlarının daha somut biçimde değerlendirilmesini sağlayacaktır.</p>
+
+    <h2>10. Kaynakça</h2>
+    <ol class="refs small">
+      <li>World Wide Web Consortium (W3C). (2024). <em>Web Content Accessibility Guidelines (WCAG) 2.2</em>. https://www.w3.org/TR/WCAG22/</li>
+      <li>Aktaş, F. N. ve Argün, Z. (2021). <em>Görme Engelli Bireylerin Matematik Eğitiminde İhtiyaçları ve Sorunları: Cebir Kavramları Bağlamında</em>. Ankara Üniversitesi Eğitim Bilimleri Fakültesi Özel Eğitim Dergisi, 22(3). https://dergipark.org.tr/tr/pub/ozelegitimdergisi/article/750682</li>
+      <li>DAISY Consortium. (t.y.). <em>MathCAT: Math Capable Assistive Technology — User Guide</em>. https://daisy.github.io/MathCAT/users.html</li>
+      <li>Lewis, P. ve diğerleri. (2020). <em>Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks</em>. https://arxiv.org/abs/2005.11401</li>
+      <li>Education Endowment Foundation. (2021). <em>Metacognition and Self-Regulated Learning</em>. https://educationendowmentfoundation.org.uk/education-evidence/guidance-reports/metacognition</li>
+      <li>ErişSTEM proje içi teknik kayıtları: <em>Ürün ve Mühendislik Yol Haritası</em>, <em>Tarih Kitabı RAG ve Rehberli Soru Çözümü</em>, <em>Kaynak Bağlı AYT Veri Tamamlama Hattı</em>, <em>Deney ve Rapor Kaydı</em> (2026).</li>
+    </ol>
+  </section>
+</body>
+</html>

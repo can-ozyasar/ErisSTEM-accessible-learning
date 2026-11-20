@@ -50,3 +50,17 @@ def test_input_manifest_rejects_a_two_epoch_dataset_before_gpu_initialization(tm
 
     with pytest.raises(ValueError, match="3-epoch"):
         module.input_manifest(tmp_path)
+
+
+def test_mount_resolution_deduplicates_default_and_legacy_slug_paths(tmp_path, monkeypatch):
+    module = runner_module()
+    mounted = tmp_path / "history-tutor-qlora-input-resume-v4"
+    mounted.mkdir()
+    for name in ("manifest.json", "train.jsonl", "dev.jsonl"):
+        (mounted / name).write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(module, "KAGGLE_DATASET_HANDLE", "owner/history-tutor-qlora-input-resume-v4")
+    legacy = module.Path("/kaggle/input/history-tutor-qlora-input-resume-v4")
+    monkeypatch.setattr(module, "INPUT", legacy)
+
+    assert module.allowed_input_paths().count(legacy) == 1
+    assert len(module.allowed_input_paths()) == 2

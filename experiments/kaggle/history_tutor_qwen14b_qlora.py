@@ -118,6 +118,13 @@ def verified_resume_checkpoint(input_directory: Path, contract: dict) -> Path | 
     return checkpoint
 
 
+def allowed_input_paths() -> tuple[Path, ...]:
+    """Return unique classic/current Kaggle mount candidates for this dataset."""
+    owner, slug = KAGGLE_DATASET_HANDLE.split("/", maxsplit=1)
+    return tuple(dict.fromkeys((INPUT, Path("/kaggle/input") / slug,
+                                Path("/kaggle/input/datasets") / owner / slug)))
+
+
 def resolve_input_directory() -> Path:
     """Find the one immutable QLoRA input mounted by Kaggle.
 
@@ -127,8 +134,9 @@ def resolve_input_directory() -> Path:
     sources: the selected directory must be the dataset declared above.
     ``input_manifest`` verifies its schema and checksums afterwards.
     """
-    owner, slug = KAGGLE_DATASET_HANDLE.split("/", maxsplit=1)
-    allowed = (INPUT, Path("/kaggle/input") / slug, Path("/kaggle/input/datasets") / owner / slug)
+    # INPUT can be the classic slug path, so de-duplicate resolved candidates
+    # before deciding whether exactly one immutable dataset is mounted.
+    allowed = allowed_input_paths()
     complete = tuple(path for path in allowed
                      if all((path / name).is_file() for name in ("manifest.json", "train.jsonl", "dev.jsonl")))
     if len(complete) != 1:

@@ -402,6 +402,66 @@ def download_tutor_qlora_artifact(kernel: str, artifact_manifest_path: Path) -> 
     return destination
 
 
+def download_tutor_qlora_resume_checkpoint(kernel: str, checkpoint_manifest_path: Path) -> Path:
+    """Download one complete, hash-bound Trainer checkpoint for exact resume."""
+    manifest_path = private_path(checkpoint_manifest_path)
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        checkpoint_name, files = manifest["checkpoint_name"], manifest["files"]
+    except (OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("QLoRA resume checkpoint manifesti okunamadı") from exc
+    if (manifest.get("schema") != "eristem-tutor-qlora-resume-checkpoint-v1"
+            or not isinstance(checkpoint_name, str) or not re.fullmatch(r"checkpoint-[1-9][0-9]*", checkpoint_name)
+            or not isinstance(files, list) or not 5 <= len(files) <= 32):
+        raise ValueError("QLoRA resume checkpoint manifesti geçersiz")
+    expected: dict[str, dict] = {}
+    for item in files:
+        name = item.get("path") if isinstance(item, dict) else None
+        if (not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+                or not isinstance(item.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])
+                or not isinstance(item.get("bytes"), int) or not 1 <= item["bytes"] <= 2_000_000_000
+                or name in expected):
+            raise ValueError("QLoRA resume checkpoint dosya sözleşmesi geçersiz")
+        expected[name] = item
+    required = {"trainer_state.json", "optimizer.pt", "scheduler.pt", "adapter_config.json"}
+    if not required <= set(expected) or not ({"adapter_model.safetensors", "adapter_model.bin"} & set(expected)):
+        raise ValueError("QLoRA resume checkpoint eğitim durumu eksik")
+    kernel = validate_handle(kernel)
+    destination = output_directory(kernel) / "verified-qlora-resume-checkpoint"
+    destination.mkdir()
+    alternatives = "|".join(re.escape(f"{checkpoint_name}/{name}") for name in expected)
+    result = subprocess.run(
+        [kaggle_cli(), "kernels", "output", kernel, "--path", str(destination), "--force", "--quiet",
+         "--file-pattern", rf"^(?:.*/)?(?:{alternatives})$"], text=True, capture_output=True, check=False,
+    )
+    _, kernel_slug = kernel.split("/", maxsplit=1)
+    technical_log = f"{kernel_slug}.log"
+    downloaded = [path for path in destination.rglob("*") if path.is_file()]
+    found: dict[str, Path] = {}
+    for path in downloaded:
+        if path.name == technical_log:
+            continue
+        if path.name not in expected or path.name in found:
+            raise RuntimeError("QLoRA resume checkpoint indirmesi allowlist dışı veya belirsiz dosya içeriyor")
+        found[path.name] = path
+    if result.returncode != 0 or set(found) != set(expected):
+        raise RuntimeError("QLoRA resume checkpoint dosyalarının tamamı indirilemedi")
+    checkpoint_destination = destination / checkpoint_name
+    checkpoint_destination.mkdir()
+    for name, path in found.items():
+        item = expected[name]
+        if path.stat().st_size != item["bytes"] or sha256(path) != item["sha256"]:
+            raise RuntimeError("QLoRA resume checkpoint checksum veya boyutu uyuşmuyor")
+        shutil.move(str(path), checkpoint_destination / name)
+    shutil.copy2(manifest_path, destination / "resume_checkpoint_manifest.json")
+    (destination / "download_manifest.json").write_text(json.dumps({
+        "schema": "eristem-tutor-qlora-resume-checkpoint-download-v1", "kernel": kernel,
+        "checkpoint_manifest_relative_path": str(manifest_path.relative_to(private_root())),
+        "files": [{"path": f"{checkpoint_name}/{name}", **expected[name]} for name in sorted(expected)],
+    }, ensure_ascii=False, indent=2), encoding="utf-8")
+    return destination
+
+
 def ayt_retrieval_input(calibration_path: Path) -> tuple[set[str], set[str], str, str]:
     """Read only identities/checksums from the private answer-free input."""
     path = private_path(calibration_path)
@@ -1043,6 +1103,9 @@ def main() -> int:
     qlora_artifact = commands.add_parser("download-tutor-qlora-artifact", help="Checksum doğrulanmış QLoRA adapter ve tokenizer dosyalarını indirir")
     qlora_artifact.add_argument("--kernel", required=True)
     qlora_artifact.add_argument("--artifact-manifest", type=Path, required=True)
+    qlora_resume = commands.add_parser("download-tutor-qlora-resume-checkpoint", help="Checksum doğrulanmış tam QLoRA eğitim durumunu indirir")
+    qlora_resume.add_argument("--kernel", required=True)
+    qlora_resume.add_argument("--checkpoint-manifest", type=Path, required=True)
     retrieval = commands.add_parser(
         "download-ayt-retrieval-rankings",
         help="Yalnız RRF top-20 sözleşmesini geçen AYT retrieval ranking çıktısını indirir",
@@ -1100,6 +1163,10 @@ def main() -> int:
         return 0
     if args.command == "download-tutor-qlora-artifact":
         destination = download_tutor_qlora_artifact(args.kernel, args.artifact_manifest)
+        print(json.dumps({"status": "download-complete", "output": str(destination)}, ensure_ascii=False))
+        return 0
+    if args.command == "download-tutor-qlora-resume-checkpoint":
+        destination = download_tutor_qlora_resume_checkpoint(args.kernel, args.checkpoint_manifest)
         print(json.dumps({"status": "download-complete", "output": str(destination)}, ensure_ascii=False))
         return 0
     if args.command == "download-ayt-retrieval-rankings":

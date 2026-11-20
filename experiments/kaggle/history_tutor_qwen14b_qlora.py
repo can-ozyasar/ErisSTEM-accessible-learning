@@ -27,8 +27,8 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 MODEL = "Qwen/Qwen3-14B"
 REVISION = "40c069824f4251a91eefaf281ebe4c544efd3e18"
 PLANNED_EPOCHS = 3
-KAGGLE_DATASET_HANDLE = "muhammedcanozyasar/history-tutor-qlora-input-v3"
-INPUT = Path(os.getenv("TUTOR_QLORA_INPUT", "/kaggle/input/history-tutor-qlora-input-v3"))
+KAGGLE_DATASET_HANDLE = "muhammedcanozyasar/history-tutor-qlora-input-resume-v4"
+INPUT = Path(os.getenv("TUTOR_QLORA_INPUT", "/kaggle/input/history-tutor-qlora-input-resume-v4"))
 OUT = Path("/kaggle/working/history-tutor-qwen3-14b-qlora-v1")
 REPORT = OUT / "report.json"
 RUN_METADATA = OUT / "run_metadata.json"

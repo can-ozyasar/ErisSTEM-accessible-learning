@@ -12,10 +12,10 @@ from pathlib import Path
 
 import pymupdf
 
-# Resmî 9. sınıf Matematik kitabı 50 MiB'i az farkla geçmektedir. 75 MiB,
-# ders kitabı kullanımını desteklerken worker kaynak sınırını korur.
+# Resmî ders kitapları 9--12 arasında 350 sayfaya çıkabilmektedir. 600 sayfa,
+# tam kitap alımını desteklerken sıradışı büyük PDF'lere karşı sınırı korur.
 MAX_BYTES = 75 * 1024 * 1024
-MAX_PAGES = 300
+MAX_PAGES = 600
 
 
 class PdfSafetyError(ValueError):

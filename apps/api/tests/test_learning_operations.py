@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app import learning_operations as operations
-from app.exam_practice import PROFILES, TASKS, ExamCreate, ExamStore
+from app.exam_practice import PROFILES, TASKS, AytHistoryExamPack, ExamCreate, ExamStore, active_tasks
 from app.job_store import make_session_factory
 from app.learning_operations import (
     PILOT_TASKS,
@@ -146,6 +146,72 @@ def test_sourced_profiles_do_not_share_extra_time_rules():
     assert all(profile.year == 2026 and profile.verified_at == "2026-10-09" for profile in PROFILES)
 
 
+def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkeypatch):
+    def question(index, split):
+        return {
+            "id": f"ayt-{index:03d}", "topic": "Millî Mücadele", "outcome": "Neden sonuç ilişkisi",
+            "authorship": "original", "review_method": "ai_source_text_review",
+            "review_artifact_checksum": "b" * 64,
+            "split": split, "question": f"Özgün tarih sorusu {index} hangi gelişmeyi sorar?",
+            "spoken_question": f"Özgün tarih sorusu {index} hangi gelişmeyi sorar?",
+            "choices": [f"Seçenek {letter}" for letter in "ABCDE"], "correct_label": "A",
+            "explanation": "Öğretmen onaylı kaynak açıklaması öğrencinin yanlışını düzeltir.",
+            "evidence": [{"source_checksum": "a" * 64, "page": 1, "bbox": [1, 1, 2, 2],
+                          "source_id": "meb-source-001", "source_kind": "meb_textbook",
+                          "quote": "Kaynakta doğrulanmış kısa kanıt yer alır."}],
+            "visual_dependency": False, "visual_description_reviewed": False, "status": "approved",
+        }
+
+    payload = {"schema": "ayt-history-exam-pack-v1", "pack_id": "ayt-history-v1", "sources": [{
+        "id": "meb-source-001", "kind": "meb_textbook", "title": "MEB Tarih Ders Kitabı",
+        "canonical_url": "https://ogm.meb.gov.tr/kitap/tarih.pdf", "source_checksum": "a" * 64,
+        "page_count": 1,
+    }], "questions": [
+        *(question(index, "development") for index in range(72)),
+        *(question(index + 72, "retrieval_test") for index in range(24)),
+        *(question(index + 96, "system_acceptance") for index in range(24)),
+    ]}
+    assert len(AytHistoryExamPack.model_validate(payload).questions) == 120
+    path = tmp_path / "ayt-pack.json"
+    import json
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    assert len(active_tasks(str(path))) == 120
+    monkeypatch.setenv("AYT_HISTORY_EXAM_PACK", str(path))
+    active_tasks.cache_clear()
+    store = LearningOperationsStore(make_session_factory(f"sqlite:///{tmp_path / 'production-pack.db'}"))
+    exam = ExamStore(store).create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                               arrangement_confirmed=True, mode="short", short_minutes=1))
+    assert len(exam["questions"]) == 120
+    assert "özgün AYT Tarih paketi" in exam["notice"]
+    active_tasks.cache_clear()
+    payload["questions"].pop()
+    with pytest.raises(ValueError):
+        AytHistoryExamPack.model_validate(payload)
+
+
+def test_ayt_pack_rejects_non_original_or_visually_dependent_question(tmp_path):
+    evidence = [{"source_checksum": "a" * 64, "page": 1, "bbox": [1, 1, 2, 2],
+                 "source_id": "meb-source-001", "source_kind": "meb_textbook",
+                 "quote": "Kaynakta doğrulanmış kısa kanıt yer alır."}]
+    base = {"id": "ayt-visual-001", "authorship": "original", "review_method": "ai_source_text_review",
+            "review_artifact_checksum": "b" * 64, "topic": "Konu", "outcome": "Kazanım",
+            "split": "development", "question": "Aşağıdaki tabloya göre hangi sonuç çıkar?",
+            "spoken_question": "Aşağıdaki tabloya göre hangi sonuç çıkar?",
+            "choices": ["Bir", "İki", "Üç", "Dört", "Beş"], "correct_label": "A",
+            "explanation": "Kaynağa bağlı kısa açıklama öğrencinin gerekçesini düzeltir.",
+            "evidence": evidence, "visual_dependency": False,
+            "visual_description_reviewed": False, "status": "approved"}
+    with pytest.raises(ValueError, match="Görsel veya tabloya bağımlı"):
+        from app.exam_practice import AytHistoryQuestion
+        AytHistoryQuestion.model_validate(base)
+    base["question"] = "Bu özgün soru hangi sonucu ölçer?"
+    base["spoken_question"] = base["question"]
+    base["authorship"] = "copied"
+    with pytest.raises(ValueError):
+        from app.exam_practice import AytHistoryQuestion
+        AytHistoryQuestion.model_validate(base)
+
+
 def test_exam_hides_solutions_until_finish_preserves_revision_and_erases_raw_answers(setup):
     store, _, client = setup
     headers = {"X-Role": "student"}
@@ -169,6 +235,19 @@ def test_exam_hides_solutions_until_finish_preserves_revision_and_erases_raw_ans
                       json={**answer, "revision": finished["revision"]}).status_code == 409
     assert client.delete(f"/v1/student/exams/sessions/{saved['id']}?revision={finished['revision']}", headers=headers).status_code == 204
     assert store.get(saved["id"]) is None
+
+
+def test_exam_coach_is_blocked_until_finish_and_refuses_unsourced_demo_questions(setup):
+    _, exams, _ = setup
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                      arrangement_confirmed=True, mode="short", short_minutes=5))
+    with pytest.raises(HTTPException, match="yalnız deneme tamamlandıktan sonra"):
+        exams.coach(started["id"], "e1", 1)
+    finished = exams.finish(started["id"], started["revision"])
+    coach = exams.coach(started["id"], "e1", 1)
+    assert coach["stage"] == "source_unavailable"
+    assert coach["can_reveal_explanation"] is False
+    assert finished["state"] == "finished"
 
 
 def json_text(data):

@@ -25,9 +25,40 @@ ANSWER_LABEL = re.compile(
 )
 
 
+def learner_signal(message: str) -> str:
+    """Infer a small, non-clinical learning need from the current utterance.
+
+    The value is intentionally transient and coarse. It is used to choose the
+    next scaffold, not to label, profile, or persist a learner.
+    """
+    text = re.sub(r"\s+", " ", message.casefold()).strip()
+    if not text:
+        return "no_signal"
+    if re.search(r"tarih.*karıştır|yıl.*karıştır|hangi.*önce|kronoloj", text):
+        return "temporal_confusion"
+    if re.search(r"neden.*sonuç|sebep.*sonuç|bağlantı.*kuram", text):
+        return "causal_confusion"
+    if re.search(r"anlamıyor|bilmiyor|yardım|karıştı|zor geliyor", text):
+        return "needs_chunking"
+    if re.search(r"eminim|kesin|bence.*doğru", text):
+        return "needs_reasoning_check"
+    return "no_signal"
+
+
+def _acknowledge(signal: str) -> str:
+    return {
+        "temporal_confusion": "Tarihlerin karışması çok olağan; önce olayları sıraya koyalım. ",
+        "causal_confusion": "Neden ile sonucu ayırmak zor olabilir; önce yalnız ilk halkayı bulalım. ",
+        "needs_chunking": "Bunu tek parçada çözmek zorunda değilsin; küçük bir ipucundan başlayalım. ",
+        "needs_reasoning_check": "Emin olman iyi bir başlangıç; şimdi gerekçeni kaynakla sınayalım. ",
+    }.get(signal, "")
+
+
 class CoachReply(BaseModel):
     stage: str
     error_type: str
+    learner_signal: str = "no_signal"
+    strategy: str = "focus_question"
     student_prompt: str = Field(min_length=1, max_length=600)
     short_spoken_text: str = Field(min_length=1, max_length=240)
     source_ids: list[str] = Field(default_factory=list, max_length=4)
@@ -68,6 +99,32 @@ def _sentence(value: str) -> str:
     return (match.group(1) if match else value[:220]).strip()
 
 
+def _spoken_text(value: str, limit: int = 240) -> str:
+    """Keep acknowledgement and one question together for TTS listeners."""
+    compact = re.sub(r"\s+", " ", value).strip()
+    if len(compact) <= limit:
+        return compact
+    return compact[:limit].rsplit(" ", 1)[0].rstrip(" ,;:") + "…"
+
+
+def coaching_strategy(signal: str, stage: str, repeat_attempts: int) -> str:
+    """Small, inspectable strategy vocabulary inspired by adaptive tutoring.
+
+    It makes the decision observable in tests without claiming to infer a
+    learner trait or mastery score.
+    """
+    if stage == "gerekceli_aciklama":
+        return "source_explanation"
+    if repeat_attempts >= 2:
+        return "source_reanchor"
+    return {
+        "temporal_confusion": "temporal_order",
+        "causal_confusion": "cause_effect_chain",
+        "needs_chunking": "reduce_load",
+        "needs_reasoning_check": "evidence_comparison",
+    }.get(signal, "focus_question")
+
+
 def _short_evidence(value: str, limit: int = 180) -> str:
     compact = re.sub(r"\s+", " ", value).strip()
     if len(compact) <= limit:
@@ -84,13 +141,13 @@ def _fallback(stage: str, context: CoachContext, submitted_choice: str | None,
 
     if stage == "soru_analizi":
         prompts = {
-            "tarih": "Soru bir olayın zamanını mı, yoksa tarihle ilgili başka bir bilgiyi mi soruyor? Kökte bunu gösteren sözcük hangisi?",
-            "yer": "Soru olayın nerede geçtiğini mi soruyor? Kökte yerle ilgili ipucu veren sözcük hangisi?",
-            "kronoloji": "Soru olayları hangi sıraya koymanı istiyor? Önce ve sonra sözcüklerini kökte bulabiliyor musun?",
-            "neden_sonuc": "Soru bir neden mi, yoksa ortaya çıkan sonucu mu arıyor? Kökün hangi sözü bunu söylüyor?",
-            "kisi": "Soru bir kişinin yaptığı işi mi soruyor? Kökten hangi görevi araman gerektiğini çıkarırsın?",
-            "kaynak_yorumu": "Soru metnin açıkça söylediğini mi, yoksa metinden çıkarılabilecek yorumu mu soruyor?",
-            "asiri_genelleme": "Soru seçenekteki geniş bir yargıyı mı sınatıyor? ‘Her zaman’ ya da ‘tamamı’ gibi bir söz görüyor musun?",
+            "tarih": "Kökte bunun zamanla ilgili bir soru olduğunu gösteren sözcük hangisi?",
+            "yer": "Kökte olayın geçtiği yeri araman gerektiğini gösteren ipucu hangisi?",
+            "kronoloji": "Kökte olayları sıraya koymanı isteyen sözcük hangisi?",
+            "neden_sonuc": "Kökte bunun neden mi sonuç mu aradığını gösteren sözcük hangisi?",
+            "kisi": "Kökte kişiyle ilgili hangi görevi araman gerektiğini gösteren ifade hangisi?",
+            "kaynak_yorumu": "Kökte metnin söylediği bilgi ile yorumunu ayırmana yardım eden söz hangisi?",
+            "asiri_genelleme": "Seçenekte ‘her zaman’ ya da ‘tamamı’ gibi geniş bir yargı var mı?",
             "genel": "Soru senden hangi bilgiyi bulmanı istiyor? Kökün en önemli sözcüğü hangisi?",
         }
         return prompts[context.error_type]
@@ -156,6 +213,17 @@ def _safe_early_question(text: str) -> bool:
     return compact.endswith("?") and compact.count("?") == 1 and not ANSWER_LABEL.search(compact)
 
 
+def _single_question(text: str) -> str:
+    """Fail closed to one spoken action per early coaching turn."""
+    compact = re.sub(r"\s+", " ", text).strip()
+    if compact.count("?") == 1 and compact.endswith("?"):
+        return compact
+    first = compact.find("?")
+    if first >= 0:
+        return compact[:first + 1]
+    return "Sorunun kökünde araman gereken bilgiyi gösteren sözcük hangisi?"
+
+
 def _llm_hint(stage: str, context: CoachContext, learner_message: str) -> tuple[str | None, dict[str, int]]:
     endpoint = os.getenv("LOCAL_TUTOR_LLM_URL", "").strip()
     if not endpoint:
@@ -182,10 +250,13 @@ def coach(context: CoachContext, previous_stage: str | None, learner_message: st
           submit_answer: bool, submitted_choice: str | None, answer_label: str | None,
           answer_choice_text: str | None = None) -> CoachReply:
     stage = next_stage(previous_stage, submit_answer)
+    signal = learner_signal(learner_message)
+    strategy = coaching_strategy(signal, stage, context.repeat_attempts)
     started = time.monotonic()
     if not context.source_ids:
         text = "Bu soru için öğretmen onaylı MEB kanıtı henüz yok. Soru kökünün senden ne istediğini kendi sözlerinle anlatır mısın?"
-        return CoachReply(stage=stage, error_type=context.error_type, student_prompt=text, short_spoken_text=_sentence(text),
+        return CoachReply(stage=stage, error_type=context.error_type, learner_signal=signal, strategy=strategy,
+                          student_prompt=text, short_spoken_text=_spoken_text(text),
                           abstain_reason="approved_source_unavailable",
                           timings_ms={"total": int((time.monotonic() - started) * 1000)})
 
@@ -202,6 +273,12 @@ def coach(context: CoachContext, previous_stage: str | None, learner_message: st
         answer_label if stage == "gerekceli_aciklama" else None,
         answer_choice_text if stage == "gerekceli_aciklama" else None,
     )
-    return CoachReply(stage=stage, error_type=context.error_type, student_prompt=text, short_spoken_text=_sentence(text),
+    # Early coaching stays a single question. The brief acknowledgement makes
+    # the response responsive without exposing an answer or simulating a
+    # psychological assessment.
+    if stage != "gerekceli_aciklama":
+        text = _acknowledge(signal) + _single_question(text)
+    return CoachReply(stage=stage, error_type=context.error_type, learner_signal=signal, strategy=strategy,
+                      student_prompt=text, short_spoken_text=_spoken_text(text),
                       source_ids=context.source_ids, can_reveal_explanation=stage == "gerekceli_aciklama",
                       timings_ms={**model_timings, "total": int((time.monotonic() - started) * 1000)})

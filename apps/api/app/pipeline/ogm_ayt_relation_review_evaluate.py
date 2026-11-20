@@ -17,6 +17,8 @@ SCHEMA_PAIRS = {
 METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
 DIAGNOSTICS = {"direct_support", "multi_atom_candidate", "indirect_only", "irrelevant"}
 QUESTION_DIAGNOSES = {"direct_evidence_found", "multi_atom_required", "candidate_set_insufficient", "indirect_only"}
+REVIEW_SCHEMAS = {"relation-agent-review-v1": "history_teacher_agent_v1",
+                  "deepseek-relation-retrieval-review-v1": "deepseek_history_teacher_v1"}
 
 
 def _key(item: dict) -> str:
@@ -48,9 +50,10 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
     methods = tuple(queue.get("ranking_methods", METHODS))
     if not methods or len(methods) != len(set(methods)):
         raise ValueError("İnceleme kuyruğunda retrieval yöntem listesi geçersiz")
-    reviews = []
+    reviews: list[tuple[dict, str]] = []
     for batch in batches:
-        if batch.get("schema") != "relation-agent-review-v1":
+        reviewer_kind = REVIEW_SCHEMAS.get(batch.get("schema"))
+        if reviewer_kind is None:
             raise ValueError("Ajan inceleme şeması geçersiz")
         for key in ("source_checksum", "corpus_checksum"):
             if batch.get(key) != queue.get(key):
@@ -58,17 +61,18 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
         for key in ("answer_key_accessed", "worked_explanation_accessed", "runtime_enabled", "qlora_enabled"):
             if batch.get(key) is not False:
                 raise ValueError(f"Ajan incelemesinde {key} false olmalı")
-        reviews.extend(batch.get("reviews", []))
-    if len(reviews) != len(expected) or {row.get("candidate_id") for row in reviews} != set(expected):
+        reviews.extend((row, reviewer_kind) for row in batch.get("reviews", []))
+    if len(reviews) != len(expected) or {row.get("candidate_id") for row, _kind in reviews} != set(expected):
         raise ValueError("Ajan incelemeleri her kalibrasyon sorusunu tam bir kez kapsamalı")
     labels = []
     by_question_diagnosis = Counter()
     by_card_diagnostic = Counter()
-    for review in reviews:
+    for review, expected_kind in reviews:
         candidate_id = review["candidate_id"]
-        if (not review.get("reviewed") or not review.get("crop_checked") or not review.get("coverage_complete")
-                or review.get("reviewer_kind") != "history_teacher_agent_v1" or not review.get("reviewer")):
-            raise ValueError("Ajan incelemesinde PDF kırpımı ve inceleyen kimliği gerekli")
+        checked = review.get("crop_checked") if expected_kind == "history_teacher_agent_v1" else review.get("source_text_checked")
+        if (not review.get("reviewed") or not checked or not review.get("coverage_complete")
+                or review.get("reviewer_kind") != expected_kind or not review.get("reviewer")):
+            raise ValueError("Ajan incelemesinde kaynak incelemesi ve inceleyen kimliği gerekli")
         judgments = review.get("judgments", [])
         keys = [item.get("source_key") for item in judgments]
         if len(keys) != len(set(keys)) or set(keys) != expected[candidate_id]:
@@ -134,7 +138,7 @@ def merge_and_evaluate(queue: dict, rankings: dict, batches: list[dict]) -> dict
         "question_diagnoses": dict(sorted(by_question_diagnosis.items())),
         "card_diagnostics": dict(sorted(by_card_diagnostic.items())),
         "runtime_enabled": False, "qlora_enabled": False,
-        "notice": "Private calibration only. Agent review is recorded distinctly from human approval and cannot enable runtime or QLoRA.",
+        "notice": "Private calibration only. AI/source-text or agent/PDF review is distinct from human approval and cannot enable runtime or QLoRA.",
     }
 
 

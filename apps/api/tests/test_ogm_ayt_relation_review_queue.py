@@ -43,11 +43,24 @@ def test_relation_queue_rejects_out_of_corpus_result():
 
 def test_relation_queue_accepts_a_declared_qwen_method_set():
     rankings = _rankings()
-    rankings["ranking_methods"] = ["bm25", "qwen_dense", "qwen_dense_rerank"]
+    rankings.update({"ranking_methods": ["bm25", "qwen_dense", "rrf", "rrf_rerank"],
+                     "rerank_candidates": 12, "runtime_enabled": False, "qlora_enabled": False})
     values = rankings["rankings"]["question"]
     values["qwen_dense"] = values.pop("bge_dense")
-    values["qwen_dense_rerank"] = values.pop("bge_dense_rerank")
+    values["rrf_rerank"] = values.pop("bge_dense_rerank")[:12]
     values.pop("bge_sparse")
-    values.pop("rrf")
     result = build(_calibration(), rankings, _corpus(), limit=6)
-    assert result["ranking_methods"] == ["bm25", "qwen_dense", "qwen_dense_rerank"]
+    assert result["ranking_methods"] == ["bm25", "qwen_dense", "rrf", "rrf_rerank"]
+
+
+def test_qwen_hybrid_contract_rejects_reranker_candidates_outside_rrf_window():
+    rankings = _rankings()
+    rankings.update({"ranking_methods": ["bm25", "qwen_dense", "rrf", "rrf_rerank"],
+                     "rerank_candidates": 2, "runtime_enabled": False, "qlora_enabled": False})
+    values = rankings["rankings"]["question"]
+    values["qwen_dense"] = values.pop("bge_dense")
+    values["rrf_rerank"] = ["book:a", "book:b", "book:c"]
+    values.pop("bge_sparse")
+    values.pop("bge_dense_rerank")
+    with pytest.raises(ValueError, match="Reranker"):
+        build(_calibration(), rankings, _corpus(), limit=6)

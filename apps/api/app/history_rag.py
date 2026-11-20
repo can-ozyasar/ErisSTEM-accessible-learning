@@ -654,7 +654,12 @@ def load_index(source: Path = BOOK, destination: Path = INDEX_PATH) -> dict:
     if not destination.is_file() or not source.is_file():
         raise FileNotFoundError("RAG dizini oluşturulmadı")
     index = json.loads(destination.read_text(encoding="utf-8"))
-    if index.get("schema") != 1 or index.get("source_checksum") != hashlib.sha256(source.read_bytes()).hexdigest():
+    # Schema 2 added provenance-bearing evidence atoms and the extraction
+    # policy version.  Runtime retrieval still consumes ``chunks``, so both
+    # versions remain readable while old private artifacts are migrated.
+    # Never accept an unknown future schema silently: it may change the
+    # meaning of approval or provenance fields.
+    if index.get("schema") not in {1, 2} or index.get("source_checksum") != hashlib.sha256(source.read_bytes()).hexdigest():
         raise ValueError("RAG dizini kaynak PDF sürümüyle eşleşmiyor")
     index["chunks"] = deduplicate_chunks(index["chunks"])
     return index

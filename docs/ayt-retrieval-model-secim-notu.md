@@ -12,7 +12,7 @@ sonra verilir.
 | `BAAI/bge-m3` | Taban çizgisi ve ilk-aşama adayı | Çok dilli dense ve sparse getirmeyi aynı modelle sağlar; temiz V4 kalibrasyonunda BM25'ten iyi aday sonuç vermiştir. Henüz runtime kabulü yoktur. |
 | `BAAI/bge-reranker-v2-m3` | İlk ikinci-aşama deneyi | Çok dilli cross-encoder'dır. Yalnız dense'in ilk 32 adayını yeniden sıralar; tüm kitapta çalışmaz. |
 | `Qwen/Qwen3-Embedding-4B` | Seçilen kalite adayı | T4'te uçtan uca sorgu getirme p95'i hedefin altında kaldı ve kör PDF-kesiti incelemesinde BGE dense'i geçti. İngilizce görev talimatı bu corpus için seçildi; bağımsız holdout ve insan onayı olmadan runtime'a açılmaz. |
-| `Qwen/Qwen3-Reranker-4B` | Runtime dışında | Top-32 ikinci aşama sıralama, bu geliştirme kümesinde kanıt kapsamını ve MRR'yi düşürdü; T4 p95'i yaklaşık dokuz saniyedir. |
+| `Qwen/Qwen3-Reranker-4B` | Runtime dışında | RRF'nin top-20 ikinci aşama sıralaması, bu geliştirme kümesinde kanıt kapsamını ve MRR'yi düşürdü; T4 p95'i yaklaşık dokuz saniyedir. |
 | `Qwen/Qwen3-Embedding-8B` | Büyük GPU'da ayrı embedding ablasyonu | 100'den fazla dili, 32k bağlamı ve instruction-aware embedding'i destekler. Yüksek çok dilli MTEB puanı, Türkçe tarih kanıtı için kanıt değildir; aynı private geliştirme protokolünde ölçülmelidir. |
 | `Alibaba-NLP/gte-Qwen2-7B-instruct` | Daha büyük GPU varsa ikinci embedding ablasyonu | Çok dilli bir adaydır; model kartındaki fp32 yük boyutu ve önerilen donanım koşulları T4 üzerinde rahat bir ilk deney için uygun değildir. |
 | `microsoft/harrier-oss-v1-27b` | Şimdilik dışarıda | 27B model, T4'ün çalışma ve p95 hedefiyle uyumlu değildir. Büyük GPU ve ayrı maliyet/gecikme bütçesi olmadan adil ölçüm yapılamaz. |
@@ -33,13 +33,14 @@ ve corpus üzerinde üretir:
 2. BGE-M3 dense
 3. BGE-M3 sparse
 4. Reciprocal Rank Fusion
-5. BGE-M3 dense ilk 32 aday → BGE Reranker V2-M3
+5. BM25 + dense RRF ilk 20 aday → BGE Reranker V2-M3
 
-Reranker için aday penceresi sabittir. Böylece sonucu iyileştirirse bunun dense
-adayları daha iyi seçmekten değil, ikinci aşama sıralamasından geldiği
-anlaşılır. Her yöntem için sorgu süresi ayrı kaydedilir. Doküman embedding
-süresi de sonraki runtime benchmarkında ilk indeks kurulum maliyeti olarak
-ayrı raporlanacaktır; sorgu p95 ile karıştırılmaz.
+Reranker için aday penceresi sabittir: BM25 ve dense sıralamaları RRF ile
+birleştirilir, yalnız ilk 20 aday yeniden sıralanır. Böylece ikinci aşamanın
+lexical+dense aday havuzuna sağladığı gerçek katkı ölçülür; tüm kitap üzerinde
+pahalı cross-encoder çağrısı yapılmaz. Her yöntem için sorgu süresi ayrı
+kaydedilir. Doküman embedding süresi de sonraki runtime benchmarkında ilk
+indeks kurulum maliyeti olarak ayrı raporlanacaktır; sorgu p95 ile karıştırılmaz.
 
 ## Kabul düzeni
 
@@ -79,8 +80,8 @@ protokolle sınanması için kaydedildi.
 
 ### Qwen kalite koşumu hazırlığı
 
-- İlk aşama aday penceresi `32` olarak sabitlendi. Bu değer, top-3 değerlendirme
-  için 15–20 aday önerisinin üzerindedir; reranker yalnız bu pencerede çalışır.
+- İlk aşama aday penceresi `20` olarak sabitlendi. BM25 ve dense sonuçları RRF
+  ile birleştirilir; reranker yalnız bu pencerede çalışır.
 - T4 için `float16` kullanılır. T4'te BF16 Tensor Core yolu olmadığı için BF16
   kalite veya hız avantajı varsayılmaz.
 - Qwen model kartı, özel instruction kullanımının çoğu retrieval görevinde
@@ -93,7 +94,8 @@ protokolle sınanması için kaydedildi.
   verisinde kullanılmadı. Düzeltmede `embedding.cpu()`, çöp toplayıcı ve CUDA
   önbellek temizliği eklendi; koşum yeniden başlatıldı.
 - Düzeltilmiş Qwen koşumu tamamlandı: 1.920 aday parçası ve 24 geliştirme
-  sorgusu. Qwen reranker top-32 p95 süresi `8.957,76 ms` oldu. Bu nedenle
+  sorgusu. Eski dense-top-32 koşumunda Qwen reranker p95 süresi `8.957,76 ms`
+  oldu; bu sonuç yeni RRF-top-20 sözleşmesinin ölçümü değildir. Bu nedenle
   kalite kör incelemesi tamamlanmadan da `<=1 saniye` runtime kabul kapısını
   geçemediği bilinmektedir. Qwen dense için ilk kayıttaki süre yalnız vektör
   skorlama süresiydi; sonraki koşumda sorgu embedding'i ile birlikte ölçmek

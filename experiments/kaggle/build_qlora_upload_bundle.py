@@ -48,7 +48,10 @@ def build(input_dir: Path, output_dir: Path, runner: Path, notebook: Path) -> di
     _safe_jsonl(train)
     _safe_jsonl(dev)
     manifest_data = json.loads(_read(manifest))
-    if manifest_data.get("answer_keys_included") is not False or manifest_data.get("kaggle_runner", {}).get("sealed_test_uploaded") is not False:
+    if (manifest_data.get("schema") != "eristem-tutor-qlora-experiment-input-v1"
+            or manifest_data.get("answer_keys_included") is not False
+            or manifest_data.get("sealed_test_uploaded") is not False
+            or manifest_data.get("student_data_included") is not False):
         raise ValueError("Kaggle manifesti kapalı test veya cevap anahtarı güvenliğini doğrulamıyor")
     data_out, code_out = output_dir / "history-tutor-qlora-input-v1", output_dir / "history-tutor-code-v1"
     data_out.mkdir(parents=True, exist_ok=True)

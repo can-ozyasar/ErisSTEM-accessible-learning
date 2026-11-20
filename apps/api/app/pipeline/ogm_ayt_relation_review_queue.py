@@ -12,6 +12,8 @@ SCHEMA_PAIRS = {
         "ogm-ayt-atom-retrieval-review-queue-v1",
 }
 METHODS = ("bm25", "bge_dense", "bge_sparse", "rrf", "bge_dense_rerank")
+QWEN_HYBRID_METHODS = ("bm25", "qwen_dense", "rrf", "rrf_rerank")
+FORBIDDEN = {"answer", "answer_key", "answer_label", "correct_choice", "worked_explanation"}
 
 
 def _balanced_ids(rankings: dict[str, list[str]], limit: int, methods: tuple[str, ...]) -> list[str]:
@@ -26,6 +28,36 @@ def _balanced_ids(rankings: dict[str, list[str]], limit: int, methods: tuple[str
                 if len(chosen) == limit:
                     return chosen
     return chosen
+
+
+def _assert_safe_qwen_hybrid_contract(rankings: dict, documents: set[str], query_ids: set[str]) -> None:
+    """Reject malformed or answer-bearing Qwen exports before crop review.
+
+    The reranker is only meaningful when it reorders the declared RRF window.
+    Enforcing that relation locally prevents a hand-edited Kaggle result from
+    looking like an experiment outcome.
+    """
+    if tuple(rankings.get("ranking_methods", ())) != QWEN_HYBRID_METHODS:
+        raise ValueError("Qwen hibrit yöntem sözleşmesi geçersiz")
+    if rankings.get("runtime_enabled") is not False or rankings.get("qlora_enabled") is not False:
+        raise ValueError("Kaggle retrieval çıktısı runtime veya QLoRA açamaz")
+    if not isinstance(rankings.get("rerank_candidates"), int) or not 1 <= rankings["rerank_candidates"] <= 20:
+        raise ValueError("Qwen reranker aday penceresi 1-20 arasında olmalı")
+    if FORBIDDEN & set(rankings):
+        raise ValueError("Kaggle retrieval çıktısı cevap alanı içeremez")
+    if set(rankings.get("rankings", ())) != query_ids:
+        raise ValueError("Kaggle ranking her kalibrasyon sorusunu tam bir kez içermeli")
+    for query_id, methods in rankings["rankings"].items():
+        if set(methods) != set(QWEN_HYBRID_METHODS):
+            raise ValueError(f"Qwen ranking yöntemleri eksik: {query_id}")
+        for method, item_ids in methods.items():
+            if not isinstance(item_ids, list) or len(item_ids) != len(set(item_ids)):
+                raise ValueError(f"Qwen ranking yinelenen veya geçersiz kimlik içeriyor: {query_id}/{method}")
+            if not set(item_ids) <= documents:
+                raise ValueError("Kaggle sonucu kalibrasyon corpus'u dışında kaynak içeriyor")
+        window = methods["rrf"][:rankings["rerank_candidates"]]
+        if not set(methods["rrf_rerank"]) <= set(window):
+            raise ValueError("Reranker yalnız RRF aday penceresini yeniden sıralayabilir")
 
 
 def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> dict:
@@ -46,6 +78,8 @@ def build(calibration: dict, rankings: dict, corpus: dict, limit: int = 12) -> d
     books = {book["source_checksum"]: book for book in corpus.get("books", [])}
     queue = []
     query_ids = {query["id"] for query in calibration.get("queries", [])}
+    if methods == QWEN_HYBRID_METHODS:
+        _assert_safe_qwen_hybrid_contract(rankings, set(documents), query_ids)
     if set(rankings.get("rankings", [])) != query_ids:
         raise ValueError("Kaggle ranking her kalibrasyon sorusunu tam bir kez içermeli")
     for query in calibration["queries"]:

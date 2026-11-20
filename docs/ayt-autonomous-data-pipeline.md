@@ -642,3 +642,144 @@ kalır. İlk ek gruplar,
 kesit/alıntı eşleşmesini ve soru-kanıt ilişkisini ayrı ayrı doğrulayarak
 hazırlanacaktır. Böylece soru kırpımının doğru olması, kanıtın soruyu
 desteklediği varsayımına dönüştürülmez.
+
+## 18 Kasım 2026: Özgün, görselsiz AYT Tarih yazım hattı (v4)
+
+9--12. sınıf yerel MEB PDF'lerinden üretilen 120 kaynak kartı, kaynak metni
+temelli AI incelemesine girdi. `heykel`, `fresk` gibi görsel kaynağa işaret
+eden atomların metin içi ekleri de kapsanacak biçimde filtre güçlendirildi.
+İlk denemede bu iki örneğin kaçabildiği görüldüğü için önceki artefaktlar
+geçersiz sayıldı; yeni kuyruğa ait `queue_checksum` bütün kaynak incelemesi,
+kırpım ve taslak artefaktlarına taşındı. Böylece aynı corpus içindeki eski
+kuyruk incelemesi yanlışlıkla yeniden kullanılamaz.
+
+V4'te 120 kartın 72'si kaynak metniyle doğrudan desteklenen görselsiz aday
+olarak PDF kırpım incelemesine ayrıldı; 48 kart fail-closed biçimde tutuldu.
+72 adayın tamamında checksum bağlı yerel PDF sayfası, bbox ve alıntı arasında
+en az %90 token geri çağırımlı eşleşme bulundu (72/72). Bu yalnız otomatik
+metin/kırpım kontrolüdür; görsel veya pedagojik yayın onayı değildir.
+
+Soru üretiminde modelin doğru cevabı A şıkkına yığdığı gözlendi. Şık içeriği
+ve doğru cevabı değiştirmeyen, kart kimliğinden türetilmiş sabit bir
+permütasyon eklendi. Ayrıca JSON kesilmesini önlemek için üretim batch boyutu
+beşe indirildi. İlk beş taslak bağımsız ikinci AI yargıcıyla tekrar incelendi:
+5/5 taslakta doğrudan kaynak desteği, tek doğru şık, metin-temelli çözüm ve
+kaynak bağlı açıklama bildirildi. Bu kayıtlar private deney artefaktıdır;
+hiçbiri deneme paketi, RAG runtime kanıtı veya QLoRA eğitimi için onaylı
+değildir.
+
+### Hedef havuzu genişletme
+
+İlk 72 kaynak adayından bağımsız taslak denetimini geçen 67 kart, 120 soruluk
+hedef için tek başına yeterli değildi. Bu nedenle ilk 120 kaynak atomuyla
+çakışmayan ikinci bir 100 kartlık örneklem üretildi (`authoring-121`--`220`).
+Atom kimliği kesişimi sıfırdır. Bu uzantı örnekleminde 73/100 kart doğrudan
+metin desteği aldı; 27 kart fail-closed durumda tutuldu. 73 kartın tamamında
+yerel checksum bağlı PDF kırpımı ve alıntı eşleşti (73/73). Böylece kaynak
+bakımından ileri doğrulamaya aday toplam havuz 140 karta ulaştı; buna rağmen
+hiçbir ek kart henüz deneme, RAG runtime veya eğitim verisi değildir.
+
+## 18 Kasım 2026: 120 kartlık private aday paket
+
+İkinci kaynak havuzunun 73 taslağı bağımsız kaynak yargıcından geçirildi:
+71 kabul, 2 ret. İlk havuzdaki 67 kabul ile birlikte 138 taslaktan 120 kartlık
+bir aday paket seçildi. Seçim rastgele yapılmadı: her doğru seçenek konumu
+tam 24 kez kullanıldı (A/B/C/D/E = 24), 63 ayrı sınıf-bölüm birleşimi korundu
+ve tüm soru/şıklar görsel bağımlılık filtresinden tekrar geçirildi. Dağılım
+9. sınıf 25, 10. sınıf 24, 11. sınıf 14, 12. sınıf 57 karttır; bu kaynak
+uygunluğu havuzunun mevcut dağılımını yansıtır, sınıf düzeyleri arasında
+eşitlik iddiası değildir.
+
+Paketin checksum değeri
+`284ef7c771c4b363b39c626a21a354b5e05a54796ce7f5d16ccc9e64401e44af`tir.
+Durumu hâlâ `source_crop_validation_required` ve `runtime_enabled: false`tır:
+PDF kırpımının pedagojik/semantik kaynak doğrulaması ile sınav yayın testleri
+tamamlanmadan öğrenci denemesine, canlı RAG'a veya QLoRA verisine girmez.
+
+## 18 Kasım 2026: Son semantik kapı ve eğitim-adayı dondurması
+
+120 adayın her biri kaynak alıntısından doğru şıkkı yeniden çıkaran bağımsız
+son semantik denetime girdi. İlk turda 119 kabul, 1 ret alındı.
+`authoring-220`, kaynakta atlı akınların rolü tek anlamlı olmadığı için
+fail-closed reddedildi; düzeltilmedi veya zorla kabul edilmedi. Aynı doğru şık
+konumundaki yedek `authoring-135` seçildi ve kendi gerçek paket sırasından
+tekrar denetlendi. Sonuçta 120/120 kart semantik kapsam aldı.
+
+Donmuş private soru-bankası eğitim adayı checksum değeri
+`22ef6d617039bf8e0d1b52999274a59ed932bc24a935909fa1bed0bd0211a2c0`tir.
+Bu, soru bankası/indeksleme veya sonraki yayın doğrulama deneyleri için
+`question_bank_training_candidate_ready: true` durumundadır. Bu durum
+**QLoRA koçluk eğitimi hazır** anlamına gelmez: çoktan seçmeli soru verisi,
+Sokratik öğretmen diyaloğu değildir; koçluk eğitimi için ayrı, kaynak-bağlı
+ve cevap-sızıntısı denetimli diyalog veri kümesi gerekir. Runtime hâlâ kapalıdır.
+
+## 18 Kasım 2026: Öğrenciye duyarlı koçluk davranış kapısı
+
+Canlı koç, öğrencinin o anki mesajından yalnız geçici ve klinik olmayan bir
+öğrenme ihtiyacı çıkarır: tarih sırası karışıklığı, neden-sonuç bağında zorluk,
+bilişsel yük veya gerekçesiz eminlik. Bu sinyal kalıcı profil, öğrenci etiketi
+ya da tanı değildir; yalnız sonraki Sokratik soruyu küçültmek için kullanılır.
+Koç, bu durumları yargılamayan kısa bir kabul cümlesiyle karşılar ve ardından
+tek bir soruya geçer.
+
+Davranış regresyon seti dört gerçekçi öğrenci ifadesinde şu özellikleri
+denetler: kaynak kimliği korunur, erken cevap/şık ifşası yoktur, sesletim
+metni kısa kalır ve tur başına tam bir soru vardır. Test, önceki şablonlarda
+iki soru sorulabildiğini buldu; tüm erken turlar için zorunlu tek-soru
+normalleştirmesi eklendi. Böylece erişilebilir sesli akışta öğrenci aynı anda
+birden fazla zihinsel işlem yapmaya zorlanmaz.
+
+Araştırma dayanağı ve test edilebilir öğretmen davranış kuralları
+`docs/ayt-tarih-kocluk-davranis-sozlesmesi.md` dosyasında sürümlenmektedir.
+
+## 18 Kasım 2026: Kaynak bağlı altı-durumlu koçluk adayları
+
+Donmuş 120 soru-bankası adayından 720 koçluk turu üretildi: her soru için
+soruyu anlama, hatırlamayı ortaya çıkarma, kanıtla bağ kurma, şıkkı sınama,
+yanlışı düzeltme ve doğruyu pekiştirme durumları vardır. Her tur kısa MEB
+alıntısı ve atom kimliği taşır; cevap anahtarı ve öğrenci verisi erişilmemiştir.
+Araştırma sözleşmesindeki durum → strateji → tek geri-çağırma sorusu akışı
+taslaklara işlendi.
+
+Yapısal denetim 120 soru grubu ve 720 tur üzerinde `0` ihlal buldu: tam altı
+durum, kaynak varlığı, tek soru, erken cevap/şık ifşası ve runtime kapalılığı
+kontrol edildi. Bu yalnız sözleşme denetimidir; veri henüz QLoRA eğitimine
+uygun değildir. Sonraki kapı, her turun doğallığını ve öğrenci durumuna uygun
+iskele kurup kurmadığını bağımsız öğretmen-stili yargıcıyla denetlemektir.
+
+### Öğretmen-stili bağımsız inceleme pilotu
+
+Bağımsız AI yargıcıyla yapılan ilk 20 soru grubu incelemesinde yalnız 4 grup
+`accept_for_qlora_candidate` aldı; 16 grup reddedildi. Yapısal denetimin
+0 ihlal bulması, metinlerin doğal öğretmen dili ve öğrenci durumuna özgü
+iskele bakımından yeterli olduğunu göstermedi. Bu nedenle kalan 100 grubu
+aynı şablonlarla incelemeye veya herhangi bir grubu QLoRA'ya göndermeye
+devam etmek durduruldu. Sonraki kök neden düzeltmesi, her soru ve öğrenci
+durumu için kaynak bağlamına göre üretilmiş diyalog adayları ve ikinci yargıç
+incelemesidir; şablonları "kabul"e zorlamak değildir.
+
+## 19 Kasım 2026: Bağlamsal koçluk kapısı ve offline deney adayı
+
+Kalan 120 soru, soru kökü ve en fazla 520 karakterlik kaynak alıntısı ile
+bağlama özel olarak üretildi; cevap anahtarı, şıklar, çözüm ve öğrenci verisi
+dış değerlendirme çağrısına verilmedi. Her altılı grup ikinci, bağımsız
+öğretmen-stili yargıçtan geçirildi. İlk geçişte 110 kabul ve 10 ret çıktı.
+Sekiz ret, somut hata gerekçelerine (erken ipucu, soru dışına sapma, tekrar
+eden iskele) göre üretim sözleşmesi sıkılaştırılarak yalnız ilgili grup için
+bir kez düzeltildi ve yeniden incelendi. İki kaydın biri aynı yöntemle kabul
+edildi. Son kayıtta PDF metin katmanındaki yinelenmiş ifade bulundu; orijinal
+PDF checksum'ı, sayfa ve bbox korunarak dar kapsamlı, sürümlü OCR yinelenme
+onarma kaydı üretildi. Bu işlem tarihsel içerik, soru veya cevap değiştirmez.
+
+Son envanter: **120/120 kabul, 0 ret, 0 eksik**. Bu sonuç insan öğretmen
+onayı ya da canlı ürüne açılış değildir; yalnız bağımsız AI değerlendirmeli
+private eğitim adayı kapısının sonucudur.
+
+`contextual-coach-qlora-candidates-v1` paketi 720 örnek içerir. Kaynak
+bölümleri ayrımlar arasında paylaşılmaz: train 71 soru/426 örnek/35 bölüm,
+dev 24/144/13 ve yerelde kilitli test 25/150/15'tir. Doğrulayıcı; her soru
+grubunda altı durum, bölüm çakışması ve doğrudan cevap ifadesi için kontrol
+çalıştırdı: cevap sızıntısı `0`, bölüm çakışması `0`. Paket runtime kapalıdır
+ve `qlora_training_ready: false` kalır. Kaggle veya Evren'de tek bir eğitim
+başlatılmadan önce kaynak aktarım politikası, sealed-test değerlendirme
+protokolü, seed/model/hardware manifesti ve maliyet limiti ayrıca dondurulur.

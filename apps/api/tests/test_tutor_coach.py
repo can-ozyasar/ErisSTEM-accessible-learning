@@ -1,5 +1,5 @@
 from app import tutor_coach
-from app.tutor_coach import CoachContext, coach, next_stage
+from app.tutor_coach import CoachContext, coach, learner_signal, next_stage
 
 
 def context(source_ids=None):
@@ -84,3 +84,16 @@ def test_coach_uses_approved_relation_as_a_recall_prompt():
     reply = coach(value, "soru_analizi", "Bir tarih hatırlıyorum.", False, None, None, None)
     assert reply.stage == "hatirlayani_ortaya_cikar"
     assert "Olay ile tarih" in reply.student_prompt
+
+
+def test_coach_adapts_to_the_students_current_confusion_without_diagnosing_them():
+    reply = coach(context(), None, "Tarihleri karıştırdım, hangisi önceydi?", False, None, None)
+    assert reply.learner_signal == "temporal_confusion"
+    assert reply.student_prompt.startswith("Tarihlerin karışması çok olağan")
+    assert reply.student_prompt.endswith("?")
+    assert "doğru cevap" not in reply.student_prompt.casefold()
+
+
+def test_learner_signals_are_coarse_learning_needs_not_personal_profiles():
+    assert learner_signal("Neden ile sonuç arasındaki bağlantıyı kuramadım") == "causal_confusion"
+    assert learner_signal("Bu bana çok karıştı, yardım eder misin?") == "needs_chunking"

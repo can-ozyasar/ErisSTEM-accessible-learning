@@ -26,7 +26,10 @@ OUTPUT = Path(os.environ.get("AYT_DISCOVERY_OUTPUT", "/kaggle/working/ayt-qwen-r
 EMBEDDING_MODEL_ID = os.environ.get("QWEN_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-4B")
 RERANKER_MODEL_ID = os.environ.get("QWEN_RERANKER_MODEL", "Qwen/Qwen3-Reranker-4B")
 TOP_K = int(os.environ.get("TOP_K", "24"))
-RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "32"))
+# Cross-encoding a whole textbook is both needlessly expensive and a poor
+# runtime comparison.  RRF supplies the lexical+dense candidate set and the
+# reranker may only decide among its first twenty results.
+RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "20"))
 MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "2048"))
 FORBIDDEN = {"answer", "answer_key", "answer_label", "correct_choice", "worked_explanation", "pdf_path", "raw_pdf"}
 TOKENS = re.compile(r"[a-zçğıöşü0-9]+", re.IGNORECASE)
@@ -74,6 +77,21 @@ def _rank_ids(scores, documents: list[dict]) -> list[str]:
     )]
 
 
+def _rrf(*rankings: list[str], limit: int, k: int = 60) -> list[str]:
+    """Deterministically fuse ranker outputs without score-scale assumptions."""
+    if k < 1 or limit < 1:
+        raise ValueError("RRF k and limit must be positive")
+    scores: dict[str, float] = {}
+    for ranking in rankings:
+        seen: set[str] = set()
+        for position, item_id in enumerate(ranking, start=1):
+            if item_id in seen:
+                continue
+            seen.add(item_id)
+            scores[item_id] = scores.get(item_id, 0.0) + 1.0 / (k + position)
+    return [item_id for item_id, _ in sorted(scores.items(), key=lambda row: (-row[1], row[0]))[:limit]]
+
+
 def _load_embedding(model_id: str, torch):
     from sentence_transformers import SentenceTransformer
 
@@ -102,6 +120,10 @@ def _load_reranker(model_id: str, torch):
 def main() -> None:
     data = json.loads(INPUT.read_text(encoding="utf-8"))
     _assert_private_calibration(data)
+    if not 1 <= RERANK_CANDIDATES <= 20:
+        raise ValueError("RERANK_CANDIDATES must be between 1 and 20")
+    if TOP_K < 3:
+        raise ValueError("TOP_K must be at least 3 for the locked evaluation")
     _ensure_dependencies()
     import numpy as np
     import torch
@@ -116,8 +138,8 @@ def main() -> None:
     dense_documents = embedding.encode(
         corpus_text, batch_size=2, show_progress_bar=True, normalize_embeddings=True,
     )
-    rankings, dense_candidate_windows = {}, {}
-    timings = {name: [] for name in ("bm25", "qwen_dense", "qwen_dense_rerank")}
+    rankings, rerank_candidate_windows = {}, {}
+    timings = {name: [] for name in ("bm25", "qwen_dense", "rrf", "rrf_rerank")}
     for query in queries:
         text = query["query"]
         started = time.perf_counter()
@@ -131,8 +153,13 @@ def main() -> None:
         )
         dense = _rank_ids(np.asarray(dense_documents) @ np.asarray(query_vector)[0], documents)
         timings["qwen_dense"].append((time.perf_counter() - started) * 1000)
-        dense_candidate_windows[query["id"]] = dense[:RERANK_CANDIDATES]
-        rankings[query["id"]] = {"bm25": lexical[:TOP_K], "qwen_dense": dense[:TOP_K]}
+        started = time.perf_counter()
+        fused = _rrf(lexical, dense, limit=TOP_K)
+        timings["rrf"].append((time.perf_counter() - started) * 1000)
+        rerank_candidate_windows[query["id"]] = fused[:RERANK_CANDIDATES]
+        rankings[query["id"]] = {
+            "bm25": lexical[:TOP_K], "qwen_dense": dense[:TOP_K], "rrf": fused,
+        }
     embedding.cpu()
     del embedding
     gc.collect()
@@ -143,7 +170,7 @@ def main() -> None:
     for query in queries:
         text = query["query"]
         started = time.perf_counter()
-        candidate_ids = dense_candidate_windows[query["id"]]
+        candidate_ids = rerank_candidate_windows[query["id"]]
         pair_scores = reranker.predict(
             [(text, documents_by_id[candidate_id]["search_text"]) for candidate_id in candidate_ids],
             batch_size=1,
@@ -154,8 +181,8 @@ def main() -> None:
         reranked = [item_id for _, item_id in sorted(
             zip(pair_scores, candidate_ids, strict=True), key=lambda pair: (-float(pair[0]), pair[1])
         )]
-        timings["qwen_dense_rerank"].append((time.perf_counter() - started) * 1000)
-        rankings[query["id"]]["qwen_dense_rerank"] = reranked[:TOP_K]
+        timings["rrf_rerank"].append((time.perf_counter() - started) * 1000)
+        rankings[query["id"]]["rrf_rerank"] = reranked[:TOP_K]
 
     OUTPUT.write_text(json.dumps({
         "schema": "ogm-ayt-relation-retrieval-rankings-v1",
@@ -163,7 +190,7 @@ def main() -> None:
         "embedding_model": EMBEDDING_MODEL_ID, "reranker_model": RERANKER_MODEL_ID,
         "query_instruction": QUERY_INSTRUCTION, "rerank_candidates": RERANK_CANDIDATES,
         "document_count": len(documents), "query_count": len(queries), "top_k": TOP_K,
-        "ranking_methods": ["bm25", "qwen_dense", "qwen_dense_rerank"],
+        "ranking_methods": ["bm25", "qwen_dense", "rrf", "rrf_rerank"],
         "rankings": rankings, "latencies_by_method_ms": timings,
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
         "runtime_enabled": False, "qlora_enabled": False,

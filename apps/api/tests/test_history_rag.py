@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from app.history_rag import build_index, matching_sections, retrieve, sections, terms
+from app.history_rag import build_index, load_index, matching_sections, retrieve, sections, terms
 
 
 def test_topic_gate_and_approved_retrieval():
@@ -19,6 +19,21 @@ def test_topic_gate_and_approved_retrieval():
     assert retrieve(index, {"a", "b"}, "Tarih Öğrenmenin Faydaları", "ortak hafıza")[0]["id"] == "a"
     assert retrieve(index, {"b"}, "Tarih Öğrenmenin Faydaları", "ortak hafıza") == []
     assert retrieve(index, {"a", "b"}, "Belirsiz konu", "ortak hafıza") == []
+
+
+def test_loader_accepts_current_schema_and_rejects_unknown_schema(tmp_path):
+    import hashlib
+    import json
+
+    source = tmp_path / "source.pdf"
+    source.write_bytes(b"private-source")
+    index = tmp_path / "history-rag.json"
+    checksum = hashlib.sha256(source.read_bytes()).hexdigest()
+    index.write_text(json.dumps({"schema": 2, "source_checksum": checksum, "chunks": []}), encoding="utf-8")
+    assert load_index(source, index)["schema"] == 2
+    index.write_text(json.dumps({"schema": 3, "source_checksum": checksum, "chunks": []}), encoding="utf-8")
+    with pytest.raises(ValueError, match="kaynak PDF sürümüyle eşleşmiyor"):
+        load_index(source, index)
 
 
 BOOK = Path(__file__).parents[3] / "data/meb/tarih-9sinif-ders-kitabi_20261006.pdf"

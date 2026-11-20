@@ -89,6 +89,10 @@ def learning_router(store: LearningOperationsStore, exams: ExamStore):
     def finish(exam_id: str, request: RevisionRequest, _: Role = student):
         return exams.finish(exam_id, request.revision)
 
+    @router.get("/v1/student/exams/sessions/{exam_id}/review/{question_id}/coach")
+    def coach(exam_id: str, question_id: str, turn: int = 1, _: Role = student):
+        return exams.coach(exam_id, question_id, turn)
+
     @router.delete("/v1/student/exams/sessions/{exam_id}", status_code=204)
     def delete_exam(exam_id: str, revision: int, _: Role = student):
         exams.remove(exam_id, revision)

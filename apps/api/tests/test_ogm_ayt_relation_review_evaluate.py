@@ -72,3 +72,14 @@ def test_relation_review_uses_only_complete_reported_query_latencies():
         assert "gecikme" in str(error)
     else:
         raise AssertionError("Eksik gecikme ölçümü reddedilmeliydi")
+
+
+def test_relation_review_accepts_explicitly_marked_deepseek_source_text_review():
+    batch = _batch()
+    batch["schema"] = "deepseek-relation-retrieval-review-v1"
+    review = batch["reviews"][0]
+    review["reviewer_kind"] = "deepseek_history_teacher_v1"
+    review["crop_checked"] = False
+    review["source_text_checked"] = True
+    result = merge_and_evaluate(_queue(), _rankings(), [batch])
+    assert result["reviewed_question_count"] == 1

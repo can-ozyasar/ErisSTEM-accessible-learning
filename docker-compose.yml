@@ -26,6 +26,10 @@ services:
       AYT_GRAPH_CHECKSUM: ${AYT_GRAPH_CHECKSUM:-}
       AYT_TTS_CACHE_ROOT: /private/tts-cache
       AYT_TTS_VOICE_VERSION: ${AYT_TTS_VOICE_VERSION:-tts-v5}
+      # Optional, teacher-approved authored AYT history package.  When set,
+      # the API rejects incomplete or unreviewed manifests rather than mixing
+      # private material with the synthetic accessibility rehearsal.
+      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-}
     volumes:
       - ./data/derived:/private/derived:ro
       - ./data/meb:/private/meb:ro
@@ -33,6 +37,7 @@ services:
       - ./data/private/tts-v5-demo-installed-v1:/private/tts-v5-demo:ro
       - ./data/private/tts-v5-extra-storage:/private/tts-v5-extra:ro
       - ./data/private/yks-ayt-source-v1:/private/architecture:ro
+      - ./data/private/ayt-history-exam:/private/ayt-history-exam:ro
       - tts_audio_cache:/private/tts-cache
     depends_on:
       db:

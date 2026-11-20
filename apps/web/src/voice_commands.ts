@@ -1,8 +1,8 @@
 /** Deterministic, deliberately narrow Turkish command grammar. No answer is submitted. */
 export type VoiceIntent =
-  | { kind: "open_history" | "open_bank" | "open_writing" | "start_study" | "back" | "next_page" | "previous_page" | "next_question" | "previous_question" | "next_unit" | "previous_unit" | "read_selected" | "show_choices" | "stop_audio" | "focus_writing" | "read_written" | "help" }
-  | { kind: "go_page" | "select_region"; number: number }
-  | { kind: "read_choice"; label: "A" | "B" | "C" | "D" | "E" };
+  | { kind: "open_history" | "open_bank" | "open_writing" | "start_study" | "back" | "next_page" | "previous_page" | "next_question" | "previous_question" | "next_unit" | "previous_unit" | "read_selected" | "show_choices" | "stop_audio" | "focus_writing" | "read_written" | "help" | "confirm" | "clear_answer" | "flag_question" | "read_time" | "finish_exam" }
+  | { kind: "go_page" | "go_question" | "select_region"; number: number }
+  | { kind: "read_choice" | "select_choice"; label: "A" | "B" | "C" | "D" | "E" };
 
 export type VoiceKind = VoiceIntent["kind"];
 
@@ -31,6 +31,11 @@ export function parseVoiceCommand(transcript: string): VoiceIntent | null {
   const text = normalizeVoiceText(transcript);
   if (!text || text.length > 90) return null;
   if (/^(yardım|komutlar|ne diyebilirim)$/.test(text)) return { kind: "help" };
+  if (/^(onayla|yanıtı onayla|işlemi onayla)$/.test(text)) return { kind: "confirm" };
+  if (/^(yanıtı temizle|cevabı temizle|işaretlemeyi temizle)$/.test(text)) return { kind: "clear_answer" };
+  if (/^(soruyu işaretle|gözden geçirmek için işaretle)$/.test(text)) return { kind: "flag_question" };
+  if (/^(kalan süre|süreyi oku|süre ne kadar)$/.test(text)) return { kind: "read_time" };
+  if (/^(denemeyi bitir|sınavı bitir)$/.test(text)) return { kind: "finish_exam" };
   if (/^(dur|sesi durdur|okumayı durdur|seslendirmeyi durdur)$/.test(text)) return { kind: "stop_audio" };
   if (/^(ana sayfa|ana sayfaya dön|kütüphane|kütüphaneye dön|geri dön)$/.test(text)) return { kind: "back" };
   // This intentionally opens a choice, not a lesson. "Çalışmak istiyorum" is a
@@ -44,6 +49,8 @@ export function parseVoiceCommand(transcript: string): VoiceIntent | null {
   if (/^(şıkları aç|şıkları göster|seçenekleri aç|seçenekleri göster)$/.test(text)) return { kind: "show_choices" };
   const choice = text.match(/^şık ([a-e])(?: yı| yi| yu| yü)?(?: oku| seslendir)?$/);
   if (choice) return { kind: "read_choice", label: choice[1].toUpperCase() as "A" | "B" | "C" | "D" | "E" };
+  const selectChoice = text.match(/^(?:şık|seçenek) ([a-e])(?: yı| yi| yu| yü)? seç$/);
+  if (selectChoice) return { kind: "select_choice", label: selectChoice[1].toUpperCase() as "A" | "B" | "C" | "D" | "E" };
   if (/^(sonraki sayfa|bir sonraki sayfa|sonraki sayfaya geç)$/.test(text)) return { kind: "next_page" };
   if (/^(önceki sayfa|bir önceki sayfa|önceki sayfaya geç)$/.test(text)) return { kind: "previous_page" };
   if (/^(sonraki soru|bir sonraki soru|sonraki soruya geç)$/.test(text)) return { kind: "next_question" };
@@ -53,6 +60,8 @@ export function parseVoiceCommand(transcript: string): VoiceIntent | null {
   if (/^(oku|seçili bölümü oku|bölümü oku|soruyu oku|metni oku|seslendir)$/.test(text)) return { kind: "read_selected" };
   const page = text.match(/^(?:sayfa|sayfaya git|sayfayı aç) (.+)$/);
   if (page) { const number = parseTurkishNumber(page[1]); return number && number <= 300 ? { kind: "go_page", number } : null; }
+  const question = text.match(/^(?:soru|soruya git|soruyu aç) (.+)$/);
+  if (question) { const number = parseTurkishNumber(question[1]); return number && number <= 120 ? { kind: "go_question", number } : null; }
   const region = text.match(/^(?:bölüm|bölüme git) (.+)$/);
   if (region) { const number = parseTurkishNumber(region[1]); return number && number <= 100 ? { kind: "select_region", number } : null; }
   return null;

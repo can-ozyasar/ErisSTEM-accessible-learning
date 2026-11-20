@@ -18,12 +18,15 @@ test("Turkish page numbers and exact navigation intents", () => {
   assert.deepEqual({ ...parseVoiceCommand("sonraki soruya geç") }, { kind: "next_question" });
   assert.deepEqual({ ...parseVoiceCommand("bölüm üç") }, { kind: "select_region", number: 3 });
   assert.deepEqual({ ...parseVoiceCommand("Şık A'yı oku") }, { kind: "read_choice", label: "A" });
+  assert.deepEqual({ ...parseVoiceCommand("şık B'yi seç") }, { kind: "select_choice", label: "B" });
+  assert.deepEqual({ ...parseVoiceCommand("soru yirmi dört") }, { kind: "go_question", number: 24 });
+  assert.deepEqual({ ...parseVoiceCommand("yanıtı onayla") }, { kind: "confirm" });
   assert.deepEqual({ ...parseVoiceCommand("tarih çalışmak istiyorum") }, { kind: "start_study" });
   assert.deepEqual({ ...parseVoiceCommand("çalışalım") }, { kind: "start_study" });
 });
 
 test("ambiguous or dangerous speech does not cause an action", () => {
-  for (const phrase of ["cevabı gönder", "hepsini sil", "sonraki", "sayfa üç yüz bir", "bölüm sıfır", "soru beş", "şık F", "merhaba"]) {
+  for (const phrase of ["cevabı gönder", "hepsini sil", "sonraki", "sayfa üç yüz bir", "bölüm sıfır", "soru sıfır", "şık F", "merhaba"]) {
     assert.equal(parseVoiceCommand(phrase), null, phrase);
   }
 });

@@ -18,15 +18,26 @@ import json
 import os
 import platform
 import re
+import hashlib
 import subprocess
 import sys
 import time
 import traceback
+from contextlib import nullcontext
 from pathlib import Path
 
 OUT = Path("/kaggle/working/behavior_baseline_v1.json")
 MODEL = "Qwen/Qwen3-14B"
 REVISION = os.environ.get("TUTOR_MODEL_REVISION", "40c069824f4251a91eefaf281ebe4c544efd3e18")
+ADAPTER_DATASET_HANDLE = "muhammedcanozyasar/history-tutor-qlora-final-adapter-v1"
+# Kaggle'ın klasik imajı Dataset'i slug altında, güncel private imajı ise
+# ``datasets/<owner>/<slug>`` altında bağlar. Yalnız bu iki sözleşmeli yol
+# kabul edilir; rastgele /kaggle/input taraması yapılmaz.
+ADAPTER_INPUT = Path("/kaggle/input/history-tutor-qlora-final-adapter-v1")
+ADAPTER_FILE_SHA256 = {
+    "adapter_config.json": "4315df5700af541a929f22113b16b8a57eacf0b765eb68d23f15c913e358ccbe",
+    "adapter_model.safetensors": "05bd6efdf281c51bdf727ed387aeb659e862993142e536f685eda70bf5d89fd1",
+}
 
 # Koçluk durumları (6 aşama)
 CASES = (
@@ -164,6 +175,33 @@ def save() -> None:
     OUT.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def resolve_adapter_input() -> Path:
+    """Resolve and verify exactly the preregistered private adapter mount."""
+    owner, slug = ADAPTER_DATASET_HANDLE.split("/", maxsplit=1)
+    candidates = tuple(dict.fromkeys((
+        ADAPTER_INPUT,
+        Path("/kaggle/input") / slug,
+        Path("/kaggle/input/datasets") / owner / slug,
+    )))
+    complete = [path for path in candidates if all((path / name).is_file() for name in ADAPTER_FILE_SHA256)]
+    if len(complete) != 1:
+        present = [str(path) for path in candidates if path.exists()]
+        raise RuntimeError(f"hash-doğrulanmış final adapter inputu gerekli; bağlı yollar={present}")
+    adapter = complete[0]
+    mismatches = [name for name, expected in ADAPTER_FILE_SHA256.items() if sha256(adapter / name) != expected]
+    if mismatches:
+        raise RuntimeError(f"final adapter checksum uyuşmazlığı: {', '.join(mismatches)}")
+    return adapter
+
+
 def build_prompt(case: dict) -> str:
     """Mevcut tutor_coach.py _prompt() ile birebir aynı format."""
     lines = [
@@ -282,41 +320,38 @@ def main() -> None:
         device_map={"": 0}, dtype=torch.float16,
     )
     model.eval()
+    from peft import PeftModel
+    adapter_input = resolve_adapter_input()
+    report["adapter"] = {
+        "dataset": ADAPTER_DATASET_HANDLE,
+        "mount": str(adapter_input),
+        "files": ADAPTER_FILE_SHA256,
+    }
+    model = PeftModel.from_pretrained(model, str(adapter_input))
     report["load_peak_gib"] = round(torch.cuda.max_memory_allocated() / 2**30, 3)
     save()
 
-    results = []
-    for i, case in enumerate(EVAL_CASES):
-        prompt_text = build_prompt(case)
-        messages = [{"role": "user", "content": prompt_text}]
-        inputs = tokenizer.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True,
-            enable_thinking=False, return_dict=True, return_tensors="pt",
-        ).to("cuda:0")
-        torch.cuda.synchronize()
-        t0 = time.monotonic()
-        with torch.inference_mode():
-            output = model.generate(
-                **inputs, max_new_tokens=128, do_sample=False,
-                pad_token_id=tokenizer.eos_token_id,
-            )
-        torch.cuda.synchronize()
-        elapsed = round(time.monotonic() - t0, 3)
-        generated = output[0, inputs["input_ids"].shape[-1]:]
-        reply = tokenizer.decode(generated, skip_special_tokens=True).strip()
-        analysis = analyze_response(reply, case)
-        analysis["prompt"] = prompt_text
-        analysis["reply"] = reply
-        analysis["seconds"] = elapsed
-        analysis["input_tokens"] = int(inputs["input_ids"].shape[-1])
-        analysis["output_tokens"] = int(generated.numel())
-        results.append(analysis)
-        report["results"] = results
-        report["metrics"] = compute_metrics(results)
-        save()
-        print(f"[{i+1}/{len(EVAL_CASES)}] {case['case']} → early={analysis['early_disclosure']} ends_q={analysis['ends_with_question']} ({elapsed}s)")
-
-    report["metrics"] = compute_metrics(results)
+    paired = {}
+    for candidate in ("base", "adapter"):
+        results = []
+        context = model.disable_adapter() if candidate == "base" else nullcontext()
+        with context:
+          for i, case in enumerate(EVAL_CASES):
+            prompt_text = build_prompt(case)
+            messages = [{"role": "user", "content": prompt_text}]
+            inputs = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True,
+                enable_thinking=False, return_dict=True, return_tensors="pt").to("cuda:0")
+            torch.cuda.synchronize(); t0 = time.monotonic()
+            with torch.inference_mode():
+                output = model.generate(**inputs, max_new_tokens=128, do_sample=False, pad_token_id=tokenizer.eos_token_id)
+            torch.cuda.synchronize(); elapsed = round(time.monotonic() - t0, 3)
+            generated = output[0, inputs["input_ids"].shape[-1]:]
+            analysis = analyze_response(tokenizer.decode(generated, skip_special_tokens=True).strip(), case)
+            analysis.update({"seconds": elapsed, "input_tokens": int(inputs["input_ids"].shape[-1]), "output_tokens": int(generated.numel())})
+            results.append(analysis)
+        paired[candidate] = {"results": results, "metrics": compute_metrics(results)}
+        report["paired"] = paired; save()
+    report["metrics"] = paired
     report["status"] = "completed"
     save()
     print("\n=== BASELINE METRİKLER ===")

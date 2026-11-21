@@ -383,8 +383,12 @@ def download_tutor_qlora_artifact(kernel: str, artifact_manifest_path: Path) -> 
          "--file-pattern", rf"^(?:.*/)?(?:{suffixes})$"], text=True, capture_output=True, check=False,
     )
     downloaded = [path for path in destination.rglob("*") if path.is_file()]
+    _, kernel_slug = kernel.split("/", maxsplit=1)
+    technical_log = f"{kernel_slug}.log"
     found: dict[str, Path] = {}
     for path in downloaded:
+        if path.name == technical_log:
+            continue
         relative = next((name for name in expected if str(path).endswith(name)), None)
         if relative is None or relative in found:
             raise RuntimeError("QLoRA artifact indirmesi allowlist dışı veya belirsiz dosya içeriyor")

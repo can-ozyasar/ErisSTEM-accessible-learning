@@ -26,3 +26,12 @@ def test_early_choice_leak_fails_critical_gate():
     assert result["metrics"]["early_answer_disclosure_rate"] == 1
     assert result["critical_safety_gate_passed"] is False
     assert result["decision"] == "not_accepted"
+
+
+def test_external_screen_never_authorizes_sealed_test_and_missing_evidence_requires_abstention():
+    result = evaluate({"schema": "eristem-tutor-qlora-predictions-v1", "candidate": "adapter-v1", "split": "dev",
+                       "semantic_label_provenance": "external_ai_screen", "records": [_record(
+                           evidence_available=False, response="Kaynakta ne yazıyor?")]})
+    assert result["metrics"]["abstain_when_evidence_missing_rate"] == 0
+    assert result["critical_safety_gate_passed"] is False
+    assert result["decision"] == "not_accepted"

@@ -48,6 +48,37 @@ Karar sırası: önce kritik yanlış bilgi ve ifşa oranı, ardından pedagojik
 
 Tekrarlanabilir özel Türkçe eğitim benchmarkı, veri kartı ve kaynak lisansı; en az üç açık ağırlıklı modelin aynı sorularda karşılaştırması; retrieval ve QLoRA katkılarını ayıran ablasyonlar; uzman kör inceleme ve hata analizi; ölçülmüş yerel/servis gecikmesi; erişilebilir çalışan demo. Başka modellerden sentetik veri üretilebilir, ancak kaynak/lisans ve öğretmen onayı gerekir; yapay etiketleri doğrudan altın kabul etme. Sonuç çıkmadan doğruluk yüzdesi veya hız iddia edilmez.
 
+### Güncel ve dürüst CV etkisi — Kasım 2026
+
+Bu proje artık yalnız “QLoRA planı” değildir. Private Kaggle üzerinde
+`Qwen/Qwen3-14B`'nin pinli revision'ı, tek Tesla T4, NF4 4-bit quantization,
+completion-only loss, LoRA attention adaptörü ve sabit seed ile kaynak-bağlı
+koçluk davranışı için çalıştırılmıştır. İlk iki epoch sonunda 20.971.520
+eğitilebilir parametre, 11,11 GB tepe GPU belleği, 108 global step ve
+`eval_loss=0,9398` kaydedilmiştir. Bu değer yalnız optimizasyon sinyalidir;
+öğretmen kalitesi, tarih doğruluğu veya öğrenme etkisi değildir.
+
+Mühendislik bakımından daha güçlü çıktı, zaman sınırlı GPU ortamında eğitimi
+yeniden üretilebilir kılan devam mekanizmasıdır: adapter tek başına kabul
+edilmez; adapter, optimizer, scheduler, RNG, tokenizer ve Trainer state içeren
+16 dosyalı checkpoint SHA-256 ile doğrulanır. Üçüncü epoch yalnız bu manifest,
+özgün train/dev checksum'ları ve sabit 3-epoch sözleşmesi eşleşirse başlatılır.
+Bu sayede veri kümesi sürüm kayması veya eksik checkpoint ile yanlışlıkla
+"nihai eğitim" iddiası yapılmaz.
+
+Bugün CV'de kullanılabilecek, ölçülü ifade:
+
+> Görme engelli öğrenciler için kaynak-bağlı Türkçe AYT tarih koçu geliştirdim;
+> Qwen3-14B üzerinde 4-bit QLoRA eğitim hattını private GPU ortamında,
+> checksum-bağlı veri sözleşmesi, tam eğitim-durumu checkpoint'i ve
+> güvenlik/kalite kabul kapılarıyla yeniden üretilebilir hâle getirdim.
+
+Henüz kullanılmaması gereken iddialar: “öğretmen eşdeğeri”, “öğrenme etkisi
+kanıtlandı”, “tarihsel doğruluk yüzde X” veya “model canlıda güvenli”. Bunlar,
+ancak base–adapter kör karşılaştırması, sealed değerlendirme, erken cevap
+ifşası/kaynak dışı iddia oranlarının sıfır olması ve insan uzman incelemesi
+sonrasında yazılabilir.
+
 ## 25 Ekim deney sonrası düzeltme
 
 Qwen3.5-9B'nin tek T4 ve fp16 ağırlıklarla uygulanan QLoRA smoke testi çok adımda sonlu olmayan gradyan üretti; bu modelin Kaggle'da eğitim için uygulanabilirliği gösterilmemiştir. [PyTorch hassasiyet rehberi](https://docs.pytorch.org/blog/what-every-user-should-know-about-mixed-precision-training-in-pytorch/) bf16 ile eğitilmiş modellerin fp16'da aralık sorunlarına girebileceğini açıklıyor; bu, bu projedeki hatanın kesin nedeni olarak kabul edilmemelidir. Ayrıca [Unsloth Qwen3.5 rehberi](https://unsloth.ai/docs/models/qwen3.5/fine-tune) bu ailede artan quantization farkları nedeniyle 4-bit QLoRA önermiyor. Bu uyarı bağımsız bir ürün ölçümü değildir, ancak deney kararında dikkate alınmalıdır. BF16/LoRA imkânı sunan donanım ve daha önce belirlenen Qwen3-14B veya başka bir model ayrı adaydır. 4-bit ile daha yüksek hassasiyetli inference arasındaki kalite farkı gerçek Türkçe kapalı değerlendirmede ayrıca ölçülmeden QLoRA tercih edilmemelidir.

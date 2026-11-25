@@ -7,8 +7,15 @@
   "verified_audio_count": 0,
   "missing_audio_count": 504,
   "verified_audio_fraction": 0.0,
-  "git_commit": "85978c34b256e4f7f2fd68030b3369aa927956df",
-  "evaluated_at_utc": "2026-11-25T07:00:25.399108+00:00",
+  "git_commit": "5050814f8645d00c7a95839e253c717b5a49b514",
+  "evaluated_at_utc": "2026-11-25T07:44:38.903926+00:00",
+  "installed_audio_root": "data/private/tts-v5-demo-installed-v1",
+  "candidate_manifest_sha256": "62c673cc6ba2d33fda224c13aec3735aea009a13b4b369ec6141fff668f93291",
+  "candidate_generation_status": "prepared_not_run",
+  "candidate_unique_text_count": 404,
+  "candidate_unique_texts_ready_for_synthesis": 387,
+  "candidate_numeric_texts_withheld_for_pronunciation_review": 17,
+  "candidate_runtime_enabled": false,
   "summary": {
     "choice": {
       "missing_audio": 405

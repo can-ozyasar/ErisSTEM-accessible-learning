@@ -22,7 +22,10 @@
     "database_healthcheck_passed": true,
     "tts_healthcheck_passed": true,
     "web_http_probe_passed": true,
-    "exam_maintenance_running": true
+    "exam_maintenance_running": true,
+    "manual_screen_reader_checklist_documented": true,
+    "nvda_firefox_manual_tasks_completed": false,
+    "talkback_chrome_manual_tasks_completed": false
   },
   "limitations": [
     "Automated Chromium and axe checks do not replace NVDA with Firefox or TalkBack with Chrome manual task testing.",

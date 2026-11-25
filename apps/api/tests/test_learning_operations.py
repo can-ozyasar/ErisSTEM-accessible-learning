@@ -155,6 +155,20 @@ def test_sourced_profiles_do_not_share_extra_time_rules():
     assert all(profile.year == 2026 and profile.verified_at == "2026-10-09" for profile in PROFILES)
 
 
+def test_exam_availability_shows_question_counts_without_answer_data(setup):
+    _, exams, client = setup
+    response = client.get("/v1/student/exams/availability", headers={"X-Role": "student"})
+    assert response.status_code == 200
+    assert response.json() == {
+        "title": "Kısa sentetik gezinme provası",
+        "content_mode": None,
+        "question_count": len(TASKS),
+        "session_question_count": len(TASKS),
+    }
+    assert not {"answers", "correct_answer", "explanation", "questions"} & response.json().keys()
+    assert exams.availability()["session_question_count"] == len(TASKS)
+
+
 def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkeypatch):
     import hashlib
 
@@ -200,10 +214,15 @@ def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkey
     monkeypatch.setenv("AYT_HISTORY_EXAM_PACK", str(path))
     active_tasks.cache_clear()
     store = LearningOperationsStore(make_session_factory(f"sqlite:///{tmp_path / 'production-pack.db'}"))
+    from app.exam_practice import active_pack_mode
+    active_pack_mode.cache_clear()
     exam = ExamStore(store).create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
                                                arrangement_confirmed=True, mode="short", short_minutes=1))
     assert len(exam["questions"]) == 120
     assert "özgün AYT Tarih paketi" in exam["notice"]
+    preview = ExamStore(store).availability()
+    assert preview == {"title": "Özgün AYT Tarih denemesi", "content_mode": "original_120",
+                       "question_count": 120, "session_question_count": 120}
     active_tasks.cache_clear()
     pdf_path.write_bytes(b"changed")
     with pytest.raises(HTTPException, match="geçerli veya hazır değil"):

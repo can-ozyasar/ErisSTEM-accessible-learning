@@ -343,6 +343,23 @@ class ExamStore:
     def bank_checksum(self) -> str:
         return _task_checksum(self.tasks())
 
+    def availability(self) -> dict:
+        """Expose package size and mode for the exam start screen, never answer data."""
+        mode = active_pack_mode()
+        titles = {
+            "original_120": "Özgün AYT Tarih denemesi",
+            "licensed_local_pilot": "AYT Tarih yerel pilot paketi",
+            "ai_source_reviewed_local_pilot": "AYT Tarih yerel aday paketi",
+            None: "Kısa sentetik gezinme provası",
+        }
+        question_count = len(self.tasks())
+        return {
+            "title": titles[mode],
+            "content_mode": mode,
+            "question_count": question_count,
+            "session_question_count": question_count,
+        }
+
     def create(self, request: ExamCreate):
         self.cleanup()
         profile = next((item for item in PROFILES if item.id == request.profile_id), None)

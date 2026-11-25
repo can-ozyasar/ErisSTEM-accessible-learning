@@ -6,6 +6,8 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from .auth import Role, require_roles
+from .deepseek_exam_coach import is_configured as external_coach_configured
+from .demo_audio import resolve_demo_audio
 from .exam_practice import PROFILES, ExamAnswer, ExamCoachTurn, ExamCreate, ExamStore
 from .learning_operations import (
     PILOT_TASKS,
@@ -16,10 +18,8 @@ from .learning_operations import (
     RevisionRequest,
     marking_keys,
 )
-from .pipeline.learning_experience import module_catalog, read_module
 from .local_tts import LocalTtsUnavailable, synthesize_history_text
-from .demo_audio import resolve_demo_audio
-from .deepseek_exam_coach import is_configured as external_coach_configured
+from .pipeline.learning_experience import module_catalog, read_module
 from .pipeline.prepare_ayt_history_v5_audio_manifest import _normalized, _question_ordinal
 
 
@@ -79,6 +79,10 @@ def learning_router(store: LearningOperationsStore, exams: ExamStore):
     def profiles(_: Role = student):
         exams.cleanup()
         return list(PROFILES)
+
+    @router.get("/v1/student/exams/availability")
+    def exam_availability(_: Role = student):
+        return exams.availability()
 
     @router.get("/v1/student/exams/coach-capabilities")
     def coach_capabilities(_: Role = student):

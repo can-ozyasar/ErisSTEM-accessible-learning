@@ -6,6 +6,7 @@ import type { VoiceIntent, VoiceKind } from "./voice_commands";
 
 type Slot = { id: string; title: string; base_minutes: number; extra_minutes: number };
 type Profile = { id: string; title: string; year: number; verified_at: string; source_url: string; source_section: string; arrangement: string; slots: Slot[] };
+type ExamAvailability = { title: string; content_mode: string | null; question_count: number; session_question_count: number };
 type Exam = { id: string; revision: number; profile: Profile; slot: Slot; state: "active" | "finished";
   deadline: number; server_now: number; duration_minutes: number; notice: string;
   questions: { id: string; question: string; choices: { id: string; text: string }[] }[];
@@ -17,8 +18,8 @@ function readSessionId() { try { return sessionStorage.getItem(SESSION_KEY); } c
 
 export function ExamPractice({ api, onBack }: { api: string; onBack: () => void }) {
   const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [profileId, setProfileId] = useState("lgs-reader-2026");
-  const [slotId, setSlotId] = useState("numeric");
+  const [profileId, setProfileId] = useState("yks-reader-2026");
+  const [slotId, setSlotId] = useState("ayt");
   const [mode, setMode] = useState("short");
   const [minutes, setMinutes] = useState(5);
   const [confirmed, setConfirmed] = useState(false);
@@ -34,6 +35,7 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
   const [coachResponse, setCoachResponse] = useState<Record<string, string>>({});
   const [externalCoachConsent, setExternalCoachConsent] = useState(false);
   const [externalCoachConfigured, setExternalCoachConfigured] = useState(false);
+  const [availability, setAvailability] = useState<ExamAvailability | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -53,6 +55,11 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
       const data = await response.json() as { external_coach_configured?: boolean };
       if (!controller.signal.aborted) setExternalCoachConfigured(data.external_coach_configured === true);
     }).catch(() => { /* Offline or unconfigured: local coach remains available. */ });
+    void fetch(`${api}/v1/student/exams/availability`, { headers, signal: controller.signal }).then(async response => {
+      if (!response.ok) throw new Error("availability");
+      const data = await response.json() as ExamAvailability;
+      if (!controller.signal.aborted) setAvailability(data);
+    }).catch(() => { if (!controller.signal.aborted) setAvailability(null); });
     void fetch(`${api}/v1/student/exams/profiles`, { headers, signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error("profiles");
       const data = await response.json() as Profile[];
@@ -215,7 +222,7 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
     <h1 ref={heading} tabIndex={-1}>{exam ? exam.state === "finished" ? "Prova sonuçları" : `Soru ${index + 1} / ${exam.questions.length}` : "Sınav düzenlemesini seçin"}</h1>
     <p role="status">{status}</p>
     {!exam ? <form onSubmit={event => void start(event)}>
-      <p>Onaylı AYT Tarih paketi kurulmadıysa bu bölüm altı sentetik soruyla okuyucu, süre ve yanıt gezinmesini çalıştırır. Kaynaklar 2026 yılına aittir; başka yıllara otomatik uygulanmaz.</p>
+      <p>{availability ? <>{availability.title}: toplam {availability.question_count} soru. Bu oturumda {availability.session_question_count} soru gösterilir.</> : "Deneme paketi bilgisi yüklenemedi; başlamadan önce bağlantıyı kontrol edin."} Onaylı paket yoksa kısa sentetik sorular yalnız gezinme provası içindir. Kaynaklardaki sınav düzenlemeleri 2026 yılına aittir; başka yıllara otomatik uygulanmaz.</p>
       <label htmlFor="exam-profile">Sınav ve düzenleme<select id="exam-profile" value={profileId} onChange={event => { const next = profiles.find(item => item.id === event.target.value); setProfileId(event.target.value); setSlotId(next?.slots[0]?.id ?? ""); setConfirmed(false); }}>{profiles.map(item => <option value={item.id} key={item.id}>{item.title}</option>)}</select></label>
       {selected && <><p>{selected.arrangement}</p><p><a href={selected.source_url} target="_blank" rel="noreferrer">Resmî {selected.year} kılavuzunu aç</a> · {selected.source_section} · Kaynak kontrolü: {selected.verified_at}</p>
         <label htmlFor="exam-slot">Oturum<select id="exam-slot" value={slotId} onChange={event => setSlotId(event.target.value)}>{selected.slots.map(item => <option value={item.id} key={item.id}>{item.title}: {item.base_minutes} + {item.extra_minutes} dakika</option>)}</select></label></>}
@@ -223,7 +230,7 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
       {mode === "short" ? <label htmlFor="exam-minutes">Kısa prova: dakika<input id="exam-minutes" type="number" value={minutes} min={1} max={60} onChange={event => setMinutes(Number(event.target.value))} required /></label> : <p>Prova süresi: {slot ? slot.base_minutes + slot.extra_minutes : 0} dakika. Soru sayısı etkin pakete bağlıdır.</p>}
       <label className="learning-option"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>Seçtiğim düzenlemeyi kendi sınav giriş belgemle kontrol ettim veya bu profili yalnız gezinme çalışması için seçiyorum. Uygulama sınav hakkı belirlemez.</span></label>
       <p className="notice">Seçimleriniz bu bilgisayarda geçici tutulur. Yanlış seçimler koçluk için saklanır; ilgili koçluk tamamlandığında silinir. Prova verisini tamamen silebilirsiniz; en geç yedi gün sonra kayıt otomatik silinir. Oturum kimliği yalnız bu tarayıcı sekmesinde saklanır.</p>
-      <button disabled={busy || !selected || !slot || !confirmed}>Provayı başlat</button>
+      <button disabled={busy || !selected || !slot || !confirmed || !availability}>Provayı başlat</button>
     </form> : <>
       <p>{exam.profile.title} · {exam.slot.title} · {exam.duration_minutes} dakika.</p><p className="notice">{exam.notice}</p>
       {exam.state === "active" && question ? <>

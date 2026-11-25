@@ -63,6 +63,9 @@ test("coach dictation remains a local draft until the learner sends it", async (
 test("exam navigation saves and changes answers, resumes, hides solutions and erases records", async ({ page }) => {
   await page.goto("/?mode=student&view=exam");
   await expect(page.getByLabel("Sınav ve düzenleme")).toBeVisible();
+  await expect(page.getByLabel("Sınav ve düzenleme")).toHaveValue("yks-reader-2026");
+  await expect(page.getByLabel("Oturum")).toHaveValue("ayt");
+  await expect(page.getByText(/Bu oturumda 6 soru gösterilir/)).toBeVisible();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Soru 1 / 6");

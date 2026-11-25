@@ -107,7 +107,7 @@
     "kaggle_kernel": "muhammedcanozyasar/eristem-tts-v5-demo-full",
     "kaggle_kernel_version": 3,
     "kaggle_kernel_status_at_last_check": "RUNNING",
-    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:22:40Z",
+    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:36:43Z",
     "generation_attempt": {
       "version": 2,
       "terminal_failure": true,
@@ -121,12 +121,13 @@
     "retry": {
       "version": 3,
       "status": "RUNNING",
-      "status_checked_at_utc": "2026-11-25T12:22:40Z",
+      "status_checked_at_utc": "2026-11-25T12:36:43Z",
       "status_history": [
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:02:27Z"},
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:09:50Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:21:05Z"},
-        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:22:40Z"}
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:22:40Z"},
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:36:43Z"}
       ],
       "runner_sha256": "bb28b6442236748fb0f0ee7940579b5d28eb05180dfa40db66f050ac44dffff5",
       "preflight_tests_passed": 15,
@@ -564,6 +565,24 @@
     "expert_blind_rubric": "pending",
     "latency_p50_p95": "pending",
     "student_runtime_enabled": false,
+    "prior_paired_synthetic_behavior_screen": {
+      "paired_report_sha256": "0d061988f403143df75b05e487acabb30389192c37bceaa7e9691662cf8055b5",
+      "semantic_evaluation_sha256": "84990ceb60eb1d3768e268d8d50574e71f2d17ff84e839b5a3f84fd8780e7507",
+      "cases": 11,
+      "student_data_included": false,
+      "answer_key_accessed": false,
+      "semantic_label_provenance": "external_ai_screen; not human teacher approval",
+      "adapter_artifact_identity_verified_against_current_manifest": false,
+      "base_vs_adapter": {
+        "early_disclosure": {"base": "1/8", "adapter": "0/8"},
+        "socratic_question_rate": {"base": 0.4545, "adapter": 1.0},
+        "turkish_detected_rate_heuristic": {"base": 0.2727, "adapter": 0.4545},
+        "abstention_when_evidence_missing": {"base": "0/1", "adapter": "0/1"},
+        "full_response_latency_p95_ms": {"base": 6486, "adapter": 7589}
+      },
+      "adapter_unanswered_critical_gate": "failed: no abstention in the single no-evidence case",
+      "paired_acceptance_decision": "not accepted; synthetic screen only and not proven to match the current adapter artifact"
+    },
     "decision": "Training completed, but the adapter is not accepted as a teacher and remains disabled in the student runtime until paired safety, quality, and latency gates pass."
   },
   "notice": "Aggregate-only report: no question text, answers, source quotations, learner responses, API keys, or audio are included."

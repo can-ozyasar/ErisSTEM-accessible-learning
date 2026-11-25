@@ -107,7 +107,7 @@
     "kaggle_kernel": "muhammedcanozyasar/eristem-tts-v5-demo-full",
     "kaggle_kernel_version": 3,
     "kaggle_kernel_status_at_last_check": "RUNNING",
-    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:46:18Z",
+    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:53:44Z",
     "generation_attempt": {
       "version": 2,
       "terminal_failure": true,
@@ -121,7 +121,7 @@
     "retry": {
       "version": 3,
       "status": "RUNNING",
-      "status_checked_at_utc": "2026-11-25T12:46:18Z",
+      "status_checked_at_utc": "2026-11-25T12:53:44Z",
       "status_history": [
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:02:27Z"},
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:09:50Z"},
@@ -129,7 +129,8 @@
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:22:40Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:36:43Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:39:36Z"},
-        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:46:18Z"}
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:46:18Z"},
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:53:44Z"}
       ],
       "runner_sha256": "bb28b6442236748fb0f0ee7940579b5d28eb05180dfa40db66f050ac44dffff5",
       "preflight_tests_passed": 15,
@@ -175,6 +176,20 @@
     "audio_bytes": 320044,
     "temporary_session_deleted_http_status": 204,
     "claim_scope": "one actual active-pack question-stem request on the local Docker API"
+  },
+  "live_private_exam_piper_after_source_gate": {
+    "recorded_at_utc": "2026-11-25T12:53:44Z",
+    "api_source_commit": "7d57cf236f74e8b9e218c734e91217a1d0694498",
+    "api_container_healthy": true,
+    "exam_started_http_status": 201,
+    "questions_in_session": 81,
+    "audio_route_http_status": 200,
+    "audio_source_header": "piper",
+    "content_type": "audio/wav",
+    "riff_wave_valid": true,
+    "audio_bytes": 320044,
+    "temporary_session_deleted_http_status": 204,
+    "claim_scope": "one actual active-pack question-stem request after the project-level DeepSeek processing gate was deployed"
   },
   "v5_listener_review_workflow": {
     "review_page_builder": "apps/api/app/pipeline/prepare_ayt_v5_audio_listener_review.py",

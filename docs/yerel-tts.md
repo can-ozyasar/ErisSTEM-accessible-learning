@@ -50,31 +50,36 @@ Eksik aday sesleri üretmek için yalnız özel Kaggle'a gönderilecek bir girdi
 hazırlandı: 487 sabit birim (387 benzersiz, rakam içermeyen metin); telaffuz
 incelemesi bekleyen 17 rakamlı birimin metni yüklemeden çıkarıldı. Yalnız
 manifest yüklendi; PDF, MEB kanıtı ve öğrenci verisi gönderilmedi. Özel Kaggle
-koşumu 25 Kasım 2026 10:26 UTC'de özel sürüm 2 olarak gönderildi; Kaggle'daki
-dataset mount yolu varsayımı yüzünden `missing_manifest` hatasıyla sona erdi.
-Sentez başlamadı ve WAV üretilmedi. Düzeltme, tek manifesti `/kaggle/input`
-altında şema ile bulup model checksum'ını bağımlılık kurulumundan önce
-doğruluyor. Bu kodla özel sürüm 3, 11:44 UTC'de yeniden gönderildi; son kontrolde
-`QUEUED` durumundaydı. Çıktı üretildiğinde dahi inceleme tamamlanana kadar aday
-kalacak.
+sürüm 2, eski dataset mount yolu varsayımı nedeniyle `missing_manifest` hatası
+verdi; sentez başlamadı. Sürüm 3, tek manifesti `/kaggle/input` altında şemayla
+bulup model checksum'ını bağımlılık kurulumundan önce doğrulayarak bu kök nedeni
+giderdi. Sürüm 3, 25 Kasım 2026 12:26:57–13:03:51 UTC arasında Tesla T4
+üzerinde tamamlandı. 387/387 benzersiz, rakam içermeyen metin üretildi. Girdi
+manifesti, model ve runner checksum'ları beklenen değerlerle eşleşti. WAV'ların
+tamamı checksum ve boyut bakımından doğrulandı; tümü geçerli mono 24 kHz PCM
+olarak açıldı. Üretim kaydı
+`data/private/kaggle-notebook-outputs/muhammedcanozyasar/eristem-tts-v5-demo-full/20261125T130446Z/eristem-tts-v5-demo-generated-v1/run_records.json`
+yolundadır. Bu otomatik kontroller telaffuz/doğallık onayı değildir.
 
 Bu kapı artık yalnız belge düzeyinde değil, çalışma anında da zorunludur:
 kurulum aracı `runtime_enabled: false` ve `requires_listening_review: true`
-yazar; API bu bayraklar değişmeden V5 WAV'ı sunmaz ve Piper'a düşer. WAV'lar
-ancak paket/model/metin checksum'ları eşleşip dinleyici onayı alındıktan sonra
-etkinleştirilebilir. Yerel dinleme sayfası ve checksum denetimli onay aracı
-hazırdır; henüz çalıştırılmadı, çünkü bu koşumun WAV çıktısı bekleniyor. Bu
-koşum öğrenciye veya kamuya yayın izni anlamına gelmez.
+yazar; API bu bayraklar değişmeden V5 WAV'ı sunmaz ve Piper'a düşer. 487 kaynak
+birimi 387 WAV'a bağlandı ve kapalı aday paketine kuruldu:
+`data/private/tts-v5-ayt-static-candidate-2026-11-25/`. Yerel dinleme sayfası
+`data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html`
+yolunda hazır. WAV'lar ancak paket/model/metin checksum'ları eşleşip dinleyici
+onayı alındıktan sonra etkinleştirilebilir. Bu koşum öğrenciye veya kamuya
+yayın izni anlamına gelmez.
 
-Koşum tamamlandıktan sonra indirilen WAV'lar önce
+Yeni koşularda indirilen WAV'lar önce
 `experiments/kaggle/install_v5_demo_audio.py` ile checksum doğrulamalı fakat
 kapalı bir aday klasörüne kurulmalıdır. Dinleme sayfası yerelde hazırlanır:
 
 ```bash
-PYTHONPATH=apps/api python -m app.pipeline.prepare_ayt_v5_audio_listener_review \
+PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.prepare_ayt_v5_audio_listener_review \
   --input-manifest data/private/tts-v5-ayt-static-input-2026-11-25-minimized/manifest.json \
-  --candidate-root data/private/tts-v5-ayt-candidate-installed-v3 \
-  --output data/private/tts-v5-ayt-candidate-installed-v3/listener-review.html
+  --candidate-root data/private/tts-v5-ayt-static-candidate-2026-11-25 \
+  --output data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html
 ```
 
 Sayfayı tarayıcıda açıp dinlenen her kayıt için anlaşılabilirlik, telaffuz ve

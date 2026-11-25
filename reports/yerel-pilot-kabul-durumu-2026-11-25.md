@@ -14,18 +14,24 @@ kayıttır. Kontrollü yerel pilot kapsamındadır; bağımsız kullanıcı baş
 | Oturum güvenilirliği | 100 stres oturumu; 100 cevap tekrarının reddi; 100 idempotent teslim; geçici oturumlar silindi | Bu otomatik test koşusunun kapsamıdır |
 | Canlı soru sesi | Gerçek 81 soruluk oturumda Piper rotası HTTP 200; geçerli WAV 320.044 bayt; geçici oturum HTTP 204 ile silindi | Tek soru kökü isteği; paket genelinde insan telaffuz değerlendirmesi değildir |
 | Koçluk TTS gecikmesi | Yerel Ryzen 7 5700U üzerinde 5 örnek; tam WAV yanıtı p50 1.928 ms, p95 2.315 ms | Küçük örnek, tek cihaz; akışta ilk ses süresi değildir |
+| Fine-tune sabit ses adayı | Kaggle T4: 387/387 WAV checksum ve çözümleme geçti; üretim süresi metin başına p50 3.766 ms, p95 20.216 ms; sessiz/kırpılmış kayıt 0 | Teknik dalga biçimi taraması telaffuz/doğallık değildir; V5 kapalı ve dinleyici incelemesi bekliyor |
 | Web/API regresyonları | Web: build, lint, 16 birim testi ve özel E2E geçti. API: 867 test geçti, 0 başarısız/atlanan | Ayrı koşular ve commit’ler; ayrıntı JSON kabul raporundadır |
 | DeepSeek güvenlik kapısı | Varsayılan kapalı; kaynak işleme yetkisi varsayılan kapalı; öğrenci izni istenir | Gerçek öğrenci veya MEB içeriğiyle canlı kullanım etkin değildir |
 
 ## TTS ve model kararı
 
 Aktif paketin 504 sabit ses birimi için önceki yerel ses adaylarında tam eşleşme
-0/504 bulundu. Bu nedenle öğrenci yolunda yerel Piper korunuyor. Kaggle’daki
-V5 sabit-ses üretim koşusu 25 Kasım 12:53 UTC kontrolünde hâlâ `RUNNING` idi;
-çıktı alınmış veya kalite kapısından geçmiş sayılmamalıdır. V3 koşusunun girdisi
-özel paket metaverisiyle sınırlandırılmıştır; öğrenci verisi ve kaynak PDF’leri
-yüklenmemiştir. Üretilen her ses için eşleşme ve dinleme kapısı tamamlanmadan
-çalışma zamanında kullanılmayacaktır.
+0/504 bulundu. Bu nedenle öğrenci yolunda yerel Piper korunuyor. Özel Kaggle V3
+koşusu 25 Kasım 13:03:51 UTC’de tamamlandı. Yalnız minimize özel manifest
+yüklendi; öğrenci verisi ve kaynak PDF’leri yüklenmedi. Beklenen 387 benzersiz
+rakam içermeyen metin için 387/387 WAV üretildi; SHA-256, dosya boyutu ve
+mono 24 kHz PCM çözümlemesi doğrulandı. Bu teknik kontroller telaffuz veya
+doğallık onayı değildir. Kayıtlar 487 statik birime bağlandı ve kapalı aday
+paketinde tutuluyor. Dalga biçimi taramasında sessiz veya eşik üstü kırpılmış
+kayıt bulunmadı; bu yine de doğru telaffuz anlamına gelmez. Yerel dinleme sayfası
+`data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html`.
+Dinleyici incelemesi ve lisans kontrolü tamamlanmadan çalışma zamanında
+kullanılmayacak.
 
 QLoRA adaptörü ve RAG araştırması da öğrenci çalışma zamanında etkin değildir.
 RAG karşılaştırması ayrı 24 sorgulu araştırma bölmesinde pooled-top-3
@@ -35,8 +41,9 @@ insan alan uzmanı incelemesi tamamlanmamıştır.
 
 ## Açık kabul kapıları
 
-- Kaggle V3 terminal durumunu beklemek; yalnız tamamlanırsa çıktıları indirmek,
-  checksum/WAV/metin eşleşmesini doğrulamak ve dinleme onay kuyruğuna almak.
+- Hazır dinleme sayfasında istenen V5 kayıtlarını dinleyip anlaşılabilirlik,
+  telaffuz ve artefakt alanlarını işaretlemek; tamamlanan JSON'u daha sonra
+  onay aracına vermek. İncelenmeyen sesler ve rakamlı 17 birim Piper'da kalacak.
 - NVDA+Firefox ve TalkBack+Chrome üzerinde görev listesini gerçek cihazlarda
   tamamlamak. Mevcut geliştirme makinesinde Firefox/NVDA ve bağlı Android cihaz
   yoktur.

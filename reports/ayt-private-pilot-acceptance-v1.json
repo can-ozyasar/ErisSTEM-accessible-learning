@@ -1,6 +1,6 @@
 {
   "schema": "ayt-private-pilot-acceptance-v1",
-  "evaluated_at_utc": "2026-11-25T10:11:20+00:00",
+  "evaluated_at_utc": "2026-11-25T13:13:35+00:00",
   "git_commit": "35a0b98",
   "test_source_status": "working_tree_uncommitted",
   "browser": "Google Chrome 157.0.8103.38",
@@ -73,6 +73,7 @@
     "notes": "Cache generation and all 486 API route checks ran locally. Cache volume totals include 22 files that predated this AYT run. The single first-request timing is neither a p95 estimate nor a guaranteed cold-cache measurement. Fine-tuned V5 audio was not present for the active pack."
   },
   "fine_tuned_static_audio_inventory": {
+    "scope": "Pre-generation inventory of previously installed V5 roots; the new Kaggle candidate is reported under ayt_v5_static_audio_generation.retry.",
     "evaluated_at_utc": "2026-11-25",
     "git_commit": "35a0b983a5573f2752eec74382bdae8f73340ceb",
     "active_pack": "data/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v2.json",
@@ -106,8 +107,8 @@
     "kaggle_dataset_status": "ready",
     "kaggle_kernel": "muhammedcanozyasar/eristem-tts-v5-demo-full",
     "kaggle_kernel_version": 3,
-    "kaggle_kernel_status_at_last_check": "RUNNING",
-    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:53:44Z",
+    "kaggle_kernel_status_at_last_check": "COMPLETE",
+    "kaggle_kernel_status_checked_at_utc": "2026-11-25T13:04:46Z",
     "generation_attempt": {
       "version": 2,
       "terminal_failure": true,
@@ -120,8 +121,8 @@
     },
     "retry": {
       "version": 3,
-      "status": "RUNNING",
-      "status_checked_at_utc": "2026-11-25T12:53:44Z",
+      "status": "COMPLETE",
+      "status_checked_at_utc": "2026-11-25T13:04:46Z",
       "status_history": [
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:02:27Z"},
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:09:50Z"},
@@ -130,11 +131,38 @@
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:36:43Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:39:36Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:46:18Z"},
-        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:53:44Z"}
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:53:44Z"},
+        {"status": "COMPLETE", "checked_at_utc": "2026-11-25T13:04:46Z"}
       ],
       "runner_sha256": "bb28b6442236748fb0f0ee7940579b5d28eb05180dfa40db66f050ac44dffff5",
       "preflight_tests_passed": 15,
-      "runner_ruff_clean": true
+      "runner_ruff_clean": true,
+      "started_at_utc": "2026-11-25T12:26:57.715291+00:00",
+      "finished_at_utc": "2026-11-25T13:03:51.562696+00:00",
+      "gpu": "Tesla T4",
+      "runtime": {"python": "3.13.15", "torch": "2.6.0+cu124", "transformers": "5.2.0", "huggingface_hub": "1.33.0"},
+      "records": 387,
+      "generated_this_run": 387,
+      "resumed": 0,
+      "pilot_limit": 0,
+      "run_records_sha256": "fa84d46da4430c116cb3766e6a2cbb6e6205dae5a984689780de4478d13cbffc",
+      "run_records_path": "data/private/kaggle-notebook-outputs/muhammedcanozyasar/eristem-tts-v5-demo-full/20261125T130446Z/eristem-tts-v5-demo-generated-v1/run_records.json",
+      "output_manifest_sha256_matches_input": true,
+      "wav_count": 387,
+      "wav_checksums_and_sizes_validated": true,
+      "wav_decode_validation": {"valid": 387, "sample_rate_hz": 24000, "channels": 1, "encoding": "PCM"},
+      "generation_latency_ms_per_unique_text": {"total": 2213391, "p50": 3766, "p95": 20215.8},
+      "speech_duration_seconds_per_unique_text": {"p50": 3.2, "p95": 21.78},
+      "waveform_screen": {"silent_units": 0, "clipped_units_threshold_0_999": 0, "peak_normalized_max": 0.7354},
+      "waveform_screen_claim_limit": "Technical waveform integrity only; not pronunciation, intelligibility, naturalness, or listener quality.",
+      "closed_candidate_index_sha256": "b13f42bda8807fa386facb46f2a0c888ac81ad5647a2ba066bbb24d663053d15",
+      "candidate_unit_references": 487,
+      "candidate_unique_audio_assets": 387,
+      "candidate_runtime_enabled": false,
+      "listener_review_required": true,
+      "listener_review_page": "data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html",
+      "listener_review_page_sha256": "9cdcc7d796d4133bbd782f4ecf459655ffd46bbe3cc00b31b247167da781d9ba",
+      "promotion_or_student_runtime_enabled": false
     },
     "gpu_timeout_seconds": 7200,
     "voice_model_sha256": "8ec3a3312b9586a8650c38d2c8e8e8b6214851f13afbaa935ed4c9d598af8503",

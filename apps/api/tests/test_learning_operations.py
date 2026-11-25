@@ -379,6 +379,70 @@ def test_no_external_coach_call_without_consent(setup, monkeypatch):
     assert result["reply"]["provider"] == "local"
 
 
+def test_consented_external_coach_uses_exam_evidence_and_never_unlocks_answer_early(setup, monkeypatch):
+    from app import deepseek_exam_coach
+    _, exams, _ = setup
+    task = TASKS[0]
+    evidence = [{"source_id": "meb-final-1", "role": "primary", "quote": "Kaynakta doğrulanmış tarihsel ilişki."}]
+    tasks = ({**task, "evidence": evidence}, *TASKS[1:])
+    monkeypatch.setattr(exams, "tasks", lambda: tasks)
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
+    observed = []
+
+    def consented_hint(context, learner_message, correct_text):
+        observed.append((context, learner_message, correct_text))
+        return "Kaynakta açıklanan ilişki sorudaki hangi ifadeyle örtüşüyor?"
+
+    monkeypatch.setattr(deepseek_exam_coach, "hint", consented_hint)
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                      arrangement_confirmed=True, mode="short", short_minutes=5))
+    wrong_index = next(index for index in range(len(task["choices"])) if index != task["correct"])
+    saved = exams.answer(started["id"], ExamAnswer(
+        revision=started["revision"], question_id=task["id"], answer=f"option-{wrong_index + 1}"))
+    finished = exams.finish(started["id"], saved["revision"])
+
+    first = exams.coach(started["id"], task["id"], ExamCoachTurn(
+        revision=finished["revision"], turn=1, learner_response="İki ilişkiyi karıştırdım.",
+        external_coach_consent=True))
+    assert first["reply"]["provider"] == "deepseek"
+    assert first["reply"]["source_ids"] == ["meb-final-1"]
+    assert first["reply"]["can_reveal_explanation"] is False
+    assert first["exam"]["results"][0]["correct_answer"] is None
+    assert len(observed) == 1
+    context, learner_message, correct_text = observed[0]
+    assert context.choice_text == task["choices"][wrong_index]
+    assert "Kaynakta doğrulanmış tarihsel ilişki." in context.evidence
+    assert learner_message == "İki ilişkiyi karıştırdım."
+    assert correct_text == task["choices"][task["correct"]]
+
+    second = exams.coach(started["id"], task["id"], ExamCoachTurn(
+        revision=first["exam"]["revision"], turn=2, learner_response="Kanıtı tekrar düşündüm.",
+        external_coach_consent=True))
+    assert second["reply"]["provider"] == "local"
+    assert second["reply"]["can_reveal_explanation"] is True
+    assert second["exam"]["results"][0]["correct_answer"] == task["choices"][task["correct"]]
+    assert len(observed) == 1
+
+
+def test_consented_external_coach_failure_keeps_the_local_reply(setup, monkeypatch):
+    from app import deepseek_exam_coach
+    _, exams, _ = setup
+    tasks = ({**TASKS[0], "evidence": [{"source_id": "meb", "quote": "Kaynak kanıtı."}]}, *TASKS[1:])
+    monkeypatch.setattr(exams, "tasks", lambda: tasks)
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
+    monkeypatch.setattr(deepseek_exam_coach, "hint", lambda *_: None)
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                      arrangement_confirmed=True, mode="short", short_minutes=5))
+    finished = exams.finish(started["id"], started["revision"])
+    result = exams.coach(started["id"], "e1", ExamCoachTurn(
+        revision=finished["revision"], turn=1, external_coach_consent=True))
+    assert result["reply"]["provider"] == "local"
+    assert result["reply"]["source_ids"] == ["meb"]
+    assert result["exam"]["results"][0]["correct_answer"] is None
+
+
 def test_legacy_checksum_compatibility_applies_only_to_finished_matching_sessions(setup, monkeypatch):
     from app import exam_practice
     store, exams, _ = setup

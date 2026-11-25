@@ -1,7 +1,7 @@
 {
   "schema": "ayt-private-pilot-acceptance-v1",
-  "evaluated_at_utc": "2026-11-25T07:40:19+00:00",
-  "git_commit": "b8c77e9",
+  "evaluated_at_utc": "2026-11-25T07:42:50+00:00",
+  "git_commit": "6033001",
   "browser": "Google Chrome 157.0.8103.38",
   "test_runtime": "Node.js 20.20.2, Playwright, isolated temporary SQLite",
   "private_pack_sha256": "a36ffb0331cc42d4ad138a996cee722bec62cd73ac92bbb6093e349f2fd052e3",
@@ -21,6 +21,10 @@
     "unit_deadline_enforcement_passed": true,
     "unit_concurrent_same_revision_write_passed": true,
     "unit_synthetic_81_item_100_session_regression_passed": true,
+    "deepseek_opt_in_route_keeps_first_turn_answer_hidden": true,
+    "deepseek_route_uses_question_evidence_and_student_context": true,
+    "deepseek_failure_falls_back_to_local_coach": true,
+    "no_consent_external_coach_calls": true,
     "questions_with_coaching_evidence": 76,
     "questions_safely_abstaining": 5,
     "axe_violations_across_exam_entry_active_exam_results_and_first_coach_turn": 0,
@@ -41,6 +45,7 @@
     "Automated Chromium and axe checks do not replace NVDA with Firefox or TalkBack with Chrome manual task testing.",
     "No blind or low-vision participant study was performed; usability and learning-effect claims are not established.",
     "This flow validates session and coaching gates, not the historical correctness of every question.",
+    "DeepSeek integration tests use a mocked provider; external service availability, live response quality, and production credentials were not tested.",
     "Fine-tuned static audio remains unmatched for the active pack; Piper is the runtime fallback."
   ],
   "notice": "Aggregate-only report: no question text, answers, source quotations, learner responses, API keys, or audio are included."

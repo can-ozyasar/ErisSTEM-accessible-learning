@@ -4,19 +4,34 @@ import AxeBuilder from "@axe-core/playwright";
 test.use({ serviceWorkers: "block" });
 
 test("exam stem and individual choice use session-bound audio without saving an answer", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "Audio", { configurable: true, value: class {
+      playbackRate = 1;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(_source: string) {}
+      play() { return Promise.resolve(); }
+      pause() {}
+    } });
+  });
   const units: string[] = [];
   await page.route("**/api/v1/student/exams/sessions/*/questions/*/audio/*", async route => {
-    units.push(new URL(route.request().url()).pathname.split("/").pop() ?? "");
-    await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.from("RIFF0000WAVE" + "0".repeat(32)) });
+    const unit = new URL(route.request().url()).pathname.split("/").pop() ?? "";
+    units.push(unit);
+    await route.fulfill({ status: 200, contentType: "audio/wav",
+      headers: { "X-Audio-Source": unit === "stem" ? "piper" : "fine-tuned-v5" },
+      body: Buffer.from("RIFF0000WAVE" + "0".repeat(32)) });
   });
   await page.goto("/?mode=student&view=exam");
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
   await page.getByRole("button", { name: "Soruyu tekrar seslendir" }).click();
   await expect.poll(() => units.includes("stem")).toBe(true);
+  await expect(page.getByText("Yerel Piper Türkçe sesiyle okunuyor.", { exact: true })).toBeVisible();
   await page.getByLabel("Komutu yazarak dene").fill("Şık A'yı oku");
   await page.getByRole("button", { name: "Uygula", exact: true }).click();
   await expect.poll(() => units.includes("choice-A")).toBe(true);
+  await expect(page.getByText("Fine-tune edilmiş Türkçe sesle okunuyor.", { exact: true })).toBeVisible();
   await expect(page.getByRole("radio", { name: "Çember", exact: true })).not.toBeChecked();
   await expect(page.getByRole("button", { name: "Soru 1 · boş", exact: true })).toBeVisible();
 });
@@ -38,7 +53,8 @@ test("showing choices reads separate audio assets in order and stop cancels the 
   const units: string[] = [];
   await page.route("**/api/v1/student/exams/sessions/*/questions/*/audio/choice-*", async route => {
     units.push(new URL(route.request().url()).pathname.split("/").pop() ?? "");
-    await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.from("RIFF0000WAVE" + "0".repeat(32)) });
+    await route.fulfill({ status: 200, contentType: "audio/wav", headers: { "X-Audio-Source": "fine-tuned-v5" },
+      body: Buffer.from("RIFF0000WAVE" + "0".repeat(32)) });
   });
   await page.goto("/?mode=student&view=exam");
   await page.getByRole("checkbox").check();

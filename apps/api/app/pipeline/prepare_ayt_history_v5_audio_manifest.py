@@ -102,8 +102,6 @@ def build(pack: AytHistoryExamPack, pack_checksum: str) -> dict:
         add("question", f"{question.id}:stem", "question_stem", prefix + question.spoken_question)
         for label, choice in zip(CHOICE_LABELS, question.choices, strict=True):
             add("question", f"{question.id}:choice-{label.lower()}", "choice", f"{label} şıkkı. {choice}")
-        choices = " ".join(f"{label} şıkkı. {choice}" for label, choice in zip(CHOICE_LABELS, question.choices, strict=True))
-        add("question", f"{question.id}:choices", "all_choices", choices)
     for text in INTERFACE_TEXTS:
         add("interface", f"interface:{_sha256_text(text)}", "interface", text)
 

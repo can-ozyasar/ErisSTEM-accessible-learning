@@ -12,12 +12,11 @@ def test_static_v5_manifest_binds_question_units_and_keeps_runtime_closed():
     payload = build(SimpleNamespace(pack_id="ayt-history-v1", questions=[question]), "a" * 64)
     assert payload["runtime_enabled"] is False
     assert payload["requires_listener_review"] is True
-    assert payload["summary"]["static_units"] == 7 + len(INTERFACE_TEXTS)
+    assert payload["summary"]["static_units"] == 6 + len(INTERFACE_TEXTS)
     stem = next(item for item in payload["items"] if item["id"] == "authoring-001:stem")
     assert stem["spoken_text"].startswith("birinci soru.")
     assert stem["contains_digits"] is False
     assert {item["id"] for item in payload["items"] if item["kind"] == "question"} == {
         "authoring-001:stem", "authoring-001:choice-a", "authoring-001:choice-b",
         "authoring-001:choice-c", "authoring-001:choice-d", "authoring-001:choice-e",
-        "authoring-001:choices",
     }

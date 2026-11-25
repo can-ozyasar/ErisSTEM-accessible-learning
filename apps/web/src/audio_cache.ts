@@ -1,6 +1,7 @@
 /** Ephemeral bounded audio cache shared by question reading and interface speech. */
 const MAX_BYTES = 24 * 1024 * 1024;
 const cache = new Map<string, ArrayBuffer>();
+const sources = new Map<string, string>();
 const pending = new Map<string, Promise<ArrayBuffer>>();
 let bytes = 0;
 
@@ -19,6 +20,7 @@ export async function audioBytes(key: string, load: () => Promise<ArrayBuffer>):
         if (!oldest) break;
         bytes -= cache.get(oldest)!.byteLength;
         cache.delete(oldest);
+        sources.delete(oldest);
       }
       cache.set(key, data); bytes += data.byteLength;
     }
@@ -32,8 +34,12 @@ export async function fetchAudio(key: string, url: string, init?: RequestInit): 
   return audioBytes(key, async () => {
     const response = await fetch(url, init);
     if (!response.ok) throw new Error("audio_unavailable");
-    return response.arrayBuffer();
+    const data = await response.arrayBuffer();
+    const source = response.headers.get("X-Audio-Source");
+    if (source && data.byteLength <= MAX_BYTES) sources.set(key, source);
+    return data;
   });
 }
 
 export function cachedAudioCount(): number { return cache.size; }
+export function cachedAudioSource(key: string): string | null { return sources.get(key) ?? null; }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchAudio } from "./audio_cache";
+import { cachedAudioSource, fetchAudio } from "./audio_cache";
 
 const API = import.meta.env.VITE_API_URL ?? "/api";
 const MAX_CHUNK = 500;
@@ -94,6 +94,7 @@ export function useLearningSpeech(rate: number) {
         const nextUrl = URL.createObjectURL(new Blob([data.slice(0)], { type: "audio/wav" }));
         const nextAudio = new Audio(nextUrl);
         url.current = nextUrl; audio.current = nextAudio; nextAudio.playbackRate = rate;
+        const source = cachedAudioSource(item.cacheKey);
         const release = () => {
           URL.revokeObjectURL(nextUrl);
           if (url.current === nextUrl) url.current = null;
@@ -104,7 +105,9 @@ export function useLearningSpeech(rate: number) {
           release();
           if (current === generation.current) setStatus("Ses oynatılamadı. Metni ekran okuyucunuzla inceleyebilirsiniz.");
         };
-        setStatus("Yerel Türkçe sesle okunuyor; hazır kayıt yoksa Piper kullanılır.");
+        setStatus(source === "fine-tuned-v5" ? "Fine-tune edilmiş Türkçe sesle okunuyor."
+          : source === "piper" ? "Yerel Piper Türkçe sesiyle okunuyor."
+            : "Yerel Türkçe sesle okunuyor.");
         void nextAudio.play().catch(() => {
           release();
           if (current === generation.current) setStatus("Ses oynatılamadı. Metni ekran okuyucunuzla inceleyebilirsiniz.");

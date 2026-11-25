@@ -543,6 +543,17 @@
     "adapter_family": "Qwen3-14B QLoRA",
     "acceptance_report_sha256": "eb746d405b20bccac42722808b9c39bc42220a788db4153531bb6212a640f3bd",
     "adapter_artifact_manifest_sha256": "5e7fed7680c5fa26dbc9311050a6c38912d754fd0b92d3ff887a52b5ccab43a2",
+    "development_dataset": {
+      "manifest_sha256": "eba71fa658ed9ba6e3f5070909bd79fb728664ac89da76dcfe3137ac57c21311",
+      "train_sha256": "ae30668878fda9e630a2df609d04115e09191ae46a93c83b72d0ee75c423c569",
+      "dev_sha256": "07212fee8c0e8042c9948d02cd01ecdf91f43553646173b1faa3cb6ca37b01fd",
+      "train_examples": 426,
+      "dev_examples": 144,
+      "student_data_included": false,
+      "answer_keys_included": false,
+      "sealed_test_uploaded": false,
+      "interpretation": "These are authored development examples, not observed student responses; the paired result cannot establish learner-facing quality."
+    },
     "training_progress": {"planned_epochs": 3, "completed_epochs": 3, "global_step": 162},
     "dev_next_token_loss": 0.931361198425293,
     "dev_loss_is_teacher_quality_metric": false,

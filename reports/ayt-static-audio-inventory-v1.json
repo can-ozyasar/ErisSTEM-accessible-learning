@@ -1,0 +1,25 @@
+{
+  "schema": "ayt-static-audio-inventory-v1",
+  "pack_sha256": "3cc6344eb4458a72d8137f26d721e0ca798d047e59ef12c673a95a115437cc97",
+  "voice_model_sha256": "8ec3a3312b9586a8650c38d2c8e8e8b6214851f13afbaa935ed4c9d598af8503",
+  "question_count": 81,
+  "static_unit_count": 504,
+  "verified_audio_count": 0,
+  "missing_audio_count": 504,
+  "verified_audio_fraction": 0.0,
+  "git_commit": "85978c34b256e4f7f2fd68030b3369aa927956df",
+  "evaluated_at_utc": "2026-11-25T07:00:25.399108+00:00",
+  "summary": {
+    "choice": {
+      "missing_audio": 405
+    },
+    "interface": {
+      "missing_audio": 18
+    },
+    "question_stem": {
+      "missing_audio": 81
+    }
+  },
+  "digits_require_pronunciation_review": 17,
+  "notice": "A match requires exact package, model, text, audio checksum, RIFF/WAVE validation and unit identity."
+}

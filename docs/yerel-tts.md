@@ -66,7 +66,7 @@ kurulum aracı `runtime_enabled: false` ve `requires_listening_review: true`
 yazar; API bu bayraklar değişmeden V5 WAV'ı sunmaz ve Piper'a düşer. 487 kaynak
 birimi 387 WAV'a bağlandı ve kapalı aday paketine kuruldu:
 `data/private/tts-v5-ayt-static-candidate-2026-11-25/`. Yerel dinleme sayfası
-`data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html`
+`data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review-v2.html`
 yolunda hazır. WAV'lar ancak paket/model/metin checksum'ları eşleşip dinleyici
 onayı alındıktan sonra etkinleştirilebilir. Bu koşum öğrenciye veya kamuya
 yayın izni anlamına gelmez.
@@ -79,7 +79,7 @@ kapalı bir aday klasörüne kurulmalıdır. Dinleme sayfası yerelde hazırlan�
 PYTHONPATH=apps/api apps/api/.venv/bin/python -m app.pipeline.prepare_ayt_v5_audio_listener_review \
   --input-manifest data/private/tts-v5-ayt-static-input-2026-11-25-minimized/manifest.json \
   --candidate-root data/private/tts-v5-ayt-static-candidate-2026-11-25 \
-  --output data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html
+  --output data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review-v2.html
 ```
 
 Sayfayı tarayıcıda açıp dinlenen her kayıt için anlaşılabilirlik, telaffuz ve

@@ -1,6 +1,6 @@
 {
   "schema": "ayt-private-pilot-acceptance-v1",
-  "evaluated_at_utc": "2026-11-25T13:13:35+00:00",
+  "evaluated_at_utc": "2026-11-25T13:22:15+00:00",
   "git_commit": "35a0b98",
   "test_source_status": "working_tree_uncommitted",
   "browser": "Google Chrome 157.0.8103.38",
@@ -160,8 +160,9 @@
       "candidate_unique_audio_assets": 387,
       "candidate_runtime_enabled": false,
       "listener_review_required": true,
-      "listener_review_page": "data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html",
-      "listener_review_page_sha256": "9cdcc7d796d4133bbd782f4ecf459655ffd46bbe3cc00b31b247167da781d9ba",
+      "listener_review_page": "data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review-v2.html",
+      "listener_review_page_sha256": "fd1fa34de71ecce1b86634411630feb44211b7a188acf5d1f287609ce6efb2f6",
+      "listener_review_page_browser_smoke": {"node": "22.23.4", "playwright": "1.64.0", "browser": "Google Chrome 157.0.8103.38", "audio_controls_and_rows": 387, "first_local_wav_metadata_loaded": true, "filter_matching_items": 1, "filter_no_match_items": 0, "clear_filter_restored_items": 387, "axe_wcag_violations": 0, "axe_passes": 17, "page_errors": 0, "claim_limit": "Automated Chromium/axe check only; not NVDA/TalkBack or listener review."},
       "promotion_or_student_runtime_enabled": false
     },
     "gpu_timeout_seconds": 7200,

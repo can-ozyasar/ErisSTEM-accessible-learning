@@ -59,6 +59,9 @@ def test_prepares_local_accessible_review_for_exact_unique_audio(tmp_path: Path)
     document = page.read_text(encoding="utf-8")
     assert "lang=\"tr\"" in document
     assert "Anlaşılabilirlik" in document
+    assert 'id="filter" type="search"' in document
+    assert "Soru numarası, şık etiketi veya metinle ses ara" in document
+    assert "c.fieldset.hidden=!searchable.includes(query)" in document
     assert "Onay yalnız seçtiğiniz WAV birimlerine uygulanır" in document
     assert "e1:stem" in document and "e1:choice-a" in document
     assert payload["pack_checksum"] in document

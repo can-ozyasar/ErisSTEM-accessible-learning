@@ -15,6 +15,7 @@ kayıttır. Kontrollü yerel pilot kapsamındadır; bağımsız kullanıcı baş
 | Canlı soru sesi | Gerçek 81 soruluk oturumda Piper rotası HTTP 200; geçerli WAV 320.044 bayt; geçici oturum HTTP 204 ile silindi | Tek soru kökü isteği; paket genelinde insan telaffuz değerlendirmesi değildir |
 | Koçluk TTS gecikmesi | Yerel Ryzen 7 5700U üzerinde 5 örnek; tam WAV yanıtı p50 1.928 ms, p95 2.315 ms | Küçük örnek, tek cihaz; akışta ilk ses süresi değildir |
 | Fine-tune sabit ses adayı | Kaggle T4: 387/387 WAV checksum ve çözümleme geçti; üretim süresi metin başına p50 3.766 ms, p95 20.216 ms; sessiz/kırpılmış kayıt 0 | Teknik dalga biçimi taraması telaffuz/doğallık değildir; V5 kapalı ve dinleyici incelemesi bekliyor |
+| Yerel ses inceleme sayfası | 387 ses kontrolü; filtre eşleşme/temizleme akışı ve yerel WAV metadata yüklemesi geçti; axe WCAG taramasında ihlal 0 | Otomatik Chrome testi; ekran okuyucu veya dinleyici onayı değildir |
 | Web/API regresyonları | Web: build, lint, 16 birim testi ve özel E2E geçti. API: 867 test geçti, 0 başarısız/atlanan | Ayrı koşular ve commit’ler; ayrıntı JSON kabul raporundadır |
 | DeepSeek güvenlik kapısı | Varsayılan kapalı; kaynak işleme yetkisi varsayılan kapalı; öğrenci izni istenir | Gerçek öğrenci veya MEB içeriğiyle canlı kullanım etkin değildir |
 
@@ -29,7 +30,7 @@ mono 24 kHz PCM çözümlemesi doğrulandı. Bu teknik kontroller telaffuz veya
 doğallık onayı değildir. Kayıtlar 487 statik birime bağlandı ve kapalı aday
 paketinde tutuluyor. Dalga biçimi taramasında sessiz veya eşik üstü kırpılmış
 kayıt bulunmadı; bu yine de doğru telaffuz anlamına gelmez. Yerel dinleme sayfası
-`data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review.html`.
+`data/private/tts-v5-ayt-static-candidate-2026-11-25/listener-review-v2.html`.
 Dinleyici incelemesi ve lisans kontrolü tamamlanmadan çalışma zamanında
 kullanılmayacak.
 

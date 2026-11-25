@@ -62,6 +62,32 @@ test("showing choices reads separate audio assets in order and stop cancels the 
   await expect.poll(() => page.evaluate(() => (window as Window & { audioStarts: number }).audioStarts)).toBe(4);
 });
 
+test("voice answer selection, clearing and finishing each wait for a separate confirmation", async ({ page }) => {
+  await page.goto("/?mode=student&view=exam");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
+  const command = page.getByLabel("Komutu yazarak dene");
+  const apply = page.getByRole("button", { name: "Uygula", exact: true });
+  await command.fill("şık A'yı seç");
+  await apply.click();
+  await expect(page.getByRole("button", { name: "Soru 1 · boş", exact: true })).toBeVisible();
+  await command.fill("onayla");
+  await apply.click();
+  await expect(page.getByRole("button", { name: "Soru 1 · yanıtlı", exact: true })).toBeVisible();
+  await command.fill("yanıtı temizle");
+  await apply.click();
+  await expect(page.getByRole("button", { name: "Soru 1 · yanıtlı", exact: true })).toBeVisible();
+  await command.fill("onayla");
+  await apply.click();
+  await expect(page.getByRole("button", { name: "Soru 1 · boş", exact: true })).toBeVisible();
+  await command.fill("denemeyi bitir");
+  await apply.click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Soru 1 / 6");
+  await command.fill("onayla");
+  await apply.click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Prova sonuçları");
+});
+
 test("coach dictation remains a local draft until the learner sends it", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: class {

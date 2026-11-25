@@ -285,6 +285,44 @@ def test_exam_hides_solutions_until_finish_preserves_revision_and_erases_raw_ans
     assert store.get(saved["id"]) is None
 
 
+def test_exam_audio_resolves_only_a_question_or_choice_from_session(setup, monkeypatch):
+    from app import learning_routes
+    _, exams, client = setup
+    texts = []
+    monkeypatch.setattr(learning_routes, "synthesize_history_text", lambda text: texts.append(text) or b"wav")
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt", arrangement_confirmed=True))
+    base = f"/v1/student/exams/sessions/{started['id']}/questions/e1/audio"
+    headers = {"X-Role": "student"}
+    assert client.get(base + "/stem", headers=headers).status_code == 200
+    assert texts[-1] == "birinci soru. " + TASKS[0]["question"]
+    assert client.get(base + "/choice-B", headers=headers).status_code == 200
+    assert texts[-1] == "B şıkkı. Doğru parçası"
+    assert client.get(base + "/answer", headers=headers).status_code == 404
+    assert client.get(base + "/choice-E", headers=headers).status_code == 404
+    assert client.get(base + "/stem").status_code == 401
+
+
+def test_exam_audio_prefers_exact_verified_recording(setup, monkeypatch, tmp_path):
+    from app import exam_practice, learning_routes
+    _, exams, client = setup
+    source = tmp_path / "pack.json"
+    source.write_text("{}")
+    monkeypatch.setattr(exams, "tasks", lambda: TASKS)
+    monkeypatch.setattr(exam_practice, "active_pack_mode", lambda: None)
+    monkeypatch.setenv("AYT_HISTORY_EXAM_PACK", str(source))
+    requests = []
+    def prerecorded(kind, identifier, text, pack):
+        requests.append((kind, identifier, text, pack))
+        return b"verified-wav"
+    monkeypatch.setattr(learning_routes, "resolve_demo_audio", prerecorded)
+    monkeypatch.setattr(learning_routes, "synthesize_history_text", lambda _: pytest.fail("Piper should not run"))
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt", arrangement_confirmed=True))
+    response = client.get(f"/v1/student/exams/sessions/{started['id']}/questions/e1/audio/choice-B", headers={"X-Role": "student"})
+    assert response.content == b"verified-wav"
+    assert response.headers["X-Audio-Source"] == "fine-tuned-v5"
+    assert requests == [("question", "e1:choice-b", "B şıkkı. Doğru parçası", source)]
+
+
 def test_exam_coach_is_blocked_until_finish_and_refuses_unsourced_demo_questions(setup):
     _, exams, _ = setup
     started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
@@ -298,8 +336,55 @@ def test_exam_coach_is_blocked_until_finish_and_refuses_unsourced_demo_questions
     assert finished["state"] == "finished"
 
 
+def test_external_coach_configuration_reports_only_boolean(setup, monkeypatch):
+    _, _, client = setup
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "secret-test-key")
+    monkeypatch.delenv("DEEPSEEK_COACH_ENABLED", raising=False)
+    headers = {"X-Role": "student"}
+    assert client.get("/v1/student/exams/coach-capabilities", headers=headers).json() == {"external_coach_configured": False}
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    response = client.get("/v1/student/exams/coach-capabilities", headers=headers)
+    assert response.json() == {"external_coach_configured": True}
+    assert "secret-test-key" not in response.text
+
+
+def test_no_external_coach_call_without_consent(setup, monkeypatch):
+    from app import deepseek_exam_coach
+    _, exams, _ = setup
+    tasks = ({**TASKS[0], "evidence": [{"source_id": "meb", "quote": "Merkeze eşit uzaklık bilgisi."}]}, *TASKS[1:])
+    monkeypatch.setattr(exams, "tasks", lambda: tasks)
+    monkeypatch.setattr(deepseek_exam_coach, "hint", lambda *_: pytest.fail("external call without consent"))
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt", arrangement_confirmed=True))
+    finished = exams.finish(started["id"], started["revision"])
+    result = exams.coach(started["id"], "e1", ExamCoachTurn(revision=finished["revision"], turn=1))
+    assert result["reply"]["provider"] == "local"
+
+
+def test_legacy_checksum_compatibility_applies_only_to_finished_matching_sessions(setup, monkeypatch):
+    from app import exam_practice
+    store, exams, _ = setup
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                      arrangement_confirmed=True, mode="short", short_minutes=5))
+    finished = exams.finish(started["id"], started["revision"])
+    record = store.get(started["id"])
+    store.save(record["id"], "exam", "exam-procedure", {**record, "bank_checksum": "legacy"}, record["revision"])
+    monkeypatch.setattr(exam_practice, "legacy_ai_task_checksum", lambda _tasks: "legacy")
+    assert exams.get(started["id"])["state"] == "finished"
+    monkeypatch.setattr(exam_practice, "legacy_ai_task_checksum", lambda _tasks: "different")
+    with pytest.raises(HTTPException) as exc:
+        exams.get(started["id"])
+    assert exc.value.status_code == 409
+
+
 def test_sourced_wrong_answer_requires_two_sequential_coach_turns(setup, monkeypatch):
-    _, exams, client = setup
+    store, exams, client = setup
+    from app import exam_practice
+    real_coach = exam_practice.build_coach_reply
+    observed_choices = []
+    def observe_coach(context, *args, **kwargs):
+        observed_choices.append(context.choice_text)
+        return real_coach(context, *args, **kwargs)
+    monkeypatch.setattr(exam_practice, "build_coach_reply", observe_coach)
     tasks = ({**TASKS[0], "evidence": [{"source_id": "meb-test-001", "quote": "Merkeze eşit uzaklıktaki noktalar çember oluşturur."}]}, *TASKS[1:])
     monkeypatch.setattr(exams, "tasks", lambda: tasks)
     headers = {"X-Role": "student"}
@@ -309,6 +394,8 @@ def test_sourced_wrong_answer_requires_two_sequential_coach_turns(setup, monkeyp
         revision=started["revision"], question_id="e1", answer="option-2"))
     finished = exams.finish(started["id"], saved["revision"])
     assert finished["results"][0]["correct_answer"] is None
+    assert "coach_selections" not in finished
+    assert store.get(started["id"])["coach_selections"] == {"e1": "option-2"}
     url = f"/v1/student/exams/sessions/{started['id']}/review/e1/coach"
     assert client.post(url, headers=headers, json={"revision": finished["revision"], "turn": 2,
                                                   "learner_response": "Çember olabilir."}).status_code == 409
@@ -320,6 +407,8 @@ def test_sourced_wrong_answer_requires_two_sequential_coach_turns(setup, monkeyp
                                                    "learner_response": "İki şekli karıştırdım."}).json()
     assert second["reply"]["stage"] == "gerekceli_aciklama"
     assert second["reply"]["can_reveal_explanation"] is True
+    assert observed_choices == ["Doğru parçası", "Doğru parçası"]
+    assert store.get(started["id"])["coach_selections"] == {}
     assert second["exam"]["results"][0]["correct_answer"] == "Çember"
     assert second["exam"]["results"][0]["explanation"]
     assert client.post(url, headers=headers, json={"revision": second["exam"]["revision"], "turn": 2,

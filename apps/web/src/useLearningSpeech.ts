@@ -76,5 +76,22 @@ export function useLearningSpeech(rate: number) {
     };
     void playPart(0);
   }, [cancel, rate]);
-  return { speak, stop, status };
+  const speakUnit = useCallback((urlPath: string, cacheKey: string) => {
+    cancel();
+    const current = generation.current;
+    void (async () => {
+      try {
+        const data = await fetchAudio(cacheKey, urlPath, { headers: { "X-Role": "student" } });
+        if (current !== generation.current) return;
+        const nextUrl = URL.createObjectURL(new Blob([data.slice(0)], { type: "audio/wav" }));
+        const nextAudio = new Audio(nextUrl);
+        url.current = nextUrl; audio.current = nextAudio; nextAudio.playbackRate = rate;
+        nextAudio.onended = () => { URL.revokeObjectURL(nextUrl); if (url.current === nextUrl) url.current = null; if (audio.current === nextAudio) audio.current = null; if (current === generation.current) setStatus("Seslendirme tamamlandı."); };
+        nextAudio.onerror = () => { if (current === generation.current) setStatus("Ses oynatılamadı. Metni ekran okuyucunuzla inceleyebilirsiniz."); };
+        setStatus("Yerel Türkçe sesle okunuyor; hazır kayıt yoksa Piper kullanılır.");
+        await nextAudio.play();
+      } catch { if (current === generation.current) setStatus("Yerel ses hizmetine erişilemedi. Metni ekran okuyucunuzla inceleyebilirsiniz."); }
+    })();
+  }, [cancel, rate]);
+  return { speak, speakUnit, stop, status };
 }

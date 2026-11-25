@@ -1,6 +1,65 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
+test.use({ serviceWorkers: "block" });
+
+test("exam stem and individual choice use session-bound audio without saving an answer", async ({ page }) => {
+  const units: string[] = [];
+  await page.route("**/api/v1/student/exams/sessions/*/questions/*/audio/*", async route => {
+    units.push(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+    await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.from("RIFF0000WAVE" + "0".repeat(32)) });
+  });
+  await page.goto("/?mode=student&view=exam");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
+  await page.getByRole("button", { name: "Soruyu tekrar seslendir" }).click();
+  await expect.poll(() => units.includes("stem")).toBe(true);
+  await page.getByLabel("Komutu yazarak dene").fill("Şık A'yı oku");
+  await page.getByRole("button", { name: "Uygula", exact: true }).click();
+  await expect.poll(() => units.includes("choice-A")).toBe(true);
+  await expect(page.getByRole("radio", { name: "Çember", exact: true })).not.toBeChecked();
+  await expect(page.getByRole("button", { name: "Soru 1 · boş", exact: true })).toBeVisible();
+});
+
+test("coach dictation remains a local draft until the learner sends it", async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: class {
+      static async available(options: { processLocally: boolean }) { return options.processLocally ? "available" : "unavailable"; }
+      lang = ""; continuous = false; interimResults = false; processLocally = false;
+      onresult: ((event: { results: { transcript: string }[][] }) => void) | null = null;
+      onend: (() => void) | null = null; onerror: (() => void) | null = null;
+      start() { if (this.processLocally) window.setTimeout(() => { this.onresult?.({ results: [[{ transcript: "Tarihleri karıştırdım" }]] }); this.onend?.(); }, 0); }
+      abort() { this.onend?.(); }
+    } });
+  });
+  await page.route("**/api/v1/student/exams/sessions/*/finish", async route => {
+    const response = await route.fetch();
+    const exam = await response.json();
+    exam.results[0].source_available = true;
+    exam.results[0].coach_turns = 1;
+    exam.results[0].coach_text = "Ne düşünüyorsun?";
+    await route.fulfill({ response, json: exam });
+  });
+  let sent: unknown = null;
+  await page.route("**/api/v1/student/exams/sessions/*/review/*/coach", async route => {
+    sent = route.request().postDataJSON();
+    await route.fulfill({ status: 503, json: { detail: "test" } });
+  });
+  await page.goto("/?mode=student&view=exam");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
+  await page.getByRole("radio", { name: "Doğru parçası", exact: true }).check();
+  await expect(page.getByRole("button", { name: "Soru 1 · yanıtlı", exact: true })).toBeEnabled();
+  page.once("dialog", dialog => dialog.accept());
+  await page.getByRole("button", { name: "Provayı bitir", exact: true }).click();
+  await page.getByText("Soru 1: yanlış", { exact: true }).click();
+  await page.getByRole("button", { name: "Düşüncemi konuşarak yaz" }).click();
+  await expect(page.getByLabel("Soru hakkındaki düşünceniz")).toHaveValue("Tarihleri karıştırdım");
+  expect(sent).toBeNull();
+  await page.getByRole("button", { name: "Düşüncemi paylaş ve ikinci ipucunu aç" }).click();
+  await expect.poll(() => sent).toMatchObject({ learner_response: "Tarihleri karıştırdım", turn: 2 });
+});
+
 test("exam navigation saves and changes answers, resumes, hides solutions and erases records", async ({ page }) => {
   await page.goto("/?mode=student&view=exam");
   await expect(page.getByLabel("Sınav ve düzenleme")).toBeVisible();

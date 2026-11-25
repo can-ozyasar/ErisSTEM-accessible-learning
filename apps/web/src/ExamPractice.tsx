@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useLearningSpeech } from "./useLearningSpeech";
 import { VoiceCommandPanel } from "./VoiceCommandPanel";
+import { LocalDictation } from "./LocalDictation";
 import type { VoiceIntent, VoiceKind } from "./voice_commands";
 
 type Slot = { id: string; title: string; base_minutes: number; extra_minutes: number };
@@ -10,7 +11,7 @@ type Exam = { id: string; revision: number; profile: Profile; slot: Slot; state:
   questions: { id: string; question: string; choices: { id: string; text: string }[] }[];
   answers: Record<string, string | null>; flags: Record<string, boolean>;
   results: { question_id: string; answered: boolean; correct: boolean; correct_answer: string | null; explanation: string | null; coach_turns: number; coach_text: string | null; source_available: boolean }[] | null };
-type CoachReply = { stage: string; turn: number; text: string; source_ids: string[]; can_reveal_explanation: boolean };
+type CoachReply = { stage: string; turn: number; text: string; source_ids: string[]; can_reveal_explanation: boolean; provider?: "local" | "deepseek" };
 const SESSION_KEY = "eristem:exam-session:v1";
 function readSessionId() { try { return sessionStorage.getItem(SESSION_KEY); } catch { return null; } }
 
@@ -31,10 +32,12 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
   const [pendingVoiceAction, setPendingVoiceAction] = useState<"save" | "clear" | "finish" | null>(null);
   const [coachReplies, setCoachReplies] = useState<Record<string, CoachReply>>({});
   const [coachResponse, setCoachResponse] = useState<Record<string, string>>({});
+  const [externalCoachConsent, setExternalCoachConsent] = useState(false);
+  const [externalCoachConfigured, setExternalCoachConfigured] = useState(false);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const heading = useRef<HTMLHeadingElement>(null);
-  const { speak, stop, status: voiceStatus } = useLearningSpeech(1);
+  const { speak, speakUnit, stop, status: voiceStatus } = useLearningSpeech(1);
   const selected = profiles.find(item => item.id === profileId);
   const slot = selected?.slots.find(item => item.id === slotId);
   const question = exam?.questions[index];
@@ -45,6 +48,11 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
     const controller = new AbortController();
     mounted.current = true;
     const headers = { "X-Role": "student" };
+    void fetch(`${api}/v1/student/exams/coach-capabilities`, { headers, signal: controller.signal }).then(async response => {
+      if (!response.ok) return;
+      const data = await response.json() as { external_coach_configured?: boolean };
+      if (!controller.signal.aborted) setExternalCoachConfigured(data.external_coach_configured === true);
+    }).catch(() => { /* Offline or unconfigured: local coach remains available. */ });
     void fetch(`${api}/v1/student/exams/profiles`, { headers, signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error("profiles");
       const data = await response.json() as Profile[];
@@ -147,23 +155,29 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
     await run(async () => {
       const response = await fetch(`${api}/v1/student/exams/sessions/${exam.id}/review/${encodeURIComponent(questionId)}/coach`, {
         method: "POST", headers: { "X-Role": "student", "Content-Type": "application/json" },
-        body: JSON.stringify({ revision: exam.revision, turn, learner_response: coachResponse[questionId] ?? "" }),
+        body: JSON.stringify({ revision: exam.revision, turn, learner_response: coachResponse[questionId] ?? "", external_coach_consent: externalCoachConsent }),
       });
       if (!response.ok) throw new Error("Kaynaklı koçluk şu anda hazır değil.");
       const data = await response.json() as { reply: CoachReply; exam: Exam };
-      if (mounted.current) { setCoachReplies(current => ({ ...current, [questionId]: data.reply })); accept(data.exam, Date.now()); }
+      if (mounted.current) { setCoachReplies(current => ({ ...current, [questionId]: data.reply })); accept(data.exam, Date.now());
+        if (turn === 1 && externalCoachConsent) setStatus(data.reply.provider === "deepseek" ? "Çevrim içi koç yanıtı alındı." : "Çevrim içi koç kullanılamadı veya yanıtı doğrulanamadı; yerel koç kullanıldı."); }
     });
   }
 
   const readRemaining = () => speak(`Kalan süre ${Math.floor(remaining / 60)} dakika ${remaining % 60} saniye.`);
   const choiceForLabel = (label: string) => question?.choices["ABCDE".indexOf(label)];
+  const readUnit = (unit: string) => {
+    if (!exam || !question) return;
+    const path = `${api}/v1/student/exams/sessions/${encodeURIComponent(exam.id)}/questions/${encodeURIComponent(question.id)}/audio/${encodeURIComponent(unit)}`;
+    speakUnit(path, `exam:${exam.id}:${question.id}:${unit}`);
+  };
   const voiceCommand = (command: VoiceIntent) => {
     if (!exam || exam.state !== "active" || !question || remaining === 0) return;
-    if (command.kind === "read_selected") { speak(question.question); return; }
+    if (command.kind === "read_selected") { readUnit("stem"); return; }
     if (command.kind === "show_choices") { speak(question.choices.map((item, i) => `Şık ${"ABCDE"[i]}. ${item.text}`).join(". ")); return; }
     if (command.kind === "read_choice") {
       const item = choiceForLabel(command.label);
-      if (item) speak(`Şık ${command.label}. ${item.text}`);
+      if (item) readUnit(`choice-${command.label}`);
       return;
     }
     if (command.kind === "select_choice") {
@@ -208,7 +222,7 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
       <label htmlFor="exam-mode">Prova süresi<select id="exam-mode" value={mode} onChange={event => setMode(event.target.value)}><option value="short">Kısa erişim ve gezinme çalışması</option><option value="full">Seçilen düzenlemenin tam süresi</option></select></label>
       {mode === "short" ? <label htmlFor="exam-minutes">Kısa prova: dakika<input id="exam-minutes" type="number" value={minutes} min={1} max={60} onChange={event => setMinutes(Number(event.target.value))} required /></label> : <p>Prova süresi: {slot ? slot.base_minutes + slot.extra_minutes : 0} dakika. Soru sayısı etkin pakete bağlıdır.</p>}
       <label className="learning-option"><input type="checkbox" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} /><span>Seçtiğim düzenlemeyi kendi sınav giriş belgemle kontrol ettim veya bu profili yalnız gezinme çalışması için seçiyorum. Uygulama sınav hakkı belirlemez.</span></label>
-      <p className="notice">Prova sırasında seçimleriniz sunucuda geçici tutulur; bitince ham seçimler silinir ve görev sonuçları kalır. Prova verisini tamamen silebilirsiniz. Oturum kimliği yalnız bu tarayıcı sekmesinde saklanır.</p>
+      <p className="notice">Seçimleriniz bu bilgisayarda geçici tutulur. Yanlış seçimler koçluk için saklanır; ilgili koçluk tamamlandığında silinir. Prova verisini tamamen silebilirsiniz; en geç yedi gün sonra kayıt otomatik silinir. Oturum kimliği yalnız bu tarayıcı sekmesinde saklanır.</p>
       <button disabled={busy || !selected || !slot || !confirmed}>Provayı başlat</button>
     </form> : <>
       <p>{exam.profile.title} · {exam.slot.title} · {exam.duration_minutes} dakika.</p><p className="notice">{exam.notice}</p>
@@ -216,19 +230,19 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
         <p aria-live="off">Kalan süre: {Math.floor(remaining / 60)} dakika {remaining % 60} saniye.</p><button type="button" onClick={readRemaining}>Kalan süreyi seslendir</button>
         <nav className="exam-navigation" aria-label="Soru gezinmesi">{exam.questions.map((item, i) => <button type="button" key={item.id} aria-current={i === index ? "step" : undefined} disabled={busy || unsaved} onClick={() => move(i)}>Soru {i + 1}{exam.answers[item.id] ? " · yanıtlı" : " · boş"}{exam.flags[item.id] ? " · gözden geçir" : ""}</button>)}</nav>
         <section className="study-card"><h2>Prova sorusu {index + 1}</h2><p id="exam-question" className="practice-question">{question.question}</p>
-          <div className="student-actions"><button type="button" onClick={() => speak(question.question)}>Soruyu tekrar seslendir</button><button type="button" onClick={stop}>Sesi durdur</button></div><p role="status">{voiceStatus}</p>
+          <div className="student-actions"><button type="button" onClick={() => readUnit("stem")}>Soruyu tekrar seslendir</button><button type="button" onClick={stop}>Sesi durdur</button></div><p role="status">{voiceStatus}</p>
           <fieldset disabled={busy || remaining === 0} aria-describedby="exam-question"><legend>Yanıtınız</legend>{question.choices.map(option => <label className="learning-option" key={option.id}><input type="radio" name="exam-answer" checked={draft === option.id} onChange={() => void saveAnswer(option.id)} /><span>{option.text}</span></label>)}</fieldset>
           {unsaved && <button type="button" disabled={busy || remaining === 0} onClick={() => void saveAnswer(draft)}>Seçimi yeniden kaydet</button>}
           <div className="student-actions"><button type="button" disabled={busy || unsaved || remaining === 0} onClick={() => void saveAnswer("", exam.flags[question.id] ?? false)}>Yanıtı temizle</button><button type="button" disabled={busy || unsaved || remaining === 0} onClick={() => void saveAnswer(draft, !exam.flags[question.id])}>{exam.flags[question.id] ? "Gözden geçirme işaretini kaldır" : "Sonra gözden geçirmek için işaretle"}</button></div>
         </section>
-        <VoiceCommandPanel title="Denemede sesli yönlendirme" examples={["soruyu oku", "şık B'yi seç", "onayla", "sonraki soru", "süreyi oku"]}
+        {remaining > 0 && <VoiceCommandPanel key={question.id} title="Denemede sesli yönlendirme" examples={["soruyu oku", "şık B'yi seç", "onayla", "sonraki soru", "süreyi oku"]}
           available={["read_selected", "show_choices", "read_choice", "select_choice", "confirm", "clear_answer", "flag_question", "read_time", "finish_exam", "stop_audio", "next_question", "previous_question", "go_question"] satisfies VoiceKind[]}
-          onCommand={voiceCommand} />
+          onCommand={voiceCommand} />}
         <div className="student-actions"><button type="button" disabled={busy || unsaved || index === 0} onClick={() => move(index - 1)}>Önceki soru</button><button type="button" disabled={busy || unsaved || index === exam.questions.length - 1} onClick={() => move(index + 1)}>Sonraki soru</button><button type="button" disabled={busy || unsaved} onClick={() => void finish()}>Provayı bitir</button></div>
-      </> : <section className="study-card"><h2>Görev sonuçları</h2><p>{exam.results?.filter(item => item.correct).length ?? 0} doğru · {exam.results?.filter(item => item.answered && !item.correct).length ?? 0} yanlış · {exam.results?.filter(item => !item.answered).length ?? 0} boş. Bu, resmî sınav puanı değildir.</p>{exam.results?.map((result, i) => <details key={result.question_id}><summary>Soru {i + 1}: {result.correct ? "doğru" : result.answered ? "yanlış" : "boş"}</summary><p>{exam.questions.find(item => item.id === result.question_id)?.question}</p>{result.correct_answer && <p>Doğru yanıt: {result.correct_answer}. {result.explanation}</p>}{!result.correct && (result.source_available ? <section aria-label={`Soru ${i + 1} kaynaklı koçluk`}>
-        {result.coach_text && <p role="status">{coachReplies[result.question_id]?.text ?? result.coach_text}</p>}
+      </> : <section className="study-card"><h2>Görev sonuçları</h2><p>{exam.results?.filter(item => item.correct).length ?? 0} doğru · {exam.results?.filter(item => item.answered && !item.correct).length ?? 0} yanlış · {exam.results?.filter(item => !item.answered).length ?? 0} boş. Bu, resmî sınav puanı değildir.</p>{externalCoachConfigured && <label className="learning-option"><input type="checkbox" checked={externalCoachConsent} onChange={event => setExternalCoachConsent(event.target.checked)} /><span>İsteğe bağlı çevrim içi koçluğu kabul ediyorum: soru metni, yanlış seçimim, yazdığım düşünce ve kaynak kesiti DeepSeek servisine gönderilebilir. Kullanılamazsa yerel koç çalışır.</span></label>}{exam.results?.map((result, i) => <details key={result.question_id}><summary>Soru {i + 1}: {result.correct ? "doğru" : result.answered ? "yanlış" : "boş"}</summary><p>{exam.questions.find(item => item.id === result.question_id)?.question}</p>{result.correct_answer && <p>Doğru yanıt: {result.correct_answer}. {result.explanation}</p>}{!result.correct && (result.source_available ? <section aria-label={`Soru ${i + 1} kaynaklı koçluk`}>
+        {result.coach_text && <><p role="status">{coachReplies[result.question_id]?.text ?? result.coach_text}</p><button type="button" onClick={() => speak(coachReplies[result.question_id]?.text ?? result.coach_text ?? "")}>Koçun yanıtını dinle</button></>}
         {result.coach_turns === 0 && <button type="button" disabled={busy} onClick={() => void requestCoach(result.question_id, 1)}>Kaynakla birlikte çöz</button>}
-        {result.coach_turns === 1 && <><label htmlFor={`coach-response-${result.question_id}`}>Soru hakkındaki düşünceniz</label><textarea id={`coach-response-${result.question_id}`} value={coachResponse[result.question_id] ?? ""} maxLength={1000} onChange={event => setCoachResponse(current => ({ ...current, [result.question_id]: event.target.value }))} /><button type="button" disabled={busy || !(coachResponse[result.question_id] ?? "").trim()} onClick={() => void requestCoach(result.question_id, 2)}>Düşüncemi paylaş ve ikinci ipucunu aç</button></>}
+        {result.coach_turns === 1 && <><label htmlFor={`coach-response-${result.question_id}`}>Soru hakkındaki düşünceniz</label><textarea id={`coach-response-${result.question_id}`} value={coachResponse[result.question_id] ?? ""} maxLength={1000} onChange={event => setCoachResponse(current => ({ ...current, [result.question_id]: event.target.value }))} /><LocalDictation disabled={busy} onText={value => setCoachResponse(current => ({ ...current, [result.question_id]: value }))} /><button type="button" disabled={busy || !(coachResponse[result.question_id] ?? "").trim()} onClick={() => void requestCoach(result.question_id, 2)}>Düşüncemi paylaş ve ikinci ipucunu aç</button></>}
       </section> : <p>Bu prova sorusunda onaylı MEB kanıtı bulunmadığından kaynaklı koçluk ve çözüm gösterilmiyor.</p>)}</details>)}</section>}
       <div className="student-actions"><button type="button" disabled={busy} onClick={() => void refresh()}>Provayı yeniden yükle</button><button type="button" disabled={busy} onClick={() => void remove()}>Prova verisini sil</button></div>
     </>}

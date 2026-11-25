@@ -62,12 +62,13 @@ export function VoiceCommandPanel({ title = "Sesli yönlendirme", examples, avai
       if (!Ctor.available) { setStatus("Bu tarayıcı Türkçe cihaz içi tanımayı doğrulayamıyor. İstersen tarayıcı servisine açıkça izin ver veya komutu yaz."); return; }
       try {
         const state = await Ctor.available({ langs: ["tr-TR"], processLocally: true, quality: "command" });
+        if (!live.current) return;
         if (state !== "available") {
           setPackState(state === "downloadable" || state === "downloading" ? state : null);
           setStatus(state === "downloadable" ? "Türkçe cihaz içi dil paketi kurulabilir. Kurmak için aşağıdaki düğmeyi kullan." : state === "downloading" ? "Türkçe dil paketi indiriliyor; bitince yeniden dene." : "Bu tarayıcıda Türkçe cihaz içi tanıma hazır değil. Komutu yazabilir veya tarayıcı servisine ayrıca izin verebilirsin.");
           return;
         }
-      } catch { setStatus("Cihaz içi tanıma denetimi başarısız. Mikrofon açılmadı; komutu yazabilirsin."); return; }
+      } catch { if (live.current) setStatus("Cihaz içi tanıma denetimi başarısız. Mikrofon açılmadı; komutu yazabilirsin."); return; }
     }
     const session = new Ctor();
     if (!browserConsent && !("processLocally" in session)) { setStatus("Bu tarayıcı cihaz içi işlemeyi garanti etmiyor; mikrofon açılmadı."); return; }
@@ -110,7 +111,8 @@ export function VoiceCommandPanel({ title = "Sesli yönlendirme", examples, avai
   const microphoneAvailable = Boolean(recognitionConstructor());
   return <section className="voice-panel" aria-label={title}>
     <div className="voice-panel-heading"><div><p className="eyebrow">İSTEĞE BAĞLI</p><h2>{title}</h2></div><span className={listening ? "voice-live" : "voice-idle"}>{listening ? "● Dinleniyor" : "Mikrofon kapalı"}</span></div>
-    <p>Tek bir kısa komut söyle. Anlaşılmayan komut hiçbir işlemi başlatmaz; yanıt gönderme veya silme sesle yapılamaz.</p>
+    <p>Tek bir kısa komut söyle. Anlaşılmayan komut hiçbir işlemi başlatmaz.
+      {available.includes("select_choice") && " Sesli seçim, silme ve denemeyi bitirme ayrıca onay gerektirir."}</p>
     <div className="voice-actions"><button type="button" onClick={() => listening ? (pending.current = null, recognition.current?.abort()) : void startListening()} disabled={!microphoneAvailable}>{listening ? "Dinlemeyi durdur" : "Bir komut dinle"}</button>{packState === "downloadable" && <button type="button" className="quiet-button" onClick={() => void installLocalPack()}>Türkçe yerel dil paketini kur</button>}</div>
     <p role="status" className="voice-status">{status}</p>{heard && <p className="voice-heard">Algılanan komut: <strong>{heard}</strong></p>}
     <form className="voice-text-command" onSubmit={submit}><label htmlFor="voice-command-text">Komutu yazarak dene</label><div><input id="voice-command-text" value={text} onChange={event => setText(event.target.value)} maxLength={90} placeholder={examples[0] ?? "Komut yaz"} /><button type="submit" disabled={!text.trim()}>Uygula</button></div></form>

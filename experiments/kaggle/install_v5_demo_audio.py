@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 from pathlib import Path
@@ -25,7 +26,8 @@ def install(source_manifest: Path, generated: Path, destination: Path) -> int:
         raise FileExistsError("destination_already_exists")
     source = json.loads(source_manifest.read_text(encoding="utf-8"))
     records = json.loads((generated / "run_records.json").read_text(encoding="utf-8"))
-    if (source.get("schema_version") != "v5-demo-input-v1"
+    schema = source.get("schema_version")
+    if (schema not in {"v5-demo-input-v1", "ayt-history-v5-static-audio-input-v1"}
             or records.get("schema_version") != "v5-demo-audio-v1"
             or records.get("input_sha256") != digest(source_manifest)
             or records.get("model_sha256") != MODEL_SHA
@@ -47,7 +49,12 @@ def install(source_manifest: Path, generated: Path, destination: Path) -> int:
     items = []
     seen = set()
     for item in source.get("items", []):
-        key = (item["kind"], item["id"])
+        item_id = item["id"]
+        if schema == "ayt-history-v5-static-audio-input-v1" and item["kind"] == "interface":
+            if item_id != f"interface:{item['spoken_text_sha256']}":
+                raise ValueError("invalid_interface_identity")
+            item_id = item["spoken_text_sha256"]
+        key = (item["kind"], item_id)
         text_hash = item["spoken_text_sha256"]
         if key in seen or hashlib.sha256(item["spoken_text"].encode()).hexdigest() != text_hash:
             raise ValueError("invalid_source_item")
@@ -56,6 +63,8 @@ def install(source_manifest: Path, generated: Path, destination: Path) -> int:
         if row is not None:
             items.append({"kind": key[0], "id": key[1], "spoken_text_sha256": text_hash,
                           "filename": f"audio/{text_hash}.wav", "bytes": row["bytes"], "audio_sha256": row["audio_sha256"]})
+        elif schema == "ayt-history-v5-static-audio-input-v1" and not re.search(r"\d", item["spoken_text"]):
+            raise ValueError("missing_required_generated_audio")
     if not items:
         raise ValueError("no_matching_assets")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -66,8 +75,12 @@ def install(source_manifest: Path, generated: Path, destination: Path) -> int:
             shutil.copyfile(generated / "audio" / f"{text_hash}.wav", staging / "audio" / f"{text_hash}.wav")
             if digest(staging / "audio" / f"{text_hash}.wav") != by_text[text_hash]["audio_sha256"]:
                 raise ValueError("installed_audio_integrity_mismatch")
+        source_hashes = ({"question": source["pack_checksum"]} if schema == "ayt-history-v5-static-audio-input-v1"
+                         else {"history": source["history_pdf_sha256"], "question": source["question_pdf_sha256"]})
+        if any(not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdef" for c in value) for value in source_hashes.values()):
+            raise ValueError("invalid_source_checksum")
         index = {"schema_version": "v5-demo-installed-v1", "model_sha256": MODEL_SHA,
-                 "source_sha256": {"history": source["history_pdf_sha256"], "question": source["question_pdf_sha256"]},
+                 "source_sha256": source_hashes,
                  "requires_listening_review": True, "items": items}
         (staging / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
         staging.rename(destination)

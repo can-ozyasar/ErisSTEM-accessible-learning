@@ -288,6 +288,26 @@ def active_pack_mode(pack_path: str = "") -> str | None:
         raise HTTPException(503, "AYT Tarih deneme paketi geçerli veya hazır değil") from error
 
 
+def legacy_ai_task_checksum(tasks: tuple[dict, ...]) -> str | None:
+    """Recognize finished sessions from before AI bundle gating, without reopening their evidence."""
+    configured = os.getenv("AYT_HISTORY_EXAM_PACK", "").strip()
+    if not configured:
+        return None
+    try:
+        pack = AytHistoryExamPack.model_validate_json(Path(configured).read_bytes())
+        if pack.content_mode != "ai_source_reviewed_local_pilot":
+            return None
+        verify_pack_sources(pack, Path(os.getenv("AYT_HISTORY_SOURCE_ROOT", "data/meb")))
+        legacy_evidence = {item.id: [ref.model_dump() for ref in item.evidence]
+                           for item in pack.questions if item.authorship == "ai_source_reviewed_local_pilot"
+                           and not item.final_bundle_verified}
+        legacy = tuple({**task, "evidence": legacy_evidence[task["id"]]} if task["id"] in legacy_evidence else task
+                       for task in tasks)
+        return _task_checksum(legacy) if legacy_evidence else None
+    except (OSError, ValueError):
+        return None
+
+
 class ExamCreate(StrictInput):
     profile_id: str
     slot_id: str
@@ -307,6 +327,7 @@ class ExamCoachTurn(StrictInput):
     revision: int = Field(ge=1)
     turn: int = Field(ge=1, le=2)
     learner_response: str = Field(default="", max_length=1000)
+    external_coach_consent: bool = False
 
 
 class ExamStore:
@@ -346,7 +367,8 @@ class ExamStore:
         if record is None or "bank_checksum" not in record:
             raise HTTPException(404, "Prova bulunamadı")
         if record["bank_checksum"] != self.bank_checksum():
-            raise HTTPException(409, "Soru bankası değişmiş; yeni prova başlatın")
+            if record["state"] != "finished" or record["bank_checksum"] != legacy_ai_task_checksum(self.tasks()):
+                raise HTTPException(409, "Soru bankası değişmiş; yeni prova başlatın")
         if record["state"] == "active" and self.now() >= record["deadline"]:
             return self.finish_record(record, "time_expired")
         return record
@@ -381,7 +403,10 @@ class ExamStore:
                                    "coach_turns": record.get("coach_turns", {}).get(result["question_id"], 0),
                                    "coach_text": record.get("coach_messages", {}).get(result["question_id"]),
                                    "source_available": bool(task and task.get("evidence"))})
-        return {**record, "results": public_results,
+        # The incorrect selection is retained only for the post-exam coach.
+        # Never include that server-side working state in public exam payloads.
+        visible_record = {key: value for key, value in record.items() if key != "coach_selections"}
+        return {**visible_record, "results": public_results,
                 "questions": [{"id": task["id"], "question": task.get("spoken_question", task["question"]),
                                "choices": [{"id": f"option-{i+1}", "text": text} for i, text in enumerate(task["choices"])]}
                               for task in tasks],
@@ -403,14 +428,17 @@ class ExamStore:
 
     def finish_record(self, record: dict, reason: str):
         results = []
+        coach_selections = {}
         for task in self.tasks():
             answer = record["answers"].get(task["id"])
             expected = f"option-{task['correct']+1}"
+            if answer is not None and answer != expected:
+                coach_selections[task["id"]] = answer
             results.append({"question_id": task["id"], "answered": answer is not None,
                             "correct": answer == expected, "correct_answer": task["choices"][task["correct"]],
                             "explanation": task["explanation"]})
         return self.records.save(record["id"], "exam", "exam-procedure",
-                                 {**record, "state": "finished", "answers": {}, "flags": {},
+                                 {**record, "state": "finished", "answers": {}, "flags": {}, "coach_selections": coach_selections,
                                   "results": results, "coach_turns": {}, "coach_messages": {},
                                   "finish_reason": reason, "finished_at": self.now()}, record["revision"])
 
@@ -446,13 +474,13 @@ class ExamStore:
             raise HTTPException(409, "Koçluk adımları sırayla açılmalı")
         if request.turn == 2 and not request.learner_response.strip():
             raise HTTPException(422, "İkinci ipucundan önce düşünceni yaz veya söyle")
+        selected = record.get("coach_selections", {}).get(question_id)
+        choice_ids = [f"option-{i + 1}" for i in range(len(task["choices"]))]
+        choice_text = task["choices"][choice_ids.index(selected)] if selected in choice_ids else None
         context = CoachContext(
             question_id=question_id,
             question_text=task["question"],
-            # Raw learner answers are erased on submission.  The deterministic
-            # coach therefore asks for a fresh reason instead of retaining a
-            # potentially sensitive answer-selection history.
-            choice_text=None,
+            choice_text=choice_text,
             section_title=task.get("topic", "AYT Tarih"),
             source_ids=source_ids,
             evidence=evidence[0]["quote"],
@@ -473,13 +501,25 @@ class ExamStore:
             task["choices"][task["correct"]] if request.turn == 2 else None,
         )
         text = reply.student_prompt
+        provider = "local"
+        if request.turn == 1 and request.external_coach_consent:
+            from .deepseek_exam_coach import hint
+            generated = hint(context, request.learner_response, task["choices"][task["correct"]])
+            if generated:
+                text = generated
+                provider = "deepseek"
+        coach_selections = dict(record.get("coach_selections", {}))
+        if request.turn == 2:
+            coach_selections.pop(question_id, None)
         updated = self.records.save(exam_id, "exam", "exam-procedure",
                                     {**record, "coach_turns": {**record.get("coach_turns", {}),
                                                                question_id: request.turn},
+                                     "coach_selections": coach_selections,
                                      "coach_messages": {**record.get("coach_messages", {}),
                                                         question_id: text}}, record["revision"])
         return {"reply": {"stage": reply.stage, "turn": request.turn,
                 "text": text, "source_ids": source_ids, "strategy": reply.strategy,
+                "provider": provider,
                 "learner_signal": reply.learner_signal, "can_reveal_explanation": reply.can_reveal_explanation},
                 "exam": self.public(updated)}
 

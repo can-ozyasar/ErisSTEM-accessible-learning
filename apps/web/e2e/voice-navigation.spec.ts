@@ -3,6 +3,28 @@ import AxeBuilder from "@axe-core/playwright";
 
 test.use({ serviceWorkers: "block" });
 
+test("a delayed local recognition check cannot start a microphone after question navigation", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as Window & { releaseVoice?: () => void; voiceStarts?: number };
+    state.voiceStarts = 0;
+    Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: class {
+      static available() { return new Promise(resolve => { state.releaseVoice = () => resolve("available"); }); }
+      processLocally = false;
+      start() { state.voiceStarts = (state.voiceStarts ?? 0) + 1; }
+      abort() {}
+    } });
+  });
+  await page.goto("/?mode=student&view=exam");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Soru 1 / 6");
+  await page.getByRole("button", { name: "Bir komut dinle" }).click();
+  await page.getByRole("button", { name: "Sonraki soru", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Soru 2 / 6");
+  await page.evaluate(() => (window as Window & { releaseVoice: () => void }).releaseVoice());
+  await expect.poll(() => page.evaluate(() => (window as Window & { voiceStarts: number }).voiceStarts)).toBe(0);
+});
+
 test("typed commands route to the intended student area; unknown text does nothing", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await page.goto("/");

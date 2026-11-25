@@ -1,0 +1,35 @@
+import json
+
+import pytest
+
+from app.deepseek_exam_coach import hint
+from app.tutor_coach import CoachContext
+
+
+def _context():
+    return CoachContext(question_id="q", question_text="Olayın nedeni nedir?", choice_text="Yanlış seçenek",
+                        section_title="Tarih", source_ids=["meb"], evidence="Kaynak ilişkisi.", error_type="genel")
+
+
+def test_opt_in_uses_separate_judge_and_never_sends_correct_choice(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    calls = []
+    def fake(body, key, timeout):
+        calls.append(body)
+        assert key == "test-key" and timeout == 8
+        assert "Gizli doğru metin" not in json.dumps(body, ensure_ascii=False)
+        result = {"question": "Kaynakta neden olarak hangi ilişki anlatılıyor?"} if len(calls) == 1 else {"safe": True}
+        return {"choices": [{"message": {"content": json.dumps(result, ensure_ascii=False)}}]}
+    assert hint(_context(), "Karıştırdım", "Gizli doğru metin", request_fn=fake) is not None
+    assert len(calls) == 2
+
+
+def test_disabled_or_unsafe_model_falls_back(monkeypatch):
+    monkeypatch.delenv("DEEPSEEK_COACH_ENABLED", raising=False)
+    assert hint(_context(), "", "Cevap", request_fn=lambda *_: pytest.fail("unexpected call")) is None
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    def unsafe(*_):
+        return {"choices": [{"message": {"content": '{"question":"Doğru cevap A şıkkı mı?"}'}}]}
+    assert hint(_context(), "", "Cevap", request_fn=unsafe) is None

@@ -20,6 +20,9 @@ services:
       # Set only with the gpu profile. Without this endpoint the API uses its
       # answer-key-isolated deterministic coaching fallback.
       LOCAL_TUTOR_LLM_URL: ${LOCAL_TUTOR_LLM_URL:-}
+      # Explicitly opt in after offline evaluation; the learner must also consent.
+      DEEPSEEK_COACH_ENABLED: ${DEEPSEEK_COACH_ENABLED:-false}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       # Optional AYT graph runtime. Empty by default: the route fails closed
       # until a teacher-approved private graph is mounted.
       AYT_APPROVED_GRAPH_PATH: ${AYT_APPROVED_GRAPH_PATH:-/private/architecture/ayt-target-approved-graph-v1.json}
@@ -114,6 +117,11 @@ services:
     command: ["python", "-m", "app.exam_maintenance", "--watch"]
     environment:
       DATABASE_URL: postgresql+psycopg://eristem:eristem@db:5432/eristem
+      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v1.json}
+      AYT_HISTORY_SOURCE_ROOT: /private/meb
+    volumes:
+      - ./data/private/ayt-history-exam:/private/ayt-history-exam:ro
+      - ./data/meb:/private/meb:ro
     depends_on:
       api:
         condition: service_healthy

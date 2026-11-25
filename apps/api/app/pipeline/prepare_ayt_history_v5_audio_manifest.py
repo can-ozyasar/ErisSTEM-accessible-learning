@@ -66,7 +66,7 @@ def _normalized(value: str) -> str:
 
 
 def _question_ordinal(value: int) -> str:
-    if not 1 <= value <= 120:
+    if not 1 <= value <= 147:
         raise ValueError("question_ordinal_out_of_range")
     hundreds, remainder = divmod(value, 100)
     prefix = "" if not hundreds else ("yüz" if hundreds == 1 else f"{_ONES[hundreds]} yüz")

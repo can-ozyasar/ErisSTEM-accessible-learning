@@ -16,11 +16,10 @@ import sys
 import time
 from pathlib import Path
 
-DATASET_HANDLE = "muhammedcanozyasar/eristem-ayt-relation-discovery-calibration-v1"
+DATASET_HANDLE = "muhammedcanozyasar/eristem-ayt-history-qwen-dense-rrf-v1"
 INPUT = Path(os.environ.get(
     "AYT_DISCOVERY_INPUT",
-    "/kaggle/input/datasets/muhammedcanozyasar/eristem-ayt-relation-discovery-calibration-v1/"
-    "qlora-relation-discovery-calibration-v1.json",
+    "/kaggle/input/datasets/muhammedcanozyasar/eristem-ayt-history-qwen-dense-rrf-v1/input.json",
 ))
 OUTPUT = Path(os.environ.get("AYT_DISCOVERY_OUTPUT", "/kaggle/working/ayt-qwen-retrieval-rankings-v1.json"))
 EMBEDDING_MODEL_ID = os.environ.get("QWEN_EMBEDDING_MODEL", "Qwen/Qwen3-Embedding-4B")
@@ -30,6 +29,7 @@ TOP_K = int(os.environ.get("TOP_K", "24"))
 # runtime comparison.  RRF supplies the lexical+dense candidate set and the
 # reranker may only decide among its first twenty results.
 RERANK_CANDIDATES = int(os.environ.get("RERANK_CANDIDATES", "20"))
+ENABLE_RERANK = os.environ.get("ENABLE_RERANK", "0") == "1"
 MAX_LENGTH = int(os.environ.get("MAX_LENGTH", "2048"))
 FORBIDDEN = {"answer", "answer_key", "answer_label", "correct_choice", "worked_explanation", "pdf_path", "raw_pdf"}
 TOKENS = re.compile(r"[a-zçğıöşü0-9]+", re.IGNORECASE)
@@ -166,8 +166,9 @@ def main() -> None:
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    reranker = _load_reranker(RERANKER_MODEL_ID, torch)
-    for query in queries:
+    if ENABLE_RERANK:
+        reranker = _load_reranker(RERANKER_MODEL_ID, torch)
+    for query in queries if ENABLE_RERANK else []:
         text = query["query"]
         started = time.perf_counter()
         candidate_ids = rerank_candidate_windows[query["id"]]
@@ -190,9 +191,15 @@ def main() -> None:
         "embedding_model": EMBEDDING_MODEL_ID, "reranker_model": RERANKER_MODEL_ID,
         "query_instruction": QUERY_INSTRUCTION, "rerank_candidates": RERANK_CANDIDATES,
         "document_count": len(documents), "query_count": len(queries), "top_k": TOP_K,
-        "ranking_methods": ["bm25", "qwen_dense", "rrf", "rrf_rerank"],
-        "rankings": rankings, "latencies_by_method_ms": timings,
+        "ranking_methods": ["bm25", "qwen_dense", "rrf", *( ["rrf_rerank"] if ENABLE_RERANK else [])],
+        "rankings": rankings, "latencies_by_method_ms": {
+            method: values for method, values in timings.items() if values
+        },
         "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        # Persist these provenance assertions in the result itself.  A
+        # downstream acceptance gate must not infer them from the runner.
+        "answer_key_accessed": False,
+        "worked_explanation_accessed": False,
         "runtime_enabled": False, "qlora_enabled": False,
         "notice": "Candidate rankings only; they are not approved sources or a runtime retrieval artifact.",
     }, ensure_ascii=False, indent=2), encoding="utf-8")

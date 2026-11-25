@@ -13,8 +13,11 @@ import sys
 import tempfile
 from pathlib import Path
 
-SOURCE = Path("/kaggle/input/datasets/muhammedcanozyasar/eristem-tts-v5-demo-input-v1")
-OUTPUT = Path("/kaggle/working/eristem-tts-v5-demo-generated-v1")
+# The default retains the reproducible book-demo run.  A published AYT pack
+# supplies its own private dataset path at submission time; no question text
+# is embedded in this notebook.
+SOURCE = Path(os.getenv("ERISTEM_V5_INPUT_PATH", "/kaggle/input/datasets/muhammedcanozyasar/eristem-tts-v5-demo-input-v1"))
+OUTPUT = Path(os.getenv("ERISTEM_V5_OUTPUT_PATH", "/kaggle/working/eristem-tts-v5-demo-generated-v1"))
 TRAINED_OUTPUT_DIR = "eristem-private-chatterbox-v3-finetune-v5"
 
 MODEL_REPOSITORY = "ResembleAI/chatterbox"
@@ -125,7 +128,7 @@ def main() -> None:
         raise RuntimeError("missing_manifest")
     payload = json.loads(manifests[0].read_text(encoding="utf-8"))
     items = payload.get("items")
-    if payload.get("schema_version") != "v5-demo-input-v1" or not isinstance(items, list) or not items:
+    if payload.get("schema_version") not in {"v5-demo-input-v1", "ayt-history-v5-static-audio-input-v1"} or not isinstance(items, list) or not items:
         raise RuntimeError("invalid_manifest")
     seen = {}
     skipped = 0

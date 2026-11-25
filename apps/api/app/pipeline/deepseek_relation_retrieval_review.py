@@ -33,7 +33,11 @@ def _request(query: str, cards: list[dict], model: str) -> dict:
         '"diagnostic":"direct_support|multi_atom_candidate|indirect_only|irrelevant"}]}.\n'
         + json.dumps({"question": query, "sources": sources}, ensure_ascii=False, separators=(",", ":"))
     )
-    return {"model": model, "temperature": 0, "max_tokens": 900,
+    # This is a constrained classification request.  Disable hidden reasoning
+    # explicitly: otherwise current DeepSeek defaults can consume the output
+    # budget before the required JSON object is emitted.
+    return {"model": model, "temperature": 0, "max_tokens": 512,
+            "thinking": {"type": "disabled"},
             "response_format": {"type": "json_object"}, "messages": [{"role": "user", "content": prompt}]}
 
 

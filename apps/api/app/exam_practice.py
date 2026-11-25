@@ -11,11 +11,14 @@ from typing import Literal
 from urllib.parse import urlparse
 from uuid import uuid4
 
+import pymupdf
 from fastapi import HTTPException
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from .learning_operations import LearningOperationsStore, StrictInput
 from .question_scope import visual_dependency_reasons
+from .tutor_coach import CoachContext
+from .tutor_coach import coach as build_coach_reply
 
 VERIFIED_AT = "2026-10-09"
 LGS_SOURCE = "https://odsgm.meb.gov.tr/meb_iys_dosyalar/2026_04/69cfb9daaf8f2557696260_LGS_Basvuru_ve_Uygulama_K%C4%B1lavuzu_2026.pdf"
@@ -96,7 +99,10 @@ class EvidenceReference(BaseModel):
     bbox: tuple[float, float, float, float]
     source_id: str = Field(min_length=8, max_length=80)
     source_kind: Literal["meb_textbook"]
-    quote: str = Field(min_length=8, max_length=700)
+    # PDF atomları bazen birden çok cümle içerir. Runtime record keeps the
+    # auditable excerpt; the coach separately bounds what enters an LLM/TTS
+    # prompt via ``_short_evidence``.
+    quote: str = Field(min_length=8, max_length=2000)
     role: Literal["primary", "context", "relation", "contrast"] = "primary"
 
 
@@ -109,41 +115,61 @@ class VerifiedMebSource(BaseModel):
     title: str = Field(min_length=8, max_length=240)
     canonical_url: str = Field(min_length=16, max_length=1000)
     source_checksum: str = Field(pattern=r"^[0-9a-f]{64}$")
+    relative_path: str = Field(min_length=5, max_length=240)
     page_count: int = Field(ge=1, le=600)
 
     @model_validator(mode="after")
     def official_meb_host(self):
         host = (urlparse(self.canonical_url).hostname or "").lower()
-        if not (host.endswith(".meb.gov.tr") or host == "ogmmateryal.eba.gov.tr"):
+        if not host.endswith((".meb.gov.tr", ".eba.gov.tr")):
             raise ValueError("Kaynak bağlantısı resmî MEB alan adında olmalı")
+        path = Path(self.relative_path)
+        if path.is_absolute() or ".." in path.parts or path.suffix.lower() != ".pdf":
+            raise ValueError("Kaynak yolu MEB klasöründeki göreli PDF adı olmalı")
         return self
 
 
 class AytHistoryQuestion(BaseModel):
-    """Private authored question accepted by the student exam runtime."""
+    """A reviewed original or locally licensed question accepted by the runtime."""
 
     model_config = ConfigDict(extra="forbid")
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{3,79}$")
-    authorship: Literal["original"]
-    review_method: Literal["ai_source_text_review", "human_pdf_crop_review"]
+    authorship: Literal["original", "licensed_local_pilot", "ai_source_reviewed_local_pilot"]
+    # An AI review is useful triage, but it is not sufficient evidence for a
+    # student-facing answer key.  Keeping this as a literal makes it
+    # impossible to accidentally publish an AI-only candidate pack.
+    review_method: Literal["human_pdf_crop_review", "license_bound_pdf_crop_review", "ai_source_consensus_pdf_review"]
     review_artifact_checksum: str = Field(pattern=r"^[0-9a-f]{64}$")
     topic: str = Field(min_length=2, max_length=160)
     outcome: str = Field(min_length=2, max_length=240)
-    split: Literal["development", "retrieval_test", "system_acceptance"]
+    split: Literal["development", "retrieval_test", "system_acceptance", "pilot"]
     question: str = Field(min_length=12, max_length=3000)
     spoken_question: str = Field(min_length=12, max_length=3000)
     choices: list[str] = Field(min_length=5, max_length=5)
     correct_label: Literal["A", "B", "C", "D", "E"]
     explanation: str = Field(min_length=12, max_length=1200)
     evidence: list[EvidenceReference] = Field(min_length=1, max_length=3)
+    # AI consensus on a larger set does not establish coverage of the final
+    # truncated bundle. An independent, bundle-specific gate is required.
+    final_bundle_verified: bool = False
     visual_dependency: Literal[False] = False
     visual_description_reviewed: Literal[False] = False
     status: Literal["approved"] = "approved"
 
     @model_validator(mode="after")
     def safe_for_audio_exam(self):
-        if len(set(item.strip() for item in self.choices)) != 5 or any(not item.strip() for item in self.choices):
+        if self.authorship == "original" and self.review_method != "human_pdf_crop_review":
+            raise ValueError("özgün soru insan PDF kırpımı incelemesiyle onaylanmalı")
+        if self.authorship == "licensed_local_pilot" and self.review_method != "license_bound_pdf_crop_review":
+            raise ValueError("izinli yerel soru lisans-kayıt bağlı PDF incelemesiyle onaylanmalı")
+        if self.authorship == "ai_source_reviewed_local_pilot" and self.review_method != "ai_source_consensus_pdf_review":
+            raise ValueError("AI kaynak-doğrulamalı soru AI kaynak uzlaşması incelemesi taşımalı")
+        if len({item.strip() for item in self.choices}) != 5 or any(not item.strip() for item in self.choices):
             raise ValueError("Beş benzersiz ve boş olmayan şık gerekli")
+        if self.question.lstrip().casefold().startswith("kaynağa göre"):
+            raise ValueError("Öğrenciye gösterilen deneme sorusu kaynak metne bağımlı 'Kaynağa göre' köküyle başlayamaz")
+        if self.spoken_question.lstrip().casefold().startswith("kaynağa göre"):
+            raise ValueError("Öğrenciye dinletilen deneme sorusu kaynak metne bağımlı 'Kaynağa göre' köküyle başlayamaz")
         visual_reasons = visual_dependency_reasons({"stem": self.question, "choices": self.choices})
         if visual_reasons:
             raise ValueError("Görsel veya tabloya bağımlı soru ilk AYT Tarih paketi kapsamı dışında")
@@ -156,17 +182,34 @@ class AytHistoryExamPack(BaseModel):
     model_config = ConfigDict(extra="forbid", populate_by_name=True)
     schema_name: Literal["ayt-history-exam-pack-v1"] = Field(alias="schema")
     pack_id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{3,79}$")
+    content_mode: Literal["original_120", "licensed_local_pilot", "ai_source_reviewed_local_pilot"] = "original_120"
+    licensed_question_source_checksum: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    license_record_checksum: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    student_publication_allowed: Literal[False] = False
     sources: list[VerifiedMebSource] = Field(min_length=1, max_length=20)
-    questions: list[AytHistoryQuestion] = Field(min_length=120, max_length=120)
+    questions: list[AytHistoryQuestion] = Field(min_length=1, max_length=147)
 
     @model_validator(mode="after")
     def exactly_one_frozen_split_per_question(self):
-        if len({item.id for item in self.questions}) != 120:
-            raise ValueError("Deneme paketinde 120 benzersiz soru gerekli")
-        expected = {"development": 72, "retrieval_test": 24, "system_acceptance": 24}
-        actual = {name: sum(item.split == name for item in self.questions) for name in expected}
-        if actual != expected:
-            raise ValueError("Paket bölümleri 72 geliştirme, 24 retrieval testi ve 24 sistem kabulü olmalı")
+        if len({item.id for item in self.questions}) != len(self.questions):
+            raise ValueError("Deneme paketinde benzersiz soru kimlikleri gerekli")
+        if self.content_mode == "original_120":
+            if len(self.questions) != 120 or any(item.authorship != "original" for item in self.questions):
+                raise ValueError("özgün paket 120 özgün soru içermeli")
+            expected = {"development": 72, "retrieval_test": 24, "system_acceptance": 24}
+            actual = {name: sum(item.split == name for item in self.questions) for name in expected}
+            if actual != expected:
+                raise ValueError("Paket bölümleri 72 geliştirme, 24 retrieval testi ve 24 sistem kabulü olmalı")
+        elif self.content_mode == "licensed_local_pilot":
+            if (not self.licensed_question_source_checksum or not self.license_record_checksum
+                    or any(item.authorship != "licensed_local_pilot" or item.split != "pilot" for item in self.questions)):
+                raise ValueError("izinli yerel pilot için lisans zinciri ve yalnız pilot soruları gerekli")
+        else:
+            allowed = {"licensed_local_pilot", "ai_source_reviewed_local_pilot"}
+            if (not self.licensed_question_source_checksum or not self.license_record_checksum
+                    or any(item.authorship not in allowed or item.split != "pilot" for item in self.questions)
+                    or not any(item.authorship == "ai_source_reviewed_local_pilot" for item in self.questions)):
+                raise ValueError("AI kaynak-doğrulamalı pilot için lisans zinciri, yalnız pilot soruları ve en az bir AI denetimli soru gerekli")
         sources = {item.id: item for item in self.sources}
         if len(sources) != len(self.sources):
             raise ValueError("Kaynak kataloğunda benzersiz kaynak kimlikleri gerekli")
@@ -182,6 +225,31 @@ def _task_checksum(tasks: tuple[dict, ...]) -> str:
     return hashlib.sha256(json.dumps(tasks, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 
+def verify_pack_sources(pack: AytHistoryExamPack, source_root: Path) -> None:
+    """Bind the authored pack to mounted PDF bytes and page geometry."""
+    root = source_root.resolve()
+    for source in pack.sources:
+        path = (root / source.relative_path).resolve()
+        if not path.is_relative_to(root) or not path.is_file():
+            raise ValueError("Paket kaynağı MEB klasöründe bulunamadı")
+        with path.open("rb") as handle:
+            if hashlib.file_digest(handle, "sha256").hexdigest() != source.source_checksum:
+                raise ValueError("Paket kaynağı PDF checksum'ı uyuşmuyor")
+        with pymupdf.open(path) as pdf:
+            if len(pdf) != source.page_count:
+                raise ValueError("Paket kaynağı PDF sayfa sayısı uyuşmuyor")
+            for question in pack.questions:
+                for evidence in question.evidence:
+                    if evidence.source_id != source.id:
+                        continue
+                    if evidence.page > len(pdf):
+                        raise ValueError("Kanıt sayfası kaynak PDF dışında")
+                    page = pdf[evidence.page - 1]
+                    rect = pymupdf.Rect(evidence.bbox)
+                    if rect.is_empty or not page.rect.contains(rect):
+                        raise ValueError("Kanıt konumu kaynak PDF sayfası dışında")
+
+
 @lru_cache(maxsize=2)
 def active_tasks(pack_path: str = "") -> tuple[dict, ...]:
     """Use the synthetic rehearsal only until a complete reviewed pack is mounted.
@@ -195,13 +263,29 @@ def active_tasks(pack_path: str = "") -> tuple[dict, ...]:
     try:
         payload = json.loads(Path(configured).read_text(encoding="utf-8"))
         pack = AytHistoryExamPack.model_validate(payload)
+        verify_pack_sources(pack, Path(os.getenv("AYT_HISTORY_SOURCE_ROOT", "data/meb")))
     except (OSError, json.JSONDecodeError, ValueError) as error:
         raise HTTPException(503, "AYT Tarih deneme paketi geçerli veya hazır değil") from error
     return tuple({"id": item.id, "question": item.question, "spoken_question": item.spoken_question,
                   "choices": item.choices, "correct": "ABCDE".index(item.correct_label),
                   "explanation": item.explanation, "topic": item.topic,
-                  "evidence": [evidence.model_dump() for evidence in item.evidence]}
+                  "evidence": ([evidence.model_dump() for evidence in item.evidence]
+                               if item.authorship != "ai_source_reviewed_local_pilot" or item.final_bundle_verified
+                               else [])}
                  for item in pack.questions)
+
+
+@lru_cache(maxsize=2)
+def active_pack_mode(pack_path: str = "") -> str | None:
+    """Return only the declared delivery mode, never question or answer data."""
+    configured = pack_path or os.getenv("AYT_HISTORY_EXAM_PACK", "").strip()
+    if not configured:
+        return None
+    try:
+        payload = json.loads(Path(configured).read_text(encoding="utf-8"))
+        return AytHistoryExamPack.model_validate(payload).content_mode
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        raise HTTPException(503, "AYT Tarih deneme paketi geçerli veya hazır değil") from error
 
 
 class ExamCreate(StrictInput):
@@ -217,6 +301,12 @@ class ExamAnswer(StrictInput):
     question_id: str
     answer: str | None
     flagged: bool = False
+
+
+class ExamCoachTurn(StrictInput):
+    revision: int = Field(ge=1)
+    turn: int = Field(ge=1, le=2)
+    learner_response: str = Field(default="", max_length=1000)
 
 
 class ExamStore:
@@ -247,7 +337,8 @@ class ExamStore:
                                     "mode": request.mode, "duration_minutes": minutes,
                                     "started_at": started, "deadline": started + minutes * 60,
                                     "bank_checksum": self.bank_checksum(), "state": "active",
-                                    "answers": {}, "flags": {}, "results": None}, 0)
+                                    "answers": {}, "flags": {}, "results": None,
+                                    "coach_turns": {}}, 0)
         return self.public(record)
 
     def get(self, exam_id: str):
@@ -262,14 +353,35 @@ class ExamStore:
 
     def public(self, record: dict):
         tasks = self.tasks()
-        is_production_pack = bool(os.getenv("AYT_HISTORY_EXAM_PACK", "").strip())
+        pack_mode = active_pack_mode()
         notice = (
+            "81 soruluk yerel AYT Tarih pilotu; bazı soruların kaynak değerlendirmesi yapay zekâ ile yapılmıştır. "
+            "Kaynak demeti doğrulanmamış sorularda koçluk açılmaz. Aktif sınavda cevap ve çözüm gösterilmez."
+            if pack_mode == "ai_source_reviewed_local_pilot" else
+            "İzin kaydı, kaynak checksum’ı ve MEB kanıt demetiyle doğrulanmış yerel AYT Tarih pilotu. "
+            "Yalnız bu bilgisayardaki gösterim içindir; genel yayın veya resmî sınav eşdeğerliği iddiası değildir. "
+            "Aktif sınavda cevap anahtarı, çözüm ve koçluk gösterilmez."
+            if pack_mode == "licensed_local_pilot" else
             "Kaynak kataloğu ve checksum ile doğrulanmış özgün AYT Tarih paketi. "
             "Aktif sınavda cevap anahtarı, çözüm ve koçluk gösterilmez."
-            if is_production_pack else
+            if pack_mode == "original_120" else
             "Altı sentetik soruyla süre, okuyucu ve yanıt gezinmesi provasıdır. Resmî soru, tam müfredat denemesi veya gerçek sınavın birebir karşılığı değildir. 2026 profilleri sonraki yıllara uygulanmaz."
         )
-        return {**record,
+        results = record.get("results")
+        public_results = None if results is None else []
+        for result in results or []:
+            task = next((item for item in tasks if item["id"] == result["question_id"]), None)
+            revealed = bool(result["correct"] or
+                            (task and task.get("evidence") and
+                             record.get("coach_turns", {}).get(result["question_id"], 0) >= 2))
+            public_results.append({"question_id": result["question_id"],
+                                   "answered": result["answered"], "correct": result["correct"],
+                                   "correct_answer": result["correct_answer"] if revealed else None,
+                                   "explanation": result["explanation"] if revealed else None,
+                                   "coach_turns": record.get("coach_turns", {}).get(result["question_id"], 0),
+                                   "coach_text": record.get("coach_messages", {}).get(result["question_id"]),
+                                   "source_available": bool(task and task.get("evidence"))})
+        return {**record, "results": public_results,
                 "questions": [{"id": task["id"], "question": task.get("spoken_question", task["question"]),
                                "choices": [{"id": f"option-{i+1}", "text": text} for i, text in enumerate(task["choices"])]}
                               for task in tasks],
@@ -299,7 +411,8 @@ class ExamStore:
                             "explanation": task["explanation"]})
         return self.records.save(record["id"], "exam", "exam-procedure",
                                  {**record, "state": "finished", "answers": {}, "flags": {},
-                                  "results": results, "finish_reason": reason, "finished_at": self.now()}, record["revision"])
+                                  "results": results, "coach_turns": {}, "coach_messages": {},
+                                  "finish_reason": reason, "finished_at": self.now()}, record["revision"])
 
     def finish(self, exam_id: str, revision: int):
         record = self.get(exam_id)
@@ -309,13 +422,13 @@ class ExamStore:
             raise HTTPException(409, "Prova değişmiş; kaydı yeniden yükleyin")
         return self.public(self.finish_record(record, "submitted"))
 
-    def coach(self, exam_id: str, question_id: str, turn: int) -> dict:
+    def coach(self, exam_id: str, question_id: str, request: ExamCoachTurn) -> dict:
         """Post-exam, source-bound deterministic coaching; unavailable during an exam."""
         record = self.get(exam_id)
         if record["state"] != "finished":
             raise HTTPException(409, "Koçluk yalnız deneme tamamlandıktan sonra açılır")
-        if turn < 1 or turn > 3:
-            raise HTTPException(422, "Koçluk turu 1 ile 3 arasında olmalı")
+        if request.revision != record["revision"]:
+            raise HTTPException(409, "Prova değişmiş; kaydı yeniden yükleyin")
         task = next((item for item in self.tasks() if item["id"] == question_id), None)
         result = next((item for item in record.get("results") or [] if item["question_id"] == question_id), None)
         if task is None or result is None:
@@ -323,22 +436,52 @@ class ExamStore:
         evidence = task.get("evidence", [])
         source_ids = [item["source_id"] for item in evidence]
         if result["correct"]:
-            return {"stage": "correct_reflection", "turn": turn,
-                    "text": "Yanıtın doğru. Kaynaktaki bilgiyle seçimini kendi cümlenle gerekçelendirebilir misin?",
-                    "source_ids": source_ids, "can_reveal_explanation": True}
+            raise HTTPException(409, "Doğru yanıt için yanlış soru koçluğu açılmaz")
         if not evidence:
-            return {"stage": "source_unavailable", "turn": turn,
-                    "text": "Bu prova sorusu için öğretmen onaylı kaynak kanıtı yok; kaynaklı koçluk açılmadı.",
-                    "source_ids": [], "can_reveal_explanation": False}
-        first = evidence[0]["quote"]
-        if turn == 1:
-            text = "Soru kökünün senden istediği ilişkiyi kendi sözlerinle söyle. Hangi kavram belirleyici?"
-        elif turn == 2:
-            text = f"Kaynakta ‘{first}’ bilgisi var. Bu bilgi seçtiğin şıkla nasıl uyuşuyor ya da çelişiyor?"
-        else:
-            text = f"Kaynak açıklaması: {task['explanation']} Doğru seçeneğin neden daha uygun olduğunu kaynakla birlikte tekrar kur."
-        return {"stage": "socratic" if turn < 3 else "explanation", "turn": turn,
-                "text": text, "source_ids": source_ids, "can_reveal_explanation": turn == 3}
+            return {"reply": {"stage": "source_unavailable", "turn": 0,
+                    "text": "Bu soru için onaylı kaynak kanıtı yok; kaynaklı koçluk ve çözüm açılmadı.",
+                    "source_ids": [], "can_reveal_explanation": False}, "exam": self.public(record)}
+        current_turn = record.get("coach_turns", {}).get(question_id, 0)
+        if request.turn != current_turn + 1:
+            raise HTTPException(409, "Koçluk adımları sırayla açılmalı")
+        if request.turn == 2 and not request.learner_response.strip():
+            raise HTTPException(422, "İkinci ipucundan önce düşünceni yaz veya söyle")
+        context = CoachContext(
+            question_id=question_id,
+            question_text=task["question"],
+            # Raw learner answers are erased on submission.  The deterministic
+            # coach therefore asks for a fresh reason instead of retaining a
+            # potentially sensitive answer-selection history.
+            choice_text=None,
+            section_title=task.get("topic", "AYT Tarih"),
+            source_ids=source_ids,
+            evidence=evidence[0]["quote"],
+            error_type="genel",
+        )
+        reply = build_coach_reply(
+            context,
+            # Turn one is a source-bound hint.  The second turn is the
+            # deliberate post-hint explanation step; passing the preceding
+            # stage is what allows the coach state machine to enter
+            # ``gerekceli_aciklama`` rather than restarting at question
+            # analysis.
+            None if request.turn == 1 else "ogrenci_yaniti",
+            request.learner_response,
+            request.turn == 2,
+            None,
+            "ABCDE"[task["correct"]] if request.turn == 2 else None,
+            task["choices"][task["correct"]] if request.turn == 2 else None,
+        )
+        text = reply.student_prompt
+        updated = self.records.save(exam_id, "exam", "exam-procedure",
+                                    {**record, "coach_turns": {**record.get("coach_turns", {}),
+                                                               question_id: request.turn},
+                                     "coach_messages": {**record.get("coach_messages", {}),
+                                                        question_id: text}}, record["revision"])
+        return {"reply": {"stage": reply.stage, "turn": request.turn,
+                "text": text, "source_ids": source_ids, "strategy": reply.strategy,
+                "learner_signal": reply.learner_signal, "can_reveal_explanation": reply.can_reveal_explanation},
+                "exam": self.public(updated)}
 
     def remove(self, exam_id: str, revision: int):
         # Do not use get(): expiry must not increment the revision before deletion.

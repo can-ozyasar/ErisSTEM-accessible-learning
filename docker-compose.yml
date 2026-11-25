@@ -29,7 +29,15 @@ services:
       # Optional, teacher-approved authored AYT history package.  When set,
       # the API rejects incomplete or unreviewed manifests rather than mixing
       # private material with the synthetic accessibility rehearsal.
-      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-}
+      # 81-question local pilot: 63 license-bound questions plus 18 questions
+      # accepted by the recorded AI source-consensus gate. The manifest keeps
+      # this distinct from a human-teacher approval claim.
+      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v1.json}
+      AYT_HISTORY_SOURCE_ROOT: /private/meb
+      # Local-only source-crop review for the 19 Qwen dense retrieval candidates.
+      # It stays outside the student exam pack until a project-owner PDF review
+      # records an explicit decision for every item.
+      OGM_AYT_EVIDENCE_REVIEW_ROOT: ${OGM_AYT_EVIDENCE_REVIEW_ROOT:-/private/architecture/ogm-ayt-abstained-qwen-dense-pdf-review-v1}
     volumes:
       - ./data/derived:/private/derived:ro
       - ./data/meb:/private/meb:ro

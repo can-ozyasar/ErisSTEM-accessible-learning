@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 async function openWorkshop(page: Page, title: string) {
-  await page.goto("/?view=practice");
+  await page.goto("/?mode=student&view=practice");
   await page.getByRole("button", { name: `${title}: çalışmayı aç`, exact: true }).click();
   await expect(page.getByRole("heading", { level: 1 })).toContainText(title);
 }
@@ -93,7 +93,7 @@ test("a connection failure retains the answer and does not become an incorrect a
 
 test("catalog, choice, guided exploration and summaries pass automated accessibility on a narrow screen", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
-  await page.goto("/?view=practice");
+  await page.goto("/?mode=student&view=practice");
   await expect(page.getByRole("button", { name: "Uçak: parçalar ve yönler: çalışmayı aç", exact: true })).toBeVisible();
   await page.screenshot({ path: "test-results/learning-catalog-mobile.png", fullPage: true });
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);

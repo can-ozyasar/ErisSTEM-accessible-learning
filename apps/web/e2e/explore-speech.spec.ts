@@ -20,6 +20,6 @@ test("a touch activation uses the native link without an extra app-level double 
   await page.goto("/");
   await page.getByRole("link", { name: /Öğrenci olarak devam et/ }).tap();
   await expect(page).toHaveURL(/mode=student/);
-  await expect(page.getByRole("heading", { name: "9. sınıf tarih kitabı" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dokuzuncu sınıf tarih kitabı" })).toBeVisible();
   await context.close();
 });

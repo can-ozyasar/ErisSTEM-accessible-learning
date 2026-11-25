@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Response
 
 from .auth import Role, require_roles
-from .exam_practice import PROFILES, ExamAnswer, ExamCreate, ExamStore
+from .exam_practice import PROFILES, ExamAnswer, ExamCoachTurn, ExamCreate, ExamStore
 from .learning_operations import (
     PILOT_TASKS,
     ExpertReview,
@@ -89,9 +89,9 @@ def learning_router(store: LearningOperationsStore, exams: ExamStore):
     def finish(exam_id: str, request: RevisionRequest, _: Role = student):
         return exams.finish(exam_id, request.revision)
 
-    @router.get("/v1/student/exams/sessions/{exam_id}/review/{question_id}/coach")
-    def coach(exam_id: str, question_id: str, turn: int = 1, _: Role = student):
-        return exams.coach(exam_id, question_id, turn)
+    @router.post("/v1/student/exams/sessions/{exam_id}/review/{question_id}/coach")
+    def coach(exam_id: str, question_id: str, request: ExamCoachTurn, _: Role = student):
+        return exams.coach(exam_id, question_id, request)
 
     @router.delete("/v1/student/exams/sessions/{exam_id}", status_code=204)
     def delete_exam(exam_id: str, revision: int, _: Role = student):

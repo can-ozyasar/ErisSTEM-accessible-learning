@@ -1,3 +1,4 @@
+import json
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 from urllib.error import URLError
@@ -147,3 +148,32 @@ def test_interface_exploration_speech_is_short_local_only_and_ephemeral(monkeypa
     monkeypatch.setenv("APP_ENV", "production")
     assert client.post("/v1/student/interface-speech", json={"text": "Düğme"}, headers={"X-Role": "student"}).status_code == 503
     assert spoken == ["Tarih kitabı, düğme"]
+
+
+def test_private_review_audio_requires_an_exact_finetuned_v5_asset(tmp_path, monkeypatch):
+    review = tmp_path / "review"
+    review.mkdir()
+    checksum = "a" * 64
+    (review / "manifest.json").write_text(json.dumps({
+        "schema": "ayt-history-human-pdf-crop-review-template-v1",
+        "candidate_checksum": checksum,
+        "reviews": [{"id": "authoring-001"}],
+    }), encoding="utf-8")
+    pack = tmp_path / "candidates.json"
+    pack.write_text(json.dumps({
+        "schema": "ayt-history-original-question-candidate-pack-v1",
+        "candidate_checksum": checksum,
+        "questions": [{"id": "authoring-001", "spoken_question": "Doğrulanmış soru."}],
+    }), encoding="utf-8")
+    monkeypatch.setattr(main, "_REVIEW_ROOT", review)
+    monkeypatch.setattr(main, "_REVIEW_CANDIDATE_PACK", pack)
+    monkeypatch.setenv("APP_ENV", "development")
+    received = []
+    monkeypatch.setattr(main, "resolve_demo_audio", lambda kind, item_id, text: received.append((kind, item_id, text)) or b"R" * 44)
+    client = TestClient(main.app)
+    response = client.post("/v1/review/ayt-history/audio/authoring-001", headers={"X-Role": "reviewer"})
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "audio/wav"
+    assert received == [("question", "authoring-001", "Doğrulanmış soru.")]
+    monkeypatch.setattr(main, "resolve_demo_audio", lambda *_: None)
+    assert client.post("/v1/review/ayt-history/audio/authoring-001", headers={"X-Role": "reviewer"}).status_code == 503

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 
 test("exam navigation saves and changes answers, resumes, hides solutions and erases records", async ({ page }) => {
-  await page.goto("/?view=exam");
+  await page.goto("/?mode=student&view=exam");
   await expect(page.getByLabel("Sınav ve düzenleme")).toBeVisible();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();

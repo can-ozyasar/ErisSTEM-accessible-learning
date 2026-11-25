@@ -45,13 +45,22 @@ export function QuestionBankStudent({ api, onBack }: { api: string; onBack: () =
     if (cached) {
       queueMicrotask(() => {
         if (controller.signal.aborted) return;
-        setQuestion(cached.question); setUnits(cached.units); setAudioSegments(cached.audio_segments); setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`);
+        setQuestion(cached.question); setUnits(cached.units ?? []); setAudioSegments(cached.audio_segments ?? []); setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`);
       });
       return () => controller.abort();
     }
     void fetch(`${api}/v1/question-bank/student/questions/${item.id}`, { headers, signal: controller.signal })
       .then(response => { if (!response.ok) throw Error(); return response.json() as Promise<QuestionPayload>; })
-      .then(value => { if (!controller.signal.aborted) { rememberQuestion(item.id, value); setQuestion(value.question); setUnits(value.units); setAudioSegments(value.audio_segments); setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`); } })
+      .then(value => {
+        if (controller.signal.aborted) return;
+        // Audio is optional while a reviewed question is being prepared. The
+        // text-and-screen-reader path must remain usable when no segment list
+        // is published yet.
+        const normalized = { ...value, units: value.units ?? [], audio_segments: value.audio_segments ?? [] };
+        rememberQuestion(item.id, normalized);
+        setQuestion(normalized.question); setUnits(normalized.units); setAudioSegments(normalized.audio_segments);
+        setStatus(`PDF sayfası ${item.page}, soru ${item.number}.`);
+      })
       .catch(() => { if (!controller.signal.aborted) setStatus("Soru yüklenemedi."); });
     return () => controller.abort();
   }, [api, index, visibleList]);
@@ -61,7 +70,7 @@ export function QuestionBankStudent({ api, onBack }: { api: string; onBack: () =
     <main id="question-bank-student" className="student-shell learning-shell question-study-shell">
       <button type="button" className="quiet-button" onClick={onBack}>← Kütüphaneye dön</button>
       <h1 tabIndex={-1}>Soruyu çöz</h1>
-      {active && <p className="question-context">{active.context.topic ?? "Tarih"} · PDF s. {active.page} · {index + 1}/{visibleList.length}</p>}
+      {active && <p className="question-context">Konu: {active.context.topic ?? "Tarih"}{active.context.test_name ? ` · ${active.context.test_name}${active.context.test_number ? ` ${active.context.test_number}` : ""}` : ""} · PDF s. {active.page} · {index + 1}/{visibleList.length}</p>}
       {list.length > 0 && <details className="question-switcher"><summary>Soru veya konu değiştir</summary>
         <nav className="question-picker" aria-label="Soru seçimi">
           <label>Konu<select value={topicFilter} onChange={event => { setTopicFilter(event.target.value); setTestFilter(""); setIndex(0); }}><option value="">Tüm konular</option>{topics.map(topic => <option key={topic} value={topic}>{topic}</option>)}</select></label>

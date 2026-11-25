@@ -16,7 +16,7 @@ from sqlalchemy import select
 
 from .auth import Role, require_roles
 from .ayt_tutor_routes import ayt_tutor_router
-from .demo_audio import resolve_demo_interface
+from .demo_audio import resolve_demo_audio, resolve_demo_interface
 from .exam_practice import ExamStore
 from .history_source import router as history_router
 from .job_store import (
@@ -489,6 +489,137 @@ def interface_speech(request: InterfaceSpeechRequest, _: Role = any_role):
     except LocalTtsUnavailable as error:
         raise HTTPException(503, "Yerel Türkçe ses kullanılamıyor") from error
     return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "no-store"})
+
+
+# The private PDF review page is deliberately served through the local web
+# proxy.  Opening its generated HTML from ``file://`` would invite a browser
+# speech fallback, whose voice and pronunciation are unrelated to the product
+# TTS.  These endpoints expose only review assets and audio for an existing
+# candidate id; callers cannot submit arbitrary text to a synthesis service.
+_REVIEW_ROOT = Path(os.getenv("AYT_HISTORY_REVIEW_ROOT", "/private/ayt-history-exam/human-review-v1"))
+_REVIEW_CANDIDATE_PACK = Path(os.getenv(
+    "AYT_HISTORY_REVIEW_CANDIDATE_PACK",
+    "/private/ayt-history-exam/original-question-candidate-pack-v3.json",
+))
+_OGM_AYT_REVIEW_ROOT = Path(os.getenv(
+    "OGM_AYT_REVIEW_ROOT",
+    "/private/architecture/ogm-ayt-real-question-review-v1",
+))
+_OGM_AYT_EVIDENCE_REVIEW_ROOT = Path(os.getenv(
+    "OGM_AYT_EVIDENCE_REVIEW_ROOT",
+    "/private/architecture/ogm-ayt-real-question-evidence-pdf-review-meb9-12-v2",
+))
+
+
+def _private_review_file(relative_path: str) -> Path:
+    root = _REVIEW_ROOT.resolve()
+    target = (root / relative_path).resolve()
+    if not root.is_dir() or root not in target.parents and target != root or not target.is_file():
+        raise HTTPException(404, "İnceleme varlığı bulunamadı")
+    return target
+
+
+def _private_ogm_review_file(relative_path: str) -> Path:
+    root = _OGM_AYT_REVIEW_ROOT.resolve()
+    target = (root / relative_path).resolve()
+    if not root.is_dir() or (root not in target.parents and target != root) or not target.is_file():
+        raise HTTPException(404, "OGM soru inceleme varlığı bulunamadı")
+    return target
+
+
+def _private_ogm_evidence_review_file(relative_path: str) -> Path:
+    root = _OGM_AYT_EVIDENCE_REVIEW_ROOT.resolve()
+    target = (root / relative_path).resolve()
+    if not root.is_dir() or (root not in target.parents and target != root) or not target.is_file():
+        raise HTTPException(404, "OGM kanıt inceleme varlığı bulunamadı")
+    return target
+
+
+def _review_spoken_question(candidate_id: str) -> str:
+    """Resolve speech only from the checksum-bound private review queue."""
+    try:
+        manifest = json.loads(_private_review_file("manifest.json").read_text(encoding="utf-8"))
+        candidate_pack = json.loads(_REVIEW_CANDIDATE_PACK.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise HTTPException(503, "Yerel inceleme paketi hazır değil") from error
+    if (manifest.get("schema") != "ayt-history-human-pdf-crop-review-template-v1"
+            or candidate_pack.get("schema") != "ayt-history-original-question-candidate-pack-v1"
+            or manifest.get("candidate_checksum") != candidate_pack.get("candidate_checksum")):
+        raise HTTPException(503, "İnceleme paketi bütünlük doğrulamasını geçemedi")
+    review_ids = {item.get("id") for item in manifest.get("reviews", [])}
+    question = next((item for item in candidate_pack.get("questions", []) if item.get("id") == candidate_id), None)
+    spoken = question.get("spoken_question") if isinstance(question, dict) else None
+    if candidate_id not in review_ids or not isinstance(spoken, str) or not spoken.strip():
+        raise HTTPException(404, "İnceleme sorusu bulunamadı")
+    return spoken.strip()
+
+
+@app.get("/v1/review/ayt-history/", include_in_schema=False)
+def read_ayt_history_review_page():
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(404, "İnceleme ekranı yerel pilotla sınırlıdır")
+    # The review page is regenerated whenever the candidate checksum changes.
+    # Never let a browser silently keep an old question/root revision.
+    return FileResponse(
+        _private_review_file("index.html"),
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/v1/review/ogm-ayt-history/", include_in_schema=False)
+def read_ogm_ayt_history_review_page():
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(404, "İnceleme ekranı yerel pilotla sınırlıdır")
+    return FileResponse(
+        _private_ogm_review_file("index.html"), media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+@app.get("/v1/review/ogm-ayt-history/{asset_path:path}", include_in_schema=False)
+def read_ogm_ayt_history_review_asset(asset_path: str):
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(404, "İnceleme ekranı yerel pilotla sınırlıdır")
+    return FileResponse(_private_ogm_review_file(asset_path))
+
+
+@app.get("/v1/review/ogm-ayt-evidence/", include_in_schema=False)
+def read_ogm_ayt_evidence_review_page():
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(404, "İnceleme ekranı yerel pilotla sınırlıdır")
+    return FileResponse(_private_ogm_evidence_review_file("index.html"), media_type="text/html; charset=utf-8",
+                        headers={"Cache-Control": "no-store"})
+
+
+@app.get("/v1/review/ogm-ayt-evidence/{asset_path:path}", include_in_schema=False)
+def read_ogm_ayt_evidence_review_asset(asset_path: str):
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(404, "İnceleme ekranı yerel pilotla sınırlıdır")
+    return FileResponse(_private_ogm_evidence_review_file(asset_path))
+
+
+@app.post("/v1/review/ayt-history/audio/{candidate_id}")
+def read_ayt_history_review_audio(candidate_id: str, _: Role = reviewer_role):
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(503, "Yerel inceleme sesi üretime açılmadı")
+    # This review checks the intended product voice.  Piper would be a
+    # different model, so return audio only when the exact question has a
+    # checksum-verified Chatterbox V5 fine-tune recording.
+    spoken = _review_spoken_question(candidate_id)
+    audio = resolve_demo_audio("question", candidate_id, spoken)
+    if audio is None:
+        raise HTTPException(503, "Bu soru için doğrulanmış fine-tuned V5 ses kaydı yok")
+    return Response(content=audio, media_type="audio/wav", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.get("/v1/review/ayt-history/{asset_path:path}", include_in_schema=False)
+def read_ayt_history_review_asset(asset_path: str):
+    if os.getenv("APP_ENV", "development") == "production":
+        raise HTTPException(404, "İnceleme ekranı yerel pilotla sınırlıdır")
+    # The browser needs the crop images without adding credentials to every
+    # <img>.  Compose publishes the proxy on 127.0.0.1 only.
+    return FileResponse(_private_review_file(asset_path))
 
 
 @app.get("/v1/student/learning/modules", response_model=list[ModuleSummary])

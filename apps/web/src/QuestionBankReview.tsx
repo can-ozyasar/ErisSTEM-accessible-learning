@@ -166,6 +166,12 @@ export function QuestionBankReview({ api }: { api: string }) {
     <main id="bank-review" className="bank-review">
       <p className="eyebrow">KAYNAK DENETİMİ</p><h1>Tarih soru bankası</h1>
       <p className="notice">{summary?.notice ?? "Kaynak kontrol ediliyor."} Öğrenci yalnız kaynağı doğrulanmış soruları görür.</p>
+      <section className="study-card" aria-labelledby="ayt-candidate-preview-title">
+        <p className="eyebrow">AYRI İNCELEME KUYRUĞU</p>
+        <h2 id="ayt-candidate-preview-title">120 özgün AYT Tarih sorusu için kaynak önizlemesi</h2>
+        <p>Bu soru bankası PDF’sinden ayrıdır. Her özgün adayın öğrenciye gösterilecek soru ve şıkları, dayandığı MEB PDF kesitiyle aynı ekranda açılır. Kitaptan soru aramanız gerekmez.</p>
+        <a className="button-link" href="/api/v1/review/ayt-history/">120 aday soruyu ve MEB kesitlerini aç</a>
+      </section>
       <p role="status">{message}</p>
       {summary && <div className="review-stats" aria-label="Denetim özeti"><div><strong>{summary.page_count}</strong><span>PDF sayfası</span></div><div><strong>{summary.candidate_count}</strong><span>çıkarılmış soru adayı</span></div><div><strong>{summary.approved_count}</strong><span>öğrenciye açık soru</span></div>{summary.quarantined_count > 0 && <div><strong>{summary.quarantined_count}</strong><span>yeniden denetlenecek onaylı soru</span></div>}</div>}
       {pageContext && <p className="notice">Konu: {pageContext.topic ?? "Başlık doğrulanamadı"} · {pageContext.test_name ?? "Test türü doğrulanamadı"}{pageContext.test_number ? ` ${pageContext.test_number}` : ""}</p>}

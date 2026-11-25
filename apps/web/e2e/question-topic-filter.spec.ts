@@ -18,10 +18,12 @@ test("student can choose a source-derived topic and test before a question", asy
         { id: `${id}-stem`, kind: "stem", label: "Soru metni", spoken_text: "Kaynak sorusu" }],
     } });
   });
-  await page.goto("/?view=question-bank");
+  await page.goto("/?mode=student&view=question-bank");
   await expect(page.getByRole("heading", { name: "Soru 1" })).toBeVisible();
-  await page.getByLabel("Konu seç").selectOption("Eski Çağ'da Hukuk");
+  await page.getByText("Soru veya konu değiştir", { exact: true }).click();
+  const picker = page.getByRole("navigation", { name: "Soru seçimi" });
+  await picker.getByRole("combobox").nth(0).selectOption("Eski Çağ'da Hukuk");
   await expect(page.getByRole("heading", { name: "Soru 2" })).toBeVisible();
-  await expect(page.getByText("Konu: Eski Çağ'da Hukuk · Geliştirme Testi 10", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Test seç").locator("option")).toHaveCount(2);
+  await expect(page.getByText("Konu: Eski Çağ'da Hukuk · Geliştirme Testi 10", { exact: false })).toBeVisible();
+  await expect(picker.getByRole("combobox").nth(1).locator("option")).toHaveCount(2);
 });

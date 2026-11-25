@@ -1,5 +1,7 @@
 import { useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { EXPLORE_ANNOUNCE_EVENT, ExploreSpeech } from "./ExploreSpeech";
+import { VoiceCommandPanel } from "./VoiceCommandPanel";
+import type { VoiceIntent } from "./voice_commands";
 
 const AREAS = [
   { mode: "student", number: "01", label: "Öğrenci", title: "Öğrenci olarak devam et", description: "Kitabı aç, soru çöz, destek iste.", action: "Öğrenme alanına geç" },
@@ -29,6 +31,14 @@ export function EntryPortal() {
     if (event.key === "ArrowLeft") { event.preventDefault(); move(-1); }
     if (event.key === "ArrowRight") { event.preventDefault(); move(1); }
   };
+  const routeVoiceCommand = (command: VoiceIntent) => {
+    const target = command.kind === "open_history" ? "history"
+      : command.kind === "open_bank" ? "question-bank"
+      : command.kind === "open_writing" ? "writing"
+      : command.kind === "start_study" ? "practice"
+      : null;
+    if (target) window.location.assign(`?mode=student&view=${target}`);
+  };
   return <><ExploreSpeech routeKey="entry" /><main id="entry-main" className="entry-carousel" aria-label="Alan seçimi">
     <div className="entry-carousel-viewport" role="region" aria-roledescription="kaydırmalı alan seçici" aria-label={`${AREAS[active].label} alanı, ${active + 1} / ${AREAS.length}`} tabIndex={0}
       onPointerDown={onPointerDown} onPointerUp={onPointerUp} onPointerCancel={() => { startX.current = null; }} onKeyDown={onKeyDown}>
@@ -50,6 +60,8 @@ export function EntryPortal() {
       </div>
     </div>
     <nav className="carousel-controls" aria-label="Alanlar arasında gezin"><button type="button" className="quiet-button" onClick={() => move(-1)} disabled={active === 0} aria-label="Önceki alan">← Önceki</button><span aria-live="off">{active + 1} / {AREAS.length}</span><button type="button" className="quiet-button" onClick={() => move(1)} disabled={active === AREAS.length - 1} aria-label="Sonraki alan">Sonraki →</button></nav>
+    <div className="entry-voice-command"><VoiceCommandPanel title="Sesli yönlendirme" examples={["tarih kitabını aç", "soru bankasını aç", "çalışalım"]}
+      available={["open_history", "open_bank", "open_writing", "start_study"]} onCommand={routeVoiceCommand} /></div>
   </main></>;
 }
 
@@ -57,7 +69,7 @@ export function TeacherHome() {
   return <><header className="site-header"><div className="site-header-inner"><p className="brand">Eriş<span>STEM</span></p><p className="site-header-context">Öğretmen çalışma alanı</p></div></header>
     <main className="entry-shell"><p className="eyebrow">ÖĞRETMEN</p><h1>İçerik denetimi</h1>
       <p>Öğrenciye açılacak soruları ve MEB kitabındaki bilgi parçalarını buradan inceleyin.</p>
-      <div className="entry-grid"><a className="entry-card entry-card-primary" href="?mode=question-bank-review"><strong>Soruları ve MEB kaynağını incele</strong><span>Soru metni, şıklar, cevap anahtarı ve kaynak bilgileri.</span><span className="entry-action">İncelemeye başla →</span></a><a className="entry-card" href="?mode=architecture-map"><strong>Mimari haritası</strong><span>Kaynak ağacını, kanıt grafiğini, sürümleri ve retrieval kabul durumunu izle.</span><span className="entry-action">Mimariyi aç →</span></a><a className="entry-card" href="?mode=rag-review"><strong>MEB kaynak parçalarını incele</strong><span>PDF kırpımını açıp koç ve RAG için kullanılacak kısa kanıtları onayla.</span><span className="entry-action">Kaynak incelemesini aç →</span></a><a className="entry-card" href="?mode=tutor-dataset-review"><strong>Tarih koçu eğitim örnekleri</strong><span>120 soru ve altı öğrenci durumunu öğretmen ve agent rubriğiyle incele.</span><span className="entry-action">Koçluk verisini aç →</span></a><a className="entry-card" href="?mode=yks-scope-review"><strong>YKS kapsamını seç</strong><span>Resmî kitapçıklardan yalnız metadata etiketle; tek sınıf ve altı üniteyi ölçerek seç.</span><span className="entry-action">Kapsam seçimini aç →</span></a></div>
+      <div className="entry-grid"><a className="entry-card entry-card-primary" href="?mode=question-bank-review"><strong>Soruları ve MEB kaynağını incele</strong><span>İçe aktarılan soru bankasındaki soru metni, şıklar, cevap anahtarı ve kaynak bilgileri.</span><span className="entry-action">İncelemeye başla →</span></a><a className="entry-card" href="/api/v1/review/ayt-history/"><strong>120 özgün AYT Tarih adayını karşılaştır</strong><span>Öğrenciye gösterilecek özgün soru ile dayandığı MEB PDF kesitini yan yana incele. Bu, yayın öncesi doğrulama ekranıdır; öğrenci denemesi değildir.</span><span className="entry-action">Aday incelemesini aç →</span></a><a className="entry-card" href="?mode=architecture-map"><strong>Mimari haritası</strong><span>Kaynak ağacını, kanıt grafiğini, sürümleri ve retrieval kabul durumunu izle.</span><span className="entry-action">Mimariyi aç →</span></a><a className="entry-card" href="?mode=rag-review"><strong>MEB kaynak parçalarını incele</strong><span>PDF kırpımını açıp koç ve RAG için kullanılacak kısa kanıtları onayla.</span><span className="entry-action">Kaynak incelemesini aç →</span></a><a className="entry-card" href="?mode=tutor-dataset-review"><strong>Tarih koçu eğitim örnekleri</strong><span>120 soru ve altı öğrenci durumunu öğretmen ve agent rubriğiyle incele.</span><span className="entry-action">Koçluk verisini aç →</span></a><a className="entry-card" href="?mode=yks-scope-review"><strong>YKS kapsamını seç</strong><span>Resmî kitapçıklardan yalnız metadata etiketle; tek sınıf ve altı üniteyi ölçerek seç.</span><span className="entry-action">Kapsam seçimini aç →</span></a></div>
       <details className="teacher-tools"><summary>Diğer öğretmen araçları</summary><nav className="teacher-home-links" aria-label="Diğer öğretmen araçları"><a href="?mode=learning-review">Öğrenme içeriği</a><a href="?mode=table-review">Tablolar</a><a href="?mode=reviewer">Yayın kontrolü</a><a href="?mode=benchmark">Ölçme ve anotasyon</a><a href="?mode=teacher-editor">Belge düzenleme</a></nav></details>
     </main></>;
 }

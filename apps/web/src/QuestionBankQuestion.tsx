@@ -23,6 +23,7 @@ export function QuestionBankQuestion({ question, units, segments, api, onPreviou
   const [isPlaying, setIsPlaying] = useState(false);
   const [selectedUnit, setSelectedUnit] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement | null>(null);
+  const choices = useRef<HTMLFieldSetElement | null>(null);
   const player = useRef<HTMLAudioElement | null>(null);
   const url = useRef<string | null>(null);
   const serial = useRef(0);
@@ -98,25 +99,26 @@ export function QuestionBankQuestion({ question, units, segments, api, onPreviou
     <div className="question-content">{question.parts.map((part, index) => <p key={part.id} className={part.kind === "prompt" ? "question-prompt" : ""}>{question.parts.length > 1 && <span className="sr-only">{part.kind === "prompt" ? "Soru kökü: " : index === 0 ? "Soru metni: " : "Soru bölümü: "}</span>}{part.text}</p>)}
       {question.visuals.map(visual => <p className="question-visual" key={visual.id}><strong>Görsel:</strong> {visual.description_reviewed ? visual.description : "Doğrulanmış betimleme henüz yok."}</p>)}
     </div>
-    {question.question_type === "multiple_choice" ? <fieldset className="focused-choices"><legend>Yanıt olarak hangi şıkkı düşünüyorsun?</legend>{question.choices.map(choice => <label key={choice.label} className="focused-choice"><input type="radio" name={`${question.id}-answer`} value={choice.label} checked={answer === choice.label} onChange={() => setAnswer(choice.label)} /><span className="choice-letter">{choice.label}</span><span>{choice.text}</span>{answer === choice.label && <span className="choice-selected" aria-hidden="true">Seçildi</span>}</label>)}</fieldset>
+    {question.question_type === "multiple_choice" ? <fieldset className="focused-choices" ref={choices} tabIndex={-1}><legend>Yanıt olarak hangi şıkkı düşünüyorsun?</legend>{question.choices.map(choice => <label key={choice.label} className="focused-choice"><input type="radio" name={`${question.id}-answer`} value={choice.label} checked={answer === choice.label} onChange={() => setAnswer(choice.label)} /><span className="sr-only">Şık {choice.label}.</span><span className="choice-letter" aria-hidden="true">{choice.label}</span><span>{choice.text}</span>{answer === choice.label && <span className="choice-selected" aria-hidden="true">Seçildi</span>}</label>)}</fieldset>
       : <label className="focused-written-answer">Yanıt taslağın<textarea value={answer} onChange={event => setAnswer(event.target.value)} placeholder="Yanıtını burada düşünebilirsin." /></label>}
     <p role="status" className="focused-audio-status">{audioStatus}</p>
     <div className="focused-actions"><button type="button" onClick={() => setHelpOpen(value => !value)} aria-expanded={helpOpen}>{helpOpen ? "Konuşmayı gizle" : "Takıldım, birlikte çözelim"}</button></div>
     <div hidden={!helpOpen}><QuestionTutor key={question.id} api={api} questionId={question.id} selectedChoice={answer} /></div>
     <nav className="focused-question-nav" aria-label="Sorular arasında ilerle"><button type="button" className="quiet-button" onClick={onPrevious} disabled={!onPrevious}>← Önceki soru</button><button type="button" onClick={onNext} disabled={!onNext}>Sonraki soru →</button></nav>
+    <VoiceCommandPanel title="Soruda sesli ilerle" examples={["soruyu oku", "şıkları göster", "şık A'yı oku", "sonraki soru"]}
+      available={["read_selected", "show_choices", "stop_audio", "read_choice", ...(onPrevious ? ["previous_question" as const] : []), ...(onNext ? ["next_question" as const] : [])]}
+      onCommand={command => {
+        if (command.kind === "read_selected") { if (selectedUnit) void play(selectedUnit); else void playQuestion(); }
+        else if (command.kind === "show_choices") { choices.current?.focus(); setAudioStatus("Şıklar odakta. Her şıkkı ayrı dinlemek için şık A'yı oku gibi bir komut kullanabilirsin."); }
+        else if (command.kind === "read_choice") void play(`${question.id}-choice-${command.label}`);
+        else if (command.kind === "stop_audio") stop();
+        else if (command.kind === "next_question") onNext?.();
+        else if (command.kind === "previous_question") onPrevious?.();
+      }} />
     <details className="question-more"><summary>Ayrıntılı okuma ve notlar</summary>
       <p>Bir bölümü ayrı dinlemek veya gerekçeni yazmak istersen burayı kullan.</p>
       <ul className="question-detail-units">{units.map(unit => <li key={unit.id}><span>{unit.label}</span><button type="button" className="quiet-button" data-explore-read-id={unit.id} data-explore-summary={`${unit.label} bölümünü dinle`} aria-current={selectedUnit === unit.id ? "true" : undefined} onClick={() => { setSelectedUnit(unit.id); void play(unit.id); }}>Dinle</button></li>)}</ul>
       <label>Gerekçem<textarea value={reason} onChange={event => setReason(event.target.value)} placeholder="Bu şıkkı neden seçtin?" /></label>
-      <details><summary>Sesli komutlar</summary><VoiceCommandPanel title="Soruda sesli ilerle" examples={["soruyu oku", "şık A'yı oku", "sonraki soru"]}
-        available={["read_selected", "stop_audio", "read_choice", ...(onPrevious ? ["previous_question" as const] : []), ...(onNext ? ["next_question" as const] : [])]}
-        onCommand={command => {
-          if (command.kind === "read_selected") { if (selectedUnit) void play(selectedUnit); else void playQuestion(); }
-          else if (command.kind === "read_choice") void play(`${question.id}-choice-${command.label}`);
-          else if (command.kind === "stop_audio") stop();
-          else if (command.kind === "next_question") onNext?.();
-          else if (command.kind === "previous_question") onPrevious?.();
-        }} /></details>
     </details>
   </section>;
 }

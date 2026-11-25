@@ -3,7 +3,16 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 
 from app import learning_operations as operations
-from app.exam_practice import PROFILES, TASKS, AytHistoryExamPack, ExamCreate, ExamStore, active_tasks
+from app.exam_practice import (
+    PROFILES,
+    TASKS,
+    AytHistoryExamPack,
+    ExamAnswer,
+    ExamCoachTurn,
+    ExamCreate,
+    ExamStore,
+    active_tasks,
+)
 from app.job_store import make_session_factory
 from app.learning_operations import (
     PILOT_TASKS,
@@ -147,16 +156,26 @@ def test_sourced_profiles_do_not_share_extra_time_rules():
 
 
 def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkeypatch):
+    import hashlib
+
+    import pymupdf
+
+    pdf_path = tmp_path / "meb-source.pdf"
+    with pymupdf.open() as pdf:
+        pdf.new_page(width=200, height=200)
+        pdf.save(pdf_path)
+    source_checksum = hashlib.sha256(pdf_path.read_bytes()).hexdigest()
+
     def question(index, split):
         return {
             "id": f"ayt-{index:03d}", "topic": "Millî Mücadele", "outcome": "Neden sonuç ilişkisi",
-            "authorship": "original", "review_method": "ai_source_text_review",
+            "authorship": "original", "review_method": "human_pdf_crop_review",
             "review_artifact_checksum": "b" * 64,
             "split": split, "question": f"Özgün tarih sorusu {index} hangi gelişmeyi sorar?",
             "spoken_question": f"Özgün tarih sorusu {index} hangi gelişmeyi sorar?",
             "choices": [f"Seçenek {letter}" for letter in "ABCDE"], "correct_label": "A",
             "explanation": "Öğretmen onaylı kaynak açıklaması öğrencinin yanlışını düzeltir.",
-            "evidence": [{"source_checksum": "a" * 64, "page": 1, "bbox": [1, 1, 2, 2],
+            "evidence": [{"source_checksum": source_checksum, "page": 1, "bbox": [1, 1, 2, 2],
                           "source_id": "meb-source-001", "source_kind": "meb_textbook",
                           "quote": "Kaynakta doğrulanmış kısa kanıt yer alır."}],
             "visual_dependency": False, "visual_description_reviewed": False, "status": "approved",
@@ -164,7 +183,8 @@ def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkey
 
     payload = {"schema": "ayt-history-exam-pack-v1", "pack_id": "ayt-history-v1", "sources": [{
         "id": "meb-source-001", "kind": "meb_textbook", "title": "MEB Tarih Ders Kitabı",
-        "canonical_url": "https://ogm.meb.gov.tr/kitap/tarih.pdf", "source_checksum": "a" * 64,
+        "canonical_url": "https://ogm.meb.gov.tr/kitap/tarih.pdf", "source_checksum": source_checksum,
+        "relative_path": pdf_path.name,
         "page_count": 1,
     }], "questions": [
         *(question(index, "development") for index in range(72)),
@@ -175,6 +195,7 @@ def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkey
     path = tmp_path / "ayt-pack.json"
     import json
     path.write_text(json.dumps(payload), encoding="utf-8")
+    monkeypatch.setenv("AYT_HISTORY_SOURCE_ROOT", str(tmp_path))
     assert len(active_tasks(str(path))) == 120
     monkeypatch.setenv("AYT_HISTORY_EXAM_PACK", str(path))
     active_tasks.cache_clear()
@@ -183,6 +204,10 @@ def test_complete_approved_ayt_pack_is_required_when_configured(tmp_path, monkey
                                                arrangement_confirmed=True, mode="short", short_minutes=1))
     assert len(exam["questions"]) == 120
     assert "özgün AYT Tarih paketi" in exam["notice"]
+    active_tasks.cache_clear()
+    pdf_path.write_bytes(b"changed")
+    with pytest.raises(HTTPException, match="geçerli veya hazır değil"):
+        active_tasks(str(path))
     active_tasks.cache_clear()
     payload["questions"].pop()
     with pytest.raises(ValueError):
@@ -193,7 +218,7 @@ def test_ayt_pack_rejects_non_original_or_visually_dependent_question(tmp_path):
     evidence = [{"source_checksum": "a" * 64, "page": 1, "bbox": [1, 1, 2, 2],
                  "source_id": "meb-source-001", "source_kind": "meb_textbook",
                  "quote": "Kaynakta doğrulanmış kısa kanıt yer alır."}]
-    base = {"id": "ayt-visual-001", "authorship": "original", "review_method": "ai_source_text_review",
+    base = {"id": "ayt-visual-001", "authorship": "original", "review_method": "human_pdf_crop_review",
             "review_artifact_checksum": "b" * 64, "topic": "Konu", "outcome": "Kazanım",
             "split": "development", "question": "Aşağıdaki tabloya göre hangi sonuç çıkar?",
             "spoken_question": "Aşağıdaki tabloya göre hangi sonuç çıkar?",
@@ -209,6 +234,27 @@ def test_ayt_pack_rejects_non_original_or_visually_dependent_question(tmp_path):
     base["authorship"] = "copied"
     with pytest.raises(ValueError):
         from app.exam_practice import AytHistoryQuestion
+        AytHistoryQuestion.model_validate(base)
+    base["authorship"] = "original"
+    base["review_method"] = "independent_ai_pdf_crop_review"
+    with pytest.raises(ValueError):
+        AytHistoryQuestion.model_validate(base)
+
+
+def test_ayt_pack_rejects_source_dependent_student_question_root():
+    from app.exam_practice import AytHistoryQuestion
+
+    base = {"id": "ayt-root-001", "authorship": "original", "review_method": "human_pdf_crop_review",
+            "review_artifact_checksum": "b" * 64, "topic": "Konu", "outcome": "Kazanım",
+            "split": "development", "question": "Kaynağa göre hangi sonuç doğrudur?",
+            "spoken_question": "Kaynağa göre hangi sonuç doğrudur?",
+            "choices": ["Bir", "İki", "Üç", "Dört", "Beş"], "correct_label": "A",
+            "explanation": "Kaynağa bağlı kısa açıklama öğrencinin gerekçesini düzeltir.",
+            "evidence": [{"source_checksum": "a" * 64, "page": 1, "bbox": [1, 1, 2, 2],
+                          "source_id": "meb-source-001", "source_kind": "meb_textbook",
+                          "quote": "Kaynakta doğrulanmış kısa kanıt yer alır."}],
+            "visual_dependency": False, "visual_description_reviewed": False, "status": "approved"}
+    with pytest.raises(ValueError, match="kaynak metne bağımlı"):
         AytHistoryQuestion.model_validate(base)
 
 
@@ -230,6 +276,8 @@ def test_exam_hides_solutions_until_finish_preserves_revision_and_erases_raw_ans
     finished = client.post(f"/v1/student/exams/sessions/{saved['id']}/finish", headers=headers,
                            json={"revision": saved["revision"]}).json()
     assert finished["results"][0]["correct"] is True
+    assert finished["results"][1]["correct_answer"] is None
+    assert finished["results"][1]["explanation"] is None
     assert finished["answers"] == {} and store.get(saved["id"])["answers"] == {}
     assert client.put(f"/v1/student/exams/sessions/{saved['id']}/answer", headers=headers,
                       json={**answer, "revision": finished["revision"]}).status_code == 409
@@ -242,12 +290,41 @@ def test_exam_coach_is_blocked_until_finish_and_refuses_unsourced_demo_questions
     started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
                                       arrangement_confirmed=True, mode="short", short_minutes=5))
     with pytest.raises(HTTPException, match="yalnız deneme tamamlandıktan sonra"):
-        exams.coach(started["id"], "e1", 1)
+        exams.coach(started["id"], "e1", ExamCoachTurn(revision=started["revision"], turn=1))
     finished = exams.finish(started["id"], started["revision"])
-    coach = exams.coach(started["id"], "e1", 1)
-    assert coach["stage"] == "source_unavailable"
-    assert coach["can_reveal_explanation"] is False
+    coach = exams.coach(started["id"], "e1", ExamCoachTurn(revision=finished["revision"], turn=1))
+    assert coach["reply"]["stage"] == "source_unavailable"
+    assert coach["reply"]["can_reveal_explanation"] is False
     assert finished["state"] == "finished"
+
+
+def test_sourced_wrong_answer_requires_two_sequential_coach_turns(setup, monkeypatch):
+    _, exams, client = setup
+    tasks = ({**TASKS[0], "evidence": [{"source_id": "meb-test-001", "quote": "Merkeze eşit uzaklıktaki noktalar çember oluşturur."}]}, *TASKS[1:])
+    monkeypatch.setattr(exams, "tasks", lambda: tasks)
+    headers = {"X-Role": "student"}
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                      arrangement_confirmed=True, short_minutes=5))
+    saved = exams.answer(started["id"], ExamAnswer(
+        revision=started["revision"], question_id="e1", answer="option-2"))
+    finished = exams.finish(started["id"], saved["revision"])
+    assert finished["results"][0]["correct_answer"] is None
+    url = f"/v1/student/exams/sessions/{started['id']}/review/e1/coach"
+    assert client.post(url, headers=headers, json={"revision": finished["revision"], "turn": 2,
+                                                  "learner_response": "Çember olabilir."}).status_code == 409
+    first = client.post(url, headers=headers, json={"revision": finished["revision"], "turn": 1}).json()
+    assert first["exam"]["results"][0]["correct_answer"] is None
+    assert "Çember" not in first["reply"]["text"]
+    assert client.post(url, headers=headers, json={"revision": first["exam"]["revision"], "turn": 2}).status_code == 422
+    second = client.post(url, headers=headers, json={"revision": first["exam"]["revision"], "turn": 2,
+                                                   "learner_response": "İki şekli karıştırdım."}).json()
+    assert second["reply"]["stage"] == "gerekceli_aciklama"
+    assert second["reply"]["can_reveal_explanation"] is True
+    assert second["exam"]["results"][0]["correct_answer"] == "Çember"
+    assert second["exam"]["results"][0]["explanation"]
+    assert client.post(url, headers=headers, json={"revision": second["exam"]["revision"], "turn": 2,
+                                                  "learner_response": "Tekrar"}).status_code == 409
+    assert client.get(f"/v1/student/exams/sessions/{started['id']}", headers=headers).json()["results"][0]["correct_answer"] == "Çember"
 
 
 def json_text(data):
@@ -267,6 +344,29 @@ def test_exam_deadline_is_server_enforced_and_expired_replay_cannot_change_score
                           json={"revision": exam["revision"], "question_id": "e1", "answer": "option-1"})
     assert response.status_code == 409
     assert not any(item["correct"] for item in exams.get(exam["id"])["results"])
+
+
+def test_hundred_repeated_exam_sessions_preserve_one_result_and_erase_raw_answers(setup):
+    """Reliability acceptance: no lost/doubled result across repeated real store writes."""
+    store, exams, _ = setup
+    seen_ids = set()
+    for _ in range(100):
+        started = exams.create(ExamCreate(profile_id="lgs-reader-2026", slot_id="numeric",
+                                          arrangement_confirmed=True, mode="short", short_minutes=1))
+        assert started["id"] not in seen_ids
+        seen_ids.add(started["id"])
+        saved = exams.answer(started["id"], ExamAnswer(
+            revision=started["revision"], question_id="e1", answer="option-1"))
+        finished = exams.finish(started["id"], saved["revision"])
+        repeated_finish = exams.finish(started["id"], finished["revision"])
+        persisted = store.get(started["id"])
+        assert finished["state"] == repeated_finish["state"] == "finished"
+        assert len(finished["results"]) == len(TASKS)
+        assert len(repeated_finish["results"]) == len(TASKS)
+        assert finished["answers"] == repeated_finish["answers"] == {}
+        assert persisted["answers"] == {}
+        assert sum(item["correct"] for item in finished["results"]) == 1
+    assert len(seen_ids) == 100
 
 
 def test_exam_creation_requires_confirmation_and_profile_slot_match(setup):

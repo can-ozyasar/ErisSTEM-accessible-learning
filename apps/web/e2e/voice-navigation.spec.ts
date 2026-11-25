@@ -33,7 +33,7 @@ test("one-shot local microphone result routes without contacting the app API", a
   });
   await page.goto("/");
   await page.getByRole("button", { name: "Bir komut dinle" }).click();
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Bir soruya odaklan.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Soruyu çöz");
   expect(new URL(page.url()).searchParams.get("view")).toBe("question-bank");
 });
 
@@ -46,7 +46,7 @@ test("question voice commands reveal and read a choice without selecting an answ
   } }));
   let requestedChoice = false;
   await page.route(`**/api/v1/question-bank/student/questions/${id}/audio/${id}-choice-A`, route => { requestedChoice = true; return route.fulfill({ status: 503 }); });
-  await page.goto("/?view=question-bank");
+  await page.goto("/?mode=student&view=question-bank");
   await expect(page.getByRole("heading", { name: "Soru 1" })).toBeVisible({ timeout: 5000 });
   await page.getByLabel("Komutu yazarak dene").fill("şıkları göster");
   await page.getByRole("button", { name: "Uygula", exact: true }).click();

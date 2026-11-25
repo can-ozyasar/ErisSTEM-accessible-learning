@@ -13,6 +13,8 @@ import { QuestionBankStudent } from "./QuestionBankStudent";
 import { TutorDatasetReview } from "./TutorDatasetReview";
 import { YksScopeReview } from "./YksScopeReview";
 import { StudentLibrary } from "./StudentLibrary";
+import { ExamPractice } from "./ExamPractice";
+import { SetPractice } from "./SetPractice";
 import { VoiceCommandPanel } from "./VoiceCommandPanel";
 import { WritingSpace } from "./WritingSpace";
 import { ExploreSpeech } from "./ExploreSpeech";
@@ -230,13 +232,13 @@ function Reader({ documentId, onBack }: { documentId: string; onBack: () => void
     {!studyMode && <article>{visibleBlocks.map(block => block.kind === "heading" ? <h2 id={block.id} tabIndex={-1} key={block.id}>{block.text}</h2> : block.kind === "paragraph" ? <p id={block.id} tabIndex={-1} key={block.id}>{block.text}</p> : <Formula key={block.id} block={block} reading={plan?.plan.units.find(item => item.id === block.id && item.kind === "formula")} onSelect={() => { const index = plan?.plan.units.findIndex(item => item.id === block.id) ?? -1; if (index >= 0) setCurrentUnit(index); }} />)}{tables.map(table => <PublishedTableView key={table.id} table={table} onSpeak={speakTableCell} />)}</article>}</main></>;
 }
 
-type StudentView = "library" | "reader" | "writing" | "history" | "question-bank";
+type StudentView = "library" | "reader" | "writing" | "history" | "question-bank" | "practice" | "exam";
 
 function currentStudentRoute(): { view: StudentView; documentId: string } {
   const url = new URL(window.location.href);
   const view = url.searchParams.get("view");
   const documentId = url.searchParams.get("document") ?? "";
-  return { view: view === "reader" && documentId ? "reader" : view === "writing" ? "writing" : view === "history" ? "history" : view === "question-bank" ? "question-bank" : "library", documentId };
+  return { view: view === "reader" && documentId ? "reader" : view === "writing" ? "writing" : view === "history" ? "history" : view === "question-bank" ? "question-bank" : view === "practice" ? "practice" : view === "exam" ? "exam" : "library", documentId };
 }
 
 function StudentApp() {
@@ -280,6 +282,8 @@ function StudentApp() {
   const screen = route.view === "reader" ? <Reader key={route.documentId} documentId={route.documentId} onBack={back} />
     : route.view === "history" ? <HistoryReader onBack={back} />
     : route.view === "question-bank" ? <QuestionBankStudent api={API} onBack={back} />
+    : route.view === "practice" ? <SetPractice api={API} onBack={back} onOpenDocument={documentId => navigate("reader", documentId)} />
+    : route.view === "exam" ? <ExamPractice api={API} onBack={back} />
     : route.view === "writing" ? <WritingSpace writing={writing} onWriting={setWriting} status={writingStatus} onStatus={setWritingStatus} onBack={back} />
     : <StudentLibrary onNavigate={view => navigate(view)} />;
   return <><ExploreSpeech routeKey={`${route.view}:${route.documentId}`} />{screen}</>;

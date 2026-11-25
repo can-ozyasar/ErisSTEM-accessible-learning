@@ -23,13 +23,17 @@ test("question flow preserves focus, marks the choice and reads the displayed tu
       units: [{ id: `p${number}`, kind: "stem", label: "Soru metni", spoken_text: "Bu soru hangi uygarlığı soruyor?" }], audio_segments: [],
     } });
   });
-  await page.route("**/api/v1/question-bank/student/questions/q1/tutor", route => route.fulfill({ json: { reply, stage: "justify", sources: [] } }));
+  await page.route("**/api/v1/question-bank/student/questions/q1/tutor", route => route.fulfill({ json: {
+    session_id: "test-session", stage: "justify", error_type: "unknown", student_prompt: reply,
+    short_spoken_text: reply, source_ids: [], abstain_reason: null, can_reveal_explanation: false,
+    sources: [], evidence_cards: [],
+  } }));
   await page.route("**/api/v1/question-bank/student/questions/q1/tutor/audio", route => { oldAudioCalls++; return route.fulfill({ status: 500 }); });
 
   await page.goto("/?mode=student&view=question-bank");
   const heading = page.getByRole("heading", { name: "Soru 1" });
   await expect(heading).toBeFocused();
-  await page.getByRole("radio", { name: "A A seçeneği" }).check();
+  await page.getByRole("radio", { name: /Şık A.*A seçeneği/ }).check();
   await expect(page.getByText("Seçildi", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Takıldım, birlikte çözelim" }).click();
   await page.getByRole("button", { name: "İlk ipucunu iste" }).click();

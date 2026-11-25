@@ -330,14 +330,25 @@ button.quiet-button:hover:not(:disabled) { background: var(--accent-soft); color
 .entry-icon { width: 42px; height: 42px; display: grid; place-items: center; border-radius: 12px; background: var(--accent-soft); color: var(--accent-dark); font-weight: 850; }
 .entry-action { margin-top: auto; color: var(--accent-dark); font-weight: 800; }
 .entry-card-primary .entry-action { color: #b8f1db; }
+.button-link { display: inline-block; width: fit-content; padding: .7rem 1rem; border-radius: .5rem; background: var(--deep); color: #fff; font-weight: 700; text-decoration: none; }
+.button-link:hover, .button-link:focus-visible { background: var(--accent); color: #061627; outline: 3px solid var(--deep); outline-offset: 2px; }
 .entry-note { margin-top: 2rem; color: var(--muted); font-size: .9rem; }
 .teacher-home-links { display: flex; flex-wrap: wrap; gap: .8rem 1.5rem; margin-top: 1rem; }
 .teacher-tools { margin-top: 1.25rem; padding: .85rem 1.1rem; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .teacher-tools > summary { color: var(--accent-dark); font-weight: 750; cursor: pointer; }
 .teacher-home-links a { display: inline-flex; align-items: center; min-height: 44px; padding: .45rem .7rem; border-radius: 8px; background: var(--accent-soft); text-decoration: none; }
 
+/* At 200% text zoom, long Turkish labels must remain usable without horizontal
+   scrolling on a 320px viewport. */
+@media (max-width: 620px) {
+  .entry-shell, .entry-shell h1, .entry-grid, .entry-card, .entry-card *,
+  .teacher-home-links, .teacher-home-links a, .accessibility-settings-panel,
+  .accessibility-settings-panel li { min-width: 0; overflow-wrap: anywhere; }
+}
+
 /* The start screen is deliberately one decision at a time. */
 .entry-carousel { position: relative; width: 100%; max-width: none; min-height: 100dvh; padding: 0; overflow-x: clip; background: #eaf4fb; }
+.entry-voice-command { max-width: 760px; margin: 0 auto; padding: 1rem max(1rem, env(safe-area-inset-right)) 7rem; }
 .entry-carousel-viewport { min-height: 100dvh; overflow-x: clip; touch-action: pan-y; outline-offset: -7px; }
 .entry-carousel-track { display: flex; width: 100%; min-height: 100dvh; transition: transform .42s cubic-bezier(.22, .72, .18, 1); }
 .entry-slide { flex: 0 0 100%; display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100dvh; padding: max(1rem, env(safe-area-inset-top)) max(1rem, env(safe-area-inset-right)) max(5.5rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); }

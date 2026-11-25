@@ -1,0 +1,34 @@
+{
+  "schema": "ayt-private-pilot-acceptance-v1",
+  "evaluated_at_utc": "2026-11-25T07:33:05+00:00",
+  "git_commit": "33e7dda",
+  "browser": "Google Chrome 157.0.8103.38",
+  "test_runtime": "Node.js 20.20.2, Playwright, isolated temporary SQLite",
+  "private_pack_sha256": "a36ffb0331cc42d4ad138a996cee722bec62cd73ac92bbb6093e349f2fd052e3",
+  "results": {
+    "web_unit_tests_passed": 16,
+    "general_playwright_tests_passed": 21,
+    "general_playwright_private_tests_skipped_without_opt_in": 2,
+    "real_private_pilot_acceptance_tests_passed": 2,
+    "private_pack_questions": 81,
+    "questions_with_coaching_evidence": 76,
+    "questions_safely_abstaining": 5,
+    "axe_violations_across_exam_entry_active_exam_results_and_first_coach_turn": 0,
+    "active_answer_or_explanation_leaks_in_checked_responses": 0,
+    "answer_survived_refresh": true,
+    "answer_revealed_after_second_coach_turn": true,
+    "all_five_unverified_bundles_abstained": true,
+    "api_healthcheck_passed": true,
+    "database_healthcheck_passed": true,
+    "tts_healthcheck_passed": true,
+    "web_http_probe_passed": true,
+    "exam_maintenance_running": true
+  },
+  "limitations": [
+    "Automated Chromium and axe checks do not replace NVDA with Firefox or TalkBack with Chrome manual task testing.",
+    "No blind or low-vision participant study was performed; usability and learning-effect claims are not established.",
+    "This flow validates session and coaching gates, not the historical correctness of every question.",
+    "Fine-tuned static audio remains unmatched for the active pack; Piper is the runtime fallback."
+  ],
+  "notice": "Aggregate-only report: no question text, answers, source quotations, learner responses, API keys, or audio are included."
+}

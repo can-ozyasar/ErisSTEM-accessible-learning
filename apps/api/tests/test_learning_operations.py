@@ -468,12 +468,17 @@ def test_exam_deadline_is_server_enforced_and_expired_replay_cannot_change_score
     assert not any(item["correct"] for item in exams.get(exam["id"])["results"])
 
 
-def test_hundred_repeated_exam_sessions_preserve_one_result_and_erase_raw_answers(setup):
-    """Reliability acceptance: no lost/doubled result across repeated real store writes."""
+def test_hundred_repeated_81_item_sessions_preserve_results_and_erase_raw_answers(setup, monkeypatch):
+    """Exercise lifecycle reliability with an 81-item synthetic session fixture."""
     store, exams, _ = setup
+    session_tasks = (TASKS[0], *(
+        {**TASKS[index % len(TASKS)], "id": f"question-{index:03d}", "correct": 1}
+        for index in range(1, 81)
+    ))
+    monkeypatch.setattr(exams, "tasks", lambda: session_tasks)
     seen_ids = set()
     for _ in range(100):
-        started = exams.create(ExamCreate(profile_id="lgs-reader-2026", slot_id="numeric",
+        started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
                                           arrangement_confirmed=True, mode="short", short_minutes=1))
         assert started["id"] not in seen_ids
         seen_ids.add(started["id"])
@@ -483,12 +488,41 @@ def test_hundred_repeated_exam_sessions_preserve_one_result_and_erase_raw_answer
         repeated_finish = exams.finish(started["id"], finished["revision"])
         persisted = store.get(started["id"])
         assert finished["state"] == repeated_finish["state"] == "finished"
-        assert len(finished["results"]) == len(TASKS)
-        assert len(repeated_finish["results"]) == len(TASKS)
+        assert len(finished["results"]) == 81
+        assert len(repeated_finish["results"]) == 81
         assert finished["answers"] == repeated_finish["answers"] == {}
         assert persisted["answers"] == {}
         assert sum(item["correct"] for item in finished["results"]) == 1
     assert len(seen_ids) == 100
+
+
+def test_concurrent_answer_writes_with_same_revision_have_one_winner(setup):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    _, exams, _ = setup
+    started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
+                                      arrangement_confirmed=True, mode="short", short_minutes=1))
+    barrier = Barrier(2)
+
+    def write(answer):
+        barrier.wait(timeout=5)
+        try:
+            saved = exams.answer(started["id"], ExamAnswer(
+                revision=started["revision"], question_id="e1", answer=answer))
+            return "accepted", saved
+        except HTTPException as error:
+            return "rejected", error.status_code
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(write, ("option-1", "option-2")))
+    assert [status for status, _ in outcomes].count("accepted") == 1
+    assert [status for status, _ in outcomes].count("rejected") == 1
+    rejected = next(value for status, value in outcomes if status == "rejected")
+    assert rejected == 409
+    persisted = exams.records.get(started["id"])
+    assert persisted["revision"] == started["revision"] + 1
+    assert persisted["answers"]["e1"] in {"option-1", "option-2"}
 
 
 def test_exam_creation_requires_confirmation_and_profile_slot_match(setup):

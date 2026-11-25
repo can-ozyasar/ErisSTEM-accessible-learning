@@ -21,6 +21,47 @@ test("exam stem and individual choice use session-bound audio without saving an 
   await expect(page.getByRole("button", { name: "Soru 1 · boş", exact: true })).toBeVisible();
 });
 
+test("showing choices reads separate audio assets in order and stop cancels the remaining queue", async ({ page }) => {
+  await page.addInitScript(() => {
+    const state = window as Window & { currentAudio?: { onended: (() => void) | null }; finishCurrentAudio?: () => void; audioStarts?: number };
+    state.audioStarts = 0;
+    Object.defineProperty(window, "Audio", { configurable: true, value: class {
+      playbackRate = 1;
+      onended: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      constructor(_source: string) {}
+      play() { state.currentAudio = this; state.audioStarts = (state.audioStarts ?? 0) + 1; return Promise.resolve(); }
+      pause() {}
+    } });
+    state.finishCurrentAudio = () => state.currentAudio?.onended?.();
+  });
+  const units: string[] = [];
+  await page.route("**/api/v1/student/exams/sessions/*/questions/*/audio/choice-*", async route => {
+    units.push(new URL(route.request().url()).pathname.split("/").pop() ?? "");
+    await route.fulfill({ status: 200, contentType: "audio/wav", body: Buffer.from("RIFF0000WAVE" + "0".repeat(32)) });
+  });
+  await page.goto("/?mode=student&view=exam");
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Provayı başlat", exact: true }).click();
+  const command = page.getByLabel("Komutu yazarak dene");
+  await command.fill("şıkları göster");
+  await page.getByRole("button", { name: "Uygula", exact: true }).click();
+  for (const [index, unit] of ["choice-A", "choice-B", "choice-C"].entries()) {
+    await expect.poll(() => units.length).toBe(index + 1);
+    expect(units[index]).toBe(unit);
+    if (index < 2) await page.evaluate(() => (window as Window & { finishCurrentAudio: () => void }).finishCurrentAudio());
+  }
+  await command.fill("şıkları göster");
+  await page.getByRole("button", { name: "Uygula", exact: true }).click();
+  await expect.poll(() => page.evaluate(() => (window as Window & { audioStarts: number }).audioStarts)).toBe(4);
+  await command.fill("sesi durdur");
+  await page.getByRole("button", { name: "Uygula", exact: true }).click();
+  await page.evaluate(() => (window as Window & { finishCurrentAudio: () => void }).finishCurrentAudio());
+  await page.waitForTimeout(100);
+  expect(units).toEqual(["choice-A", "choice-B", "choice-C"]);
+  await expect.poll(() => page.evaluate(() => (window as Window & { audioStarts: number }).audioStarts)).toBe(4);
+});
+
 test("coach dictation remains a local draft until the learner sends it", async ({ page }) => {
   await page.addInitScript(() => {
     Object.defineProperty(window, "SpeechRecognition", { configurable: true, value: class {

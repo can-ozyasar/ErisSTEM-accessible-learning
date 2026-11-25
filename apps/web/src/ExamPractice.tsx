@@ -39,7 +39,7 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
   const inFlight = useRef(false);
   const mounted = useRef(true);
   const heading = useRef<HTMLHeadingElement>(null);
-  const { speak, speakUnit, stop, status: voiceStatus } = useLearningSpeech(1);
+  const { speak, speakUnit, speakUnits, stop, status: voiceStatus } = useLearningSpeech(1);
   const selected = profiles.find(item => item.id === profileId);
   const slot = selected?.slots.find(item => item.id === slotId);
   const question = exam?.questions[index];
@@ -175,13 +175,23 @@ export function ExamPractice({ api, onBack }: { api: string; onBack: () => void 
   const choiceForLabel = (label: string) => question?.choices["ABCDE".indexOf(label)];
   const readUnit = (unit: string) => {
     if (!exam || !question) return;
-    const path = `${api}/v1/student/exams/sessions/${encodeURIComponent(exam.id)}/questions/${encodeURIComponent(question.id)}/audio/${encodeURIComponent(unit)}`;
-    speakUnit(path, `exam:${exam.id}:${question.id}:${unit}`);
+    const asset = speechAsset(unit);
+    if (asset) speakUnit(asset.urlPath, asset.cacheKey);
+  };
+  const speechAsset = (unit: string) => {
+    if (!exam || !question) return null;
+    return {
+      urlPath: `${api}/v1/student/exams/sessions/${encodeURIComponent(exam.id)}/questions/${encodeURIComponent(question.id)}/audio/${encodeURIComponent(unit)}`,
+      cacheKey: `exam:${exam.id}:${question.id}:${unit}`,
+    };
   };
   const voiceCommand = (command: VoiceIntent) => {
     if (!exam || exam.state !== "active" || !question || remaining === 0) return;
     if (command.kind === "read_selected") { readUnit("stem"); return; }
-    if (command.kind === "show_choices") { speak(question.choices.map((item, i) => `Şık ${"ABCDE"[i]}. ${item.text}`).join(". ")); return; }
+    if (command.kind === "show_choices") {
+      speakUnits(question.choices.map((_, i) => speechAsset(`choice-${"ABCDE"[i]}`)).filter((item): item is NonNullable<typeof item> => item !== null));
+      return;
+    }
     if (command.kind === "read_choice") {
       const item = choiceForLabel(command.label);
       if (item) readUnit(`choice-${command.label}`);

@@ -3,6 +3,7 @@ import { fetchAudio } from "./audio_cache";
 
 const API = import.meta.env.VITE_API_URL ?? "/api";
 const MAX_CHUNK = 500;
+type SpeechAsset = { urlPath: string; cacheKey: string };
 
 function chunks(value: string): string[] {
   const words = value.replace(/\s+/g, " ").trim().split(" ");
@@ -76,22 +77,47 @@ export function useLearningSpeech(rate: number) {
     };
     void playPart(0);
   }, [cancel, rate]);
-  const speakUnit = useCallback((urlPath: string, cacheKey: string) => {
+  const speakUnits = useCallback((items: SpeechAsset[]) => {
     cancel();
+    if (!items.length) { setStatus("Okunacak ses birimi bulunamadı."); return; }
     const current = generation.current;
-    void (async () => {
-      try {
-        const data = await fetchAudio(cacheKey, urlPath, { headers: { "X-Role": "student" } });
+    const playUnit = (index: number) => {
+      if (current !== generation.current) return;
+      if (index >= items.length) { setStatus("Seslendirme tamamlandı."); return; }
+      const item = items[index];
+      const controller = new AbortController();
+      request.current = controller;
+      void fetchAudio(item.cacheKey, item.urlPath, {
+        headers: { "X-Role": "student" }, signal: controller.signal,
+      }).then(data => {
         if (current !== generation.current) return;
         const nextUrl = URL.createObjectURL(new Blob([data.slice(0)], { type: "audio/wav" }));
         const nextAudio = new Audio(nextUrl);
         url.current = nextUrl; audio.current = nextAudio; nextAudio.playbackRate = rate;
-        nextAudio.onended = () => { URL.revokeObjectURL(nextUrl); if (url.current === nextUrl) url.current = null; if (audio.current === nextAudio) audio.current = null; if (current === generation.current) setStatus("Seslendirme tamamlandı."); };
-        nextAudio.onerror = () => { if (current === generation.current) setStatus("Ses oynatılamadı. Metni ekran okuyucunuzla inceleyebilirsiniz."); };
+        const release = () => {
+          URL.revokeObjectURL(nextUrl);
+          if (url.current === nextUrl) url.current = null;
+          if (audio.current === nextAudio) audio.current = null;
+        };
+        nextAudio.onended = () => { release(); playUnit(index + 1); };
+        nextAudio.onerror = () => {
+          release();
+          if (current === generation.current) setStatus("Ses oynatılamadı. Metni ekran okuyucunuzla inceleyebilirsiniz.");
+        };
         setStatus("Yerel Türkçe sesle okunuyor; hazır kayıt yoksa Piper kullanılır.");
-        await nextAudio.play();
-      } catch { if (current === generation.current) setStatus("Yerel ses hizmetine erişilemedi. Metni ekran okuyucunuzla inceleyebilirsiniz."); }
-    })();
+        void nextAudio.play().catch(() => {
+          release();
+          if (current === generation.current) setStatus("Ses oynatılamadı. Metni ekran okuyucunuzla inceleyebilirsiniz.");
+        });
+      }).catch(() => {
+        if (current === generation.current && !controller.signal.aborted)
+          setStatus("Yerel ses hizmetine erişilemedi. Metni ekran okuyucunuzla inceleyebilirsiniz.");
+      });
+    };
+    playUnit(0);
   }, [cancel, rate]);
-  return { speak, speakUnit, stop, status };
+  const speakUnit = useCallback((urlPath: string, cacheKey: string) => {
+    speakUnits([{ urlPath, cacheKey }]);
+  }, [speakUnits]);
+  return { speak, speakUnit, speakUnits, stop, status };
 }

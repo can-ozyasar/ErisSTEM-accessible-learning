@@ -8,7 +8,11 @@ from app.tutor_coach import CoachContext
 
 def _context():
     return CoachContext(question_id="q", question_text="Olayın nedeni nedir?", choice_text="Yanlış seçenek",
-                        section_title="Tarih", source_ids=["meb"], evidence="Kaynak ilişkisi.", error_type="genel")
+                        section_title="Tarih", source_ids=["meb-1", "meb-2"],
+                        evidence="primary: Kaynakta olayın nedeni açıklanıyor.\nrelation: İkinci kanıt sonucu gösteriyor.",
+                        error_type="genel",
+                        evidence_by_role={"primary": "Kaynakta olayın nedeni açıklanıyor.",
+                                          "relation": "İkinci kanıt sonucu gösteriyor."})
 
 
 def test_opt_in_uses_separate_judge_and_never_sends_correct_choice(monkeypatch):
@@ -18,6 +22,8 @@ def test_opt_in_uses_separate_judge_and_never_sends_correct_choice(monkeypatch):
     def fake(body, key, timeout):
         calls.append(body)
         assert key == "test-key" and timeout == 8
+        assert "Kaynakta olayın nedeni açıklanıyor." in json.dumps(body, ensure_ascii=False)
+        assert "İkinci kanıt sonucu gösteriyor." in json.dumps(body, ensure_ascii=False)
         assert "Gizli doğru metin" not in json.dumps(body, ensure_ascii=False)
         result = {"question": "Kaynakta neden olarak hangi ilişki anlatılıyor?"} if len(calls) == 1 else {"safe": True}
         return {"choices": [{"message": {"content": json.dumps(result, ensure_ascii=False)}}]}

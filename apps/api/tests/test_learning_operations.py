@@ -399,12 +399,17 @@ def test_sourced_wrong_answer_requires_two_sequential_coach_turns(setup, monkeyp
     store, exams, client = setup
     from app import exam_practice
     real_coach = exam_practice.build_coach_reply
-    observed_choices = []
+    observed_contexts = []
     def observe_coach(context, *args, **kwargs):
-        observed_choices.append(context.choice_text)
+        observed_contexts.append(context)
         return real_coach(context, *args, **kwargs)
     monkeypatch.setattr(exam_practice, "build_coach_reply", observe_coach)
-    tasks = ({**TASKS[0], "evidence": [{"source_id": "meb-test-001", "quote": "Merkeze eşit uzaklıktaki noktalar çember oluşturur."}]}, *TASKS[1:])
+    evidence = [
+        {"source_id": "meb-test-001", "role": "primary", "quote": "Merkeze eşit uzaklıktaki noktalar çember oluşturur."},
+        {"source_id": "meb-test-002", "role": "relation", "quote": "Çember, düzlemde merkeze sabit uzaklıktaki noktaların kümesidir."},
+        {"source_id": "meb-test-003", "role": "contrast", "quote": "Doğru parçası iki uç noktayla sınırlıdır."},
+    ]
+    tasks = ({**TASKS[0], "evidence": evidence}, *TASKS[1:])
     monkeypatch.setattr(exams, "tasks", lambda: tasks)
     headers = {"X-Role": "student"}
     started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
@@ -426,7 +431,16 @@ def test_sourced_wrong_answer_requires_two_sequential_coach_turns(setup, monkeyp
                                                    "learner_response": "İki şekli karıştırdım."}).json()
     assert second["reply"]["stage"] == "gerekceli_aciklama"
     assert second["reply"]["can_reveal_explanation"] is True
-    assert observed_choices == ["Doğru parçası", "Doğru parçası"]
+    assert [context.choice_text for context in observed_contexts] == ["Doğru parçası", "Doğru parçası"]
+    assert all(context.source_ids == ["meb-test-001", "meb-test-002", "meb-test-003"]
+               for context in observed_contexts)
+    assert all(context.evidence_by_role == {
+        "primary": "Merkeze eşit uzaklıktaki noktalar çember oluşturur.",
+        "relation": "Çember, düzlemde merkeze sabit uzaklıktaki noktaların kümesidir.",
+        "contrast": "Doğru parçası iki uç noktayla sınırlıdır.",
+    } for context in observed_contexts)
+    assert all("Doğru parçası iki uç noktayla sınırlıdır." in context.evidence
+               for context in observed_contexts)
     assert store.get(started["id"])["coach_selections"] == {}
     assert second["exam"]["results"][0]["correct_answer"] == "Çember"
     assert second["exam"]["results"][0]["explanation"]

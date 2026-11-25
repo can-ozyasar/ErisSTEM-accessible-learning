@@ -494,14 +494,21 @@ class ExamStore:
         selected = record.get("coach_selections", {}).get(question_id)
         choice_ids = [f"option-{i + 1}" for i in range(len(task["choices"]))]
         choice_text = task["choices"][choice_ids.index(selected)] if selected in choice_ids else None
+        evidence_by_role: dict[str, str] = {}
+        for item in evidence:
+            role = item.get("role", "primary")
+            quote = item["quote"].strip()
+            evidence_by_role[role] = "\n".join(part for part in (evidence_by_role.get(role), quote) if part)
+        evidence_text = "\n".join(f"{role}: {quote}" for role, quote in evidence_by_role.items())
         context = CoachContext(
             question_id=question_id,
             question_text=task["question"],
             choice_text=choice_text,
             section_title=task.get("topic", "AYT Tarih"),
             source_ids=source_ids,
-            evidence=evidence[0]["quote"],
+            evidence=evidence_text,
             error_type="genel",
+            evidence_by_role=evidence_by_role,
         )
         reply = build_coach_reply(
             context,

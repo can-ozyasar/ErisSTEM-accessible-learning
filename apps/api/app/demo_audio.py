@@ -28,7 +28,10 @@ def _resolve_at(root: Path, kind: str, item_id: str, text: str, source: Path | N
     try:
         manifest_path = root / "index.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-        if manifest.get("schema_version") != "v5-demo-installed-v1" or manifest.get("model_sha256") != MODEL_SHA256:
+        if (manifest.get("schema_version") != "v5-demo-installed-v1"
+                or manifest.get("model_sha256") != MODEL_SHA256
+                or manifest.get("runtime_enabled") is not True
+                or manifest.get("requires_listening_review") is not False):
             return None
         if kind != "interface":
             if source is None:

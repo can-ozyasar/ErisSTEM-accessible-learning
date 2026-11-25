@@ -127,16 +127,61 @@ def build(pack: AytHistoryExamPack, pack_checksum: str) -> dict:
     }
 
 
+def kaggle_synthesis_view(manifest: dict) -> dict:
+    """Remove number-bearing utterance text before private external synthesis.
+
+    Keep every nonnumeric product-unit identity so generated audio can later
+    be installed only for exact package/text matches. The pack checksum still
+    binds this minimized input to the local source package.
+    """
+    items = manifest.get("items")
+    summary = manifest.get("summary")
+    if not isinstance(items, list) or not isinstance(summary, dict):
+        raise TypeError("invalid_static_audio_manifest")
+    if any(not isinstance(item, dict) for item in items):
+        raise TypeError("invalid_static_audio_item")
+    eligible = [item for item in items if item.get("contains_digits") is False]
+    withheld = len(items) - len(eligible)
+    for item in eligible:
+        text = item.get("spoken_text")
+        if not isinstance(text, str):
+            raise TypeError("invalid_static_audio_text")
+        if re.search(r"\d", text):
+            raise ValueError("numeric_text_must_be_withheld_from_external_synthesis")
+    result = {**manifest, "items": eligible}
+    result["summary"] = {
+        **summary,
+        "source_static_units": len(items),
+        "static_units": len(eligible),
+        "unique_texts": len({item["spoken_text_sha256"] for item in eligible}),
+        "units_with_digits_withheld": withheld,
+        "external_synthesis_scope": "nonnumeric_fixed_exam_and_interface_audio_only",
+    }
+    result["notice"] = (
+        "Private Kaggle synthesis input only. Number-bearing text is omitted; "
+        "the pack checksum and exact unit identities are retained. This does "
+        "not publish audio or enable a student runtime."
+    )
+    return result
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--exam-pack", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--include-digit-bearing-text",
+        action="store_true",
+        help="Include pronunciation-review items in the generated input (not recommended).",
+    )
     args = parser.parse_args()
     if args.output.exists():
         raise FileExistsError("refusing_to_overwrite_v5_static_audio_input")
     raw = args.exam_pack.read_bytes()
     pack = AytHistoryExamPack.model_validate_json(raw)
     payload = build(pack, hashlib.sha256(raw).hexdigest())
+    if not args.include_digit_bearing_text:
+        payload = kaggle_synthesis_view(payload)
     args.output.mkdir(parents=True)
     (args.output / "manifest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(payload["summary"], ensure_ascii=False))

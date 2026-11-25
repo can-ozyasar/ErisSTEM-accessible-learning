@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-
 SCRIPT = Path(__file__).resolve().parents[3] / "experiments/kaggle/install_v5_demo_audio.py"
 spec = importlib.util.spec_from_file_location("install_v5_audio", SCRIPT)
 installer = importlib.util.module_from_spec(spec)
@@ -21,6 +20,7 @@ def _fixture(tmp_path):
     text = "Sonraki soru."
     text_hash = _digest(text.encode())
     source = {"schema_version": "ayt-history-v5-static-audio-input-v1", "pack_checksum": "a" * 64,
+              "voice_model_sha256": installer.MODEL_SHA,
               "items": [{"kind": "interface", "id": "interface:" + text_hash, "spoken_text": text,
                          "spoken_text_sha256": text_hash}]}
     source_path = tmp_path / "manifest.json"
@@ -43,6 +43,8 @@ def test_installs_exam_manifest_with_pack_binding_and_interface_identity(tmp_pat
     index = json.loads((destination / "index.json").read_text())
     assert index["source_sha256"]["question"] == "a" * 64
     assert index["items"][0]["id"] == text_hash
+    assert index["runtime_enabled"] is False
+    assert index["requires_listening_review"] is True
 
 
 def test_rejects_missing_exam_audio(tmp_path):
@@ -51,4 +53,17 @@ def test_rejects_missing_exam_audio(tmp_path):
     records["records"] = []
     (generated / "run_records.json").write_text(json.dumps(records))
     with pytest.raises(ValueError, match="missing_required_generated_audio"):
+        installer.install(source, generated, tmp_path / "installed")
+
+
+def test_rejects_source_manifest_bound_to_different_voice_model(tmp_path):
+    source, generated, _ = _fixture(tmp_path)
+    manifest = json.loads(source.read_text())
+    manifest["voice_model_sha256"] = "0" * 64
+    source.write_text(json.dumps(manifest), encoding="utf-8")
+    records = json.loads((generated / "run_records.json").read_text())
+    records["input_sha256"] = _digest(source.read_bytes())
+    (generated / "run_records.json").write_text(json.dumps(records), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="source_voice_model_mismatch"):
         installer.install(source, generated, tmp_path / "installed")

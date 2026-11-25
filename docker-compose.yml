@@ -67,7 +67,9 @@ services:
     # No host port: source text and synthesized audio remain in the local
     # Docker network.  This CPU profile works on machines without a GPU.
     mem_limit: 1g
-    cpus: 2.0
+    # Local Piper synthesis is CPU-bound; 4 CPU units on the pilot laptop
+    # keep dynamic coaching speech within the first-audio latency budget.
+    cpus: 4.0
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:5000/info', timeout=3)"]
       interval: 10s

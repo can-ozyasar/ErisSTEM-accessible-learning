@@ -101,3 +101,47 @@ def test_v5_resume_retries_missing_or_corrupt_audio_and_rejects_unknown_units(tm
     module.persist_run_records(output, run)
     with pytest.raises(RuntimeError, match="resume_manifest_unit_mismatch"):
         module.load_resumable_records(output, run, {digest})
+
+
+def test_input_manifest_discovery_accepts_exact_v5_manifest_under_kaggle_input_root(tmp_path: Path):
+    module = runner_module()
+    dataset = tmp_path / "mounted-dataset-slug"
+    dataset.mkdir()
+    text = "Sonraki soru."
+    text_hash = hashlib.sha256(text.encode()).hexdigest()
+    payload = {
+        "schema_version": "ayt-history-v5-static-audio-input-v1",
+        "voice_model_sha256": module.EXPECTED_MODEL_SHA256,
+        "items": [{"spoken_text": text, "spoken_text_sha256": text_hash, "contains_digits": False}],
+    }
+    manifest = dataset / "manifest.json"
+    manifest.write_text(json.dumps(payload), encoding="utf-8")
+
+    manifest_path, loaded, eligible, skipped = module.load_input_manifest(tmp_path)
+
+    assert manifest_path == manifest
+    assert loaded["schema_version"] == payload["schema_version"]
+    assert eligible == {text_hash: text}
+    assert skipped == 0
+
+
+def test_input_manifest_preflight_rejects_wrong_model_and_multiple_candidates(tmp_path: Path):
+    module = runner_module()
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps({
+        "schema_version": "ayt-history-v5-static-audio-input-v1",
+        "voice_model_sha256": "0" * 64,
+        "items": [{"spoken_text": "ses", "spoken_text_sha256": hashlib.sha256(b"ses").hexdigest(),
+                   "contains_digits": False}],
+    }), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="input_voice_model_checksum_mismatch"):
+        module.load_input_manifest(tmp_path)
+
+    valid = json.loads(manifest.read_text(encoding="utf-8"))
+    valid["voice_model_sha256"] = module.EXPECTED_MODEL_SHA256
+    manifest.write_text(json.dumps(valid), encoding="utf-8")
+    second = tmp_path / "nested"
+    second.mkdir()
+    (second / "manifest.json").write_text(json.dumps(valid), encoding="utf-8")
+    with pytest.raises(RuntimeError, match="expected_one_v5_manifest_found_2"):
+        module.load_input_manifest(tmp_path)

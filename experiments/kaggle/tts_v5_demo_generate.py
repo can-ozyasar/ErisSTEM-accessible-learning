@@ -20,9 +20,10 @@ from pathlib import Path
 # The default retains the reproducible book-demo run.  A published AYT pack
 # supplies its own private dataset path at submission time; no question text
 # is embedded in this notebook.
-SOURCE = Path(os.getenv("ERISTEM_V5_INPUT_PATH", "/kaggle/input/datasets/muhammedcanozyasar/eristem-tts-v5-demo-input-v1"))
+SOURCE = Path(os.getenv("ERISTEM_V5_INPUT_PATH", "/kaggle/input"))
 OUTPUT = Path(os.getenv("ERISTEM_V5_OUTPUT_PATH", "/kaggle/working/eristem-tts-v5-demo-generated-v1"))
 TRAINED_OUTPUT_DIR = "eristem-private-chatterbox-v3-finetune-v5"
+EXPECTED_MODEL_SHA256 = "8ec3a3312b9586a8650c38d2c8e8e8b6214851f13afbaa935ed4c9d598af8503"
 
 MODEL_REPOSITORY = "ResembleAI/chatterbox"
 MODEL_REVISION = "5bb1f6ee58e50c3b8d408bc82a6d3740c2db6e18"
@@ -195,28 +196,34 @@ def chunks(text: str, limit: int = 220) -> list[str]:
     return parts
 
 
-def main() -> None:
-    if not os.environ.get("KAGGLE_KERNEL_RUN_TYPE"):
-        raise RuntimeError("private_kaggle_only")
-    install_runtime()
-    import numpy as np
-    import soundfile as sf
-    import torch
-    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-    from huggingface_hub import snapshot_download
-
-    if not torch.cuda.is_available():
-        raise RuntimeError("cuda_required")
-    manifests = list(SOURCE.rglob("manifest.json"))
+def load_input_manifest(source: Path) -> tuple[Path, dict, dict[str, str], int]:
+    """Find and validate exactly one supported input before installing packages."""
+    if not source.is_dir():
+        raise RuntimeError("input_root_missing")
+    manifests = []
+    for path in source.rglob("manifest.json"):
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if isinstance(payload, dict) and payload.get("schema_version") in {
+            "v5-demo-input-v1", "ayt-history-v5-static-audio-input-v1"
+        }:
+            manifests.append((path, payload))
     if len(manifests) != 1:
-        raise RuntimeError("missing_manifest")
-    payload = json.loads(manifests[0].read_text(encoding="utf-8"))
+        raise RuntimeError(f"expected_one_v5_manifest_found_{len(manifests)}")
+    manifest_path, payload = manifests[0]
     items = payload.get("items")
-    if payload.get("schema_version") not in {"v5-demo-input-v1", "ayt-history-v5-static-audio-input-v1"} or not isinstance(items, list) or not items:
-        raise RuntimeError("invalid_manifest")
-    seen = {}
+    if not isinstance(items, list) or not items:
+        raise RuntimeError("invalid_manifest_items")
+    if (payload.get("schema_version") == "ayt-history-v5-static-audio-input-v1"
+            and payload.get("voice_model_sha256") != EXPECTED_MODEL_SHA256):
+        raise RuntimeError("input_voice_model_checksum_mismatch")
+    seen: dict[str, str] = {}
     skipped = 0
     for item in items:
+        if not isinstance(item, dict):
+            raise TypeError("invalid_manifest_item")
         text, digest = item.get("spoken_text"), item.get("spoken_text_sha256")
         if not isinstance(text, str) or not text.strip() or hashlib.sha256(text.encode()).hexdigest() != digest:
             raise RuntimeError("text_checksum_mismatch")
@@ -229,8 +236,30 @@ def main() -> None:
         if digest in seen and seen[digest] != text:
             raise RuntimeError("digest_collision")
         seen[digest] = text
+    if not seen:
+        raise RuntimeError("no_synthesis_eligible_items")
+    return manifest_path, payload, seen, skipped
+
+
+def main() -> None:
+    if not os.environ.get("KAGGLE_KERNEL_RUN_TYPE"):
+        raise RuntimeError("private_kaggle_only")
+    manifest_path, payload, seen, skipped = load_input_manifest(SOURCE)
+    if MAX_UNIQUE < 0:
+        raise ValueError("pilot_limit_must_be_nonnegative")
+    install_runtime()
+    import numpy as np
+    import soundfile as sf
+    import torch
+    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
+    from huggingface_hub import snapshot_download
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("cuda_required")
     tuned = trained_weight()
     tuned_sha = sha256(tuned)
+    if payload.get("schema_version") == "ayt-history-v5-static-audio-input-v1" and tuned_sha != EXPECTED_MODEL_SHA256:
+        raise RuntimeError("trained_voice_model_checksum_mismatch")
     reference, reference_row = reference_waveform()
     OUTPUT.mkdir(parents=True, exist_ok=True)
     audio_dir = OUTPUT / "audio"
@@ -263,7 +292,7 @@ def main() -> None:
         }
         runtime_sha = hashlib.sha256(json.dumps(runtime, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
         bindings = {
-            "input_sha256": sha256(manifests[0]), "model_sha256": tuned_sha,
+            "input_sha256": sha256(manifest_path), "model_sha256": tuned_sha,
             "pilot_limit": MAX_UNIQUE, "runner_sha256": sha256(Path(__file__)),
             "model_repository": MODEL_REPOSITORY, "model_revision": MODEL_REVISION,
             "chatterbox_commit": CHATTERBOX_COMMIT, "voice_repository": VOICE_REPOSITORY,

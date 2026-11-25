@@ -33,6 +33,8 @@ def install(source_manifest: Path, generated: Path, destination: Path) -> int:
             or records.get("model_sha256") != MODEL_SHA
             or records.get("pilot_limit") != 0):
         raise ValueError("input_or_model_mismatch")
+    if schema == "ayt-history-v5-static-audio-input-v1" and source.get("voice_model_sha256") != MODEL_SHA:
+        raise ValueError("source_voice_model_mismatch")
     by_text = {}
     for row in records.get("records", []):
         text_hash = row.get("spoken_text_sha256", "")
@@ -80,8 +82,9 @@ def install(source_manifest: Path, generated: Path, destination: Path) -> int:
         if any(not isinstance(value, str) or len(value) != 64 or any(c not in "0123456789abcdef" for c in value) for value in source_hashes.values()):
             raise ValueError("invalid_source_checksum")
         index = {"schema_version": "v5-demo-installed-v1", "model_sha256": MODEL_SHA,
-                 "source_sha256": source_hashes,
-                 "requires_listening_review": True, "items": items}
+                 "source_sha256": source_hashes, "runtime_enabled": False,
+                 "requires_listening_review": True,
+                 "input_manifest_sha256": digest(source_manifest), "items": items}
         (staging / "index.json").write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
         staging.rename(destination)
     return len(items)

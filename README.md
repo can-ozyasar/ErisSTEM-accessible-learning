@@ -13,7 +13,7 @@ Bu depoda **MEB PDF'si, sayfa görüntüsü veya dönüştürülmüş gerçek ki
 - Öğretmen kuyruğu: düşük güvenli formülü düzeltme, sürüm/audit kaydı, onaylayıcıyla yayın.
 - Öğrenme kalite yönetimi: sürüme bağlı uzman kontrolleri, rızalı yetişkin pilotu, görev gözlemleri, kritik hata engeli ve ayrı yayın kararı.
 - Ürün yönü: MEB veya tek okul seviyesiyle sınırlı olmayan, Türkçe görme yetersizliği bağlamında öğrenme görevlerine odaklanan araştırma ve mimari çerçeve [ürün vizyonunda](docs/urun-vizyonu-ve-arastirma-programi.md).
-- Sınav erişim provası: kaynak-bağlı 2026 LGS/YKS/EKPSS düzenlemeleri, altı sentetik soruda süre ve yanıt gezinmesi, sonuçların bitişe kadar gizlenmesi ve veri silme.
+- AYT Tarih erişilebilir yerel pilotu: 81 metin tabanlı aday soru, 63 lisans-kaydı bağlı ve 18 AI kaynak incelemeli soru; AI incelemesi öğretmen onayı değildir, beş soruda kanıtlı koçluk güvenli biçimde kapalıdır. Kimlik bilgisi ve cevap anahtarı dış servise gönderilmez; DeepSeek opt-in koç çağrısı yalnız deneme sonrasında soru, yanlış seçim, öğrenci gerekçesi ve onaylı kanıtı gönderir. 486 kök/şık WAV birimi yerel Piper cache'iyle doğrulandı; NVDA/TalkBack manuel testi ve görme engelli katılımcı çalışması hâlâ bekliyor. Ayrıntılar [işletim kılavuzunda](docs/tam-uygulama-isletim.md) ve [pilot kabul raporunda](reports/ayt-private-pilot-acceptance-v1.json).
 - Tarih soru bankasında [konu bazlı MEB RAG ve rehberli çözüm](docs/tarih-rag-ve-rehberli-cozum.md): çevrimdışı kitap dizini, öğretmen kaynak onayı, soruyla eşleşen kanıt, cevabı erken söylemeyen destekçi ve yerel ses. Kaggle ince ayar runner'ı değerlendirme için hazırdır; eğitilmiş model henüz canlı öğrenci yolunda değildir.
 
 ## Çalıştırma

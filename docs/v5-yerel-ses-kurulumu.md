@@ -51,3 +51,23 @@ değiştirin. API Docker içinde, servis host üzerinde çalışıyorsa `127.0.0
 aynı ad alanı değildir; bu yerleşim için ayrıca güvenli ağ yapılandırması
 gerekir. Servis henüz Docker entegrasyonu, gerçek modelle uçtan uca üretim,
 uzun metin kalitesi veya GPU gecikmesi açısından bu yerel ortamda sınanmadı.
+
+## Kaggle üretim koşusunun dayanıklılığı
+
+`experiments/kaggle/tts_v5_demo_generate.py`, her ses biriminden sonra
+`run_records.json` dosyasını aynı çıktı klasöründe atomik olarak günceller.
+Kernel kesilirse başarılı ve checksum'ı hâlâ eşleşen WAV'lar atlanır; eksik,
+bozuk veya önceki koşuda başarısız olan birimler yeniden üretilir. Yeniden
+başlatma; girdi manifesti, eğitilmiş T3 ağırlığı, runner kodu, model/referans
+sürümleri, seed, referans WAV, örnekleme hızı ve çalışma ortamı aynı değilse
+karışık çıktı üretmek yerine güvenli biçimde durur. Farklı bir girdi veya kod
+sürümü için yeni bir çıktı klasörü kullanın.
+
+Koşu kaydı GPU adı, Python/CUDA ve ilgili paket sürümlerini, model ve kaynak
+checksum'larını, birim başına süreleri ve devam edilen/yeniden üretilen birim
+sayılarını içerir; konuşulan metni kaydetmez. `ERISTEM_V5_DEMO_MAX_UNIQUE` ile
+yapılan sınırlı koşu yalnız smoke testidir ve ürün paketine kurulamaz; tam paket
+ancak tüm gerekli metin birimleri başarıyla üretildiğinde yükleyiciye verilir.
+Rakam içeren sesler ayrıca telaffuz incelemesi için bekletilir. Üretilmiş WAV'lar
+dinleme kontrolü tamamlanana kadar adaydır; otomatik çıktı dinleyici onayı veya
+ses kalitesi üstünlüğü kanıtı değildir.

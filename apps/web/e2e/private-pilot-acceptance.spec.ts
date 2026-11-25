@@ -32,7 +32,9 @@ test("private 81-question pilot hides answers and coaches only from its exact ev
     }
   });
 
-  await page.goto("/?mode=student&view=exam");
+  await page.goto("/?mode=student");
+  await expect(page.getByRole("heading", { name: "Erişilebilir AYT Tarih denemesi" })).toBeVisible();
+  await page.getByRole("button", { name: "Deneme alanına geç", exact: true }).click();
   await expect(page.getByText(/toplam 81 soru/)).toBeVisible();
   expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
   await page.getByRole("checkbox").check();
@@ -215,7 +217,11 @@ test("keyboard alone completes the real pilot, post-exam coaching, and data dele
     throw new Error(`Keyboard focus did not reach ${await locator.toString()}`);
   }
 
-  await page.goto("/?mode=student&view=exam");
+  await page.goto("/?mode=student");
+  const examEntry = page.getByRole("button", { name: "Deneme alanına geç", exact: true });
+  await tabTo(examEntry);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sınav düzenlemesini seçin");
   const confirmation = page.getByRole("checkbox");
   await tabTo(confirmation);
   await page.keyboard.press("Space");

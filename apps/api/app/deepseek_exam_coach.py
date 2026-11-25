@@ -9,8 +9,17 @@ from .tutor_coach import ANSWER_LABEL, CoachContext, _safe_early_question
 
 
 def is_configured() -> bool:
-    """Configuration only: this does not check provider availability."""
-    return os.getenv("DEEPSEEK_COACH_ENABLED", "").lower() in {"1", "true"} and bool(os.getenv("DEEPSEEK_API_KEY", "").strip())
+    """Return true only after provider, key, and project-level data approval.
+
+    Learner consent is checked per coaching request in the exam route. This
+    separate project-level gate prevents that consent from being mistaken for
+    permission to process copyrighted source excerpts with an external API.
+    """
+    return (
+        os.getenv("DEEPSEEK_COACH_ENABLED", "").lower() in {"1", "true"}
+        and os.getenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "").lower() in {"1", "true"}
+        and bool(os.getenv("DEEPSEEK_API_KEY", "").strip())
+    )
 
 
 def hint(context: CoachContext, learner_message: str, correct_text: str, *, request_fn=_call,

@@ -17,6 +17,7 @@ def _context():
 
 def test_opt_in_uses_separate_judge_and_never_sends_correct_choice(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "true")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     calls = []
     def fake(body, key, timeout):
@@ -35,7 +36,18 @@ def test_disabled_or_unsafe_model_falls_back(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_COACH_ENABLED", raising=False)
     assert hint(_context(), "", "Cevap", request_fn=lambda *_: pytest.fail("unexpected call")) is None
     monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "true")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
     def unsafe(*_):
         return {"choices": [{"message": {"content": '{"question":"Doğru cevap A şıkkı mı?"}'}}]}
     assert hint(_context(), "", "Cevap", request_fn=unsafe) is None
+
+
+def test_student_and_project_provider_opt_ins_do_not_override_missing_source_processing_authorization(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "false")
+    calls = []
+    assert hint(_context(), "İki ilişkiyi karıştırdım.", "Gizli doğru metin",
+                request_fn=lambda *args: calls.append(args)) is None
+    assert calls == []

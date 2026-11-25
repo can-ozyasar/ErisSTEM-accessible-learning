@@ -212,20 +212,24 @@ katılımcı görevleri hâlâ bekliyor; sonuçlar kabul raporunda açıkça ayr
 # DeepSeek coach (optional outbound access)
 
 The default Compose stack keeps the API on the isolated `internal` network.
-To use the experimental DeepSeek coach, first set `DEEPSEEK_COACH_ENABLED=true`
-and `DEEPSEEK_API_KEY` in the private `.env` file, then start the API with the
-opt-in overlay:
+To use the experimental DeepSeek coach, first ensure a documented rights and
+data-processing basis explicitly covers sending this question pack's excerpts
+to DeepSeek. The current source usage record is local-pilot-only and does not
+provide that authorization, so the coach must remain disabled. Only after that
+record is valid, set `DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED=true`,
+`DEEPSEEK_COACH_ENABLED=true`, and `DEEPSEEK_API_KEY` in the private `.env`
+file, then start the API with the opt-in overlay:
 
 ```sh
 docker compose -f docker-compose.yml -f docker-compose.deepseek.yml up -d api
 ```
 
-This gives the API outbound network access but does not publish its port on the
-host. The model is still called only for a post-exam coaching turn when that
-student request carries explicit external-processing consent. Active-exam
-answers are never sent. Do not use this mode for real student data until the
-privacy notice and retention behavior have been reviewed. Return to the
-offline/default network with:
+Both the project-level authorization flag and the student's per-request consent
+are required. This gives the API outbound network access but does not publish
+its port on the host. The model is called only for a post-exam coaching turn.
+Active-exam answers and the answer key are never sent. Do not use this mode for
+real student data until the privacy notice and retention behavior have been
+reviewed. Return to the offline/default network with:
 
 ```sh
 docker compose -f docker-compose.yml up -d api

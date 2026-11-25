@@ -362,6 +362,10 @@ def test_external_coach_configuration_reports_only_boolean(setup, monkeypatch):
     headers = {"X-Role": "student"}
     assert client.get("/v1/student/exams/coach-capabilities", headers=headers).json() == {"external_coach_configured": False}
     monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "false")
+    response = client.get("/v1/student/exams/coach-capabilities", headers=headers)
+    assert response.json() == {"external_coach_configured": False}
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "true")
     response = client.get("/v1/student/exams/coach-capabilities", headers=headers)
     assert response.json() == {"external_coach_configured": True}
     assert "secret-test-key" not in response.text
@@ -372,6 +376,9 @@ def test_no_external_coach_call_without_consent(setup, monkeypatch):
     _, exams, _ = setup
     tasks = ({**TASKS[0], "evidence": [{"source_id": "meb", "quote": "Merkeze eşit uzaklık bilgisi."}]}, *TASKS[1:])
     monkeypatch.setattr(exams, "tasks", lambda: tasks)
+    monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "true")
     monkeypatch.setattr(deepseek_exam_coach, "hint", lambda *_: pytest.fail("external call without consent"))
     started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt", arrangement_confirmed=True))
     finished = exams.finish(started["id"], started["revision"])
@@ -388,6 +395,7 @@ def test_consented_external_coach_uses_exam_evidence_and_never_unlocks_answer_ea
     monkeypatch.setattr(exams, "tasks", lambda: tasks)
     monkeypatch.setenv("DEEPSEEK_COACH_ENABLED", "true")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-only-key")
+    monkeypatch.setenv("DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED", "true")
     observed = []
 
     def consented_hint(context, learner_message, correct_text):
@@ -448,7 +456,7 @@ def test_legacy_checksum_compatibility_applies_only_to_finished_matching_session
     store, exams, _ = setup
     started = exams.create(ExamCreate(profile_id="yks-reader-2026", slot_id="ayt",
                                       arrangement_confirmed=True, mode="short", short_minutes=5))
-    finished = exams.finish(started["id"], started["revision"])
+    exams.finish(started["id"], started["revision"])
     record = store.get(started["id"])
     store.save(record["id"], "exam", "exam-procedure", {**record, "bank_checksum": "legacy"}, record["revision"])
     monkeypatch.setattr(exam_practice, "legacy_ai_task_checksum", lambda _tasks: "legacy")

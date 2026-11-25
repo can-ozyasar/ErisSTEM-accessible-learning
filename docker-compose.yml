@@ -22,6 +22,8 @@ services:
       LOCAL_TUTOR_LLM_URL: ${LOCAL_TUTOR_LLM_URL:-}
       # Explicitly opt in after offline evaluation; the learner must also consent.
       DEEPSEEK_COACH_ENABLED: ${DEEPSEEK_COACH_ENABLED:-false}
+      # Separate rights/data-processing gate; student consent alone is insufficient.
+      DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED: ${DEEPSEEK_SOURCE_PROCESSING_AUTHORIZED:-false}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       # Optional AYT graph runtime. Empty by default: the route fails closed
       # until a teacher-approved private graph is mounted.

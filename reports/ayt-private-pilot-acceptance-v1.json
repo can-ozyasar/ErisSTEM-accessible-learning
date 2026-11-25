@@ -537,5 +537,23 @@
     "working_api_image_rebuilt_from_gate_commit": true,
     "decision": "External DeepSeek coaching remains unavailable until a documented source-rights and data-processing basis is recorded, the project gate is enabled, and each learner consents."
   },
+  "qlora_candidate_acceptance_status": {
+    "recorded_at_utc": "2026-11-25T12:22:40Z",
+    "artifact_run": "private Kaggle run 2026-11-20T12:43:05Z",
+    "adapter_family": "Qwen3-14B QLoRA",
+    "acceptance_report_sha256": "eb746d405b20bccac42722808b9c39bc42220a788db4153531bb6212a640f3bd",
+    "adapter_artifact_manifest_sha256": "5e7fed7680c5fa26dbc9311050a6c38912d754fd0b92d3ff887a52b5ccab43a2",
+    "training_progress": {"planned_epochs": 3, "completed_epochs": 3, "global_step": 162},
+    "dev_next_token_loss": 0.931361198425293,
+    "dev_loss_is_teacher_quality_metric": false,
+    "base_model_paired_comparison": "pending",
+    "sealed_test": "not_run",
+    "early_answer_disclosure_gate": "pending_must_be_zero",
+    "unsupported_claim_and_wrong_attribution_gates": "pending_must_be_zero",
+    "expert_blind_rubric": "pending",
+    "latency_p50_p95": "pending",
+    "student_runtime_enabled": false,
+    "decision": "Training completed, but the adapter is not accepted as a teacher and remains disabled in the student runtime until paired safety, quality, and latency gates pass."
+  },
   "notice": "Aggregate-only report: no question text, answers, source quotations, learner responses, API keys, or audio are included."
 }

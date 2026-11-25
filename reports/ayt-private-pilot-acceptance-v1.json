@@ -1,6 +1,6 @@
 {
   "schema": "ayt-private-pilot-acceptance-v1",
-  "evaluated_at_utc": "2026-11-25T13:22:15+00:00",
+  "evaluated_at_utc": "2026-11-25T13:30:30+00:00",
   "git_commit": "35a0b98",
   "test_source_status": "working_tree_uncommitted",
   "browser": "Google Chrome 157.0.8103.38",
@@ -607,7 +607,7 @@
     "claim_limit": "Automated browser and keyboard acceptance; not NVDA/TalkBack or participant validation."
   },
   "qlora_candidate_acceptance_status": {
-    "recorded_at_utc": "2026-11-25T12:39:36Z",
+    "recorded_at_utc": "2026-11-25T13:30:30Z",
     "artifact_run": "private Kaggle run 2026-11-20T12:43:05Z",
     "adapter_family": "Qwen3-14B QLoRA",
     "acceptance_report_sha256": "eb746d405b20bccac42722808b9c39bc42220a788db4153531bb6212a640f3bd",
@@ -627,7 +627,7 @@
     "training_progress": {"planned_epochs": 3, "completed_epochs": 3, "global_step": 162},
     "dev_next_token_loss": 0.931361198425293,
     "dev_loss_is_teacher_quality_metric": false,
-    "base_model_paired_comparison": "pending",
+    "base_model_paired_comparison": "11_case_synthetic_screen_complete; 144_case_development_pair_pending",
     "sealed_test": "not_run",
     "early_answer_disclosure_gate": "pending_must_be_zero",
     "unsupported_claim_and_wrong_attribution_gates": "pending_must_be_zero",
@@ -641,7 +641,19 @@
       "student_data_included": false,
       "answer_key_accessed": false,
       "semantic_label_provenance": "external_ai_screen; not human teacher approval",
-      "adapter_artifact_identity_verified_against_current_manifest": false,
+      "adapter_artifact_identity_verified_against_current_manifest": true,
+      "adapter_identity_verification": {
+        "current_artifact_manifest_sha256": "5e7fed7680c5fa26dbc9311050a6c38912d754fd0b92d3ff887a52b5ccab43a2",
+        "paired_run_output": "data/private/kaggle-notebook-outputs/muhammedcanozyasar/eristem-tutor-behavior-paired-v2/20261121T091619Z/behavior_baseline_v1.json",
+        "paired_output_adapter_sha256": {
+          "adapter_config.json": "4315df5700af541a929f22113b16b8a57eacf0b765eb68d23f15c913e358ccbe",
+          "adapter_model.safetensors": "05bd6efdf281c51bdf727ed387aeb659e862993142e536f685eda70bf5d89fd1"
+        },
+        "current_verified_download_matches_both_files": true,
+        "base_model": "Qwen/Qwen3-14B",
+        "base_model_revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
+        "paired_run_output_matches_base_model_revision": true
+      },
       "base_vs_adapter": {
         "early_disclosure": {"base": "1/8", "adapter": "0/8"},
         "socratic_question_rate": {"base": 0.4545, "adapter": 1.0},
@@ -650,7 +662,7 @@
         "full_response_latency_p95_ms": {"base": 6486, "adapter": 7589}
       },
       "adapter_unanswered_critical_gate": "failed: no abstention in the single no-evidence case",
-      "paired_acceptance_decision": "not accepted; synthetic screen only and not proven to match the current adapter artifact"
+      "paired_acceptance_decision": "not accepted: current adapter identity is verified, but the screen is synthetic and failed the no-evidence abstention gate (0/1); full development evaluation remains pending"
     },
     "decision": "Training completed, but the adapter is not accepted as a teacher and remains disabled in the student runtime until paired safety, quality, and latency gates pass."
   },

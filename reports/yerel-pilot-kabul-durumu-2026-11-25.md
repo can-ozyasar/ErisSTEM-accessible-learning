@@ -35,6 +35,11 @@ Dinleyici incelemesi ve lisans kontrolü tamamlanmadan çalışma zamanında
 kullanılmayacak.
 
 QLoRA adaptörü ve RAG araştırması da öğrenci çalışma zamanında etkin değildir.
+QLoRA'nın önceki 11-vaka sentetik base/adaptör taramasındaki iki adaptör dosyasının
+SHA-256 değerleri güncel artefakt manifestiyle şimdi doğrulandı. Adaptör erken
+cevap ifşasında 0/8 olsa da kanıt yokken çekimserlik 0/1 olduğu için kabul
+edilmedi; aynı ayrılmış 144 geliştirme örneğindeki tam karşılaştırma hâlâ
+bekliyor. Bu örnekler gözlemlenmiş öğrenci yanıtları değildir.
 RAG karşılaştırması ayrı 24 sorgulu araştırma bölmesinde pooled-top-3
 değerlendirmesidir; dense/RRF Recall@3 değeri BM25’ten 0,0417 yüksek olsa da bu
 sonuç aktif 81 soruya veya tam korpusa genellenemez. Semantik yakın-kopya ve

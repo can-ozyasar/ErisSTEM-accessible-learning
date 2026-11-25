@@ -107,7 +107,7 @@
     "kaggle_kernel": "muhammedcanozyasar/eristem-tts-v5-demo-full",
     "kaggle_kernel_version": 3,
     "kaggle_kernel_status_at_last_check": "RUNNING",
-    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:39:36Z",
+    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:46:18Z",
     "generation_attempt": {
       "version": 2,
       "terminal_failure": true,
@@ -121,14 +121,15 @@
     "retry": {
       "version": 3,
       "status": "RUNNING",
-      "status_checked_at_utc": "2026-11-25T12:39:36Z",
+      "status_checked_at_utc": "2026-11-25T12:46:18Z",
       "status_history": [
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:02:27Z"},
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:09:50Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:21:05Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:22:40Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:36:43Z"},
-        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:39:36Z"}
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:39:36Z"},
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:46:18Z"}
       ],
       "runner_sha256": "bb28b6442236748fb0f0ee7940579b5d28eb05180dfa40db66f050ac44dffff5",
       "preflight_tests_passed": 15,
@@ -538,6 +539,28 @@
     "external_processing_performed_during_gate_verification": false,
     "working_api_image_rebuilt_from_gate_commit": true,
     "decision": "External DeepSeek coaching remains unavailable until a documented source-rights and data-processing basis is recorded, the project gate is enabled, and each learner consents."
+  },
+  "private_pilot_entry_route_regression": {
+    "recorded_at_utc": "2026-11-25T12:46:18Z",
+    "git_commit": "2dca82309c4e5a6e68eee7d87b04d42a86332756",
+    "private_pack_sha256": "a36ffb0331cc42d4ad138a996cee722bec62cd73ac92bbb6093e349f2fd052e3",
+    "questions": 81,
+    "playwright_version": "1.64.0",
+    "node_version": "22.23.4",
+    "browser": "Google Chrome 157.0.8103.38",
+    "scenarios_passed": 4,
+    "scenarios_failed": 0,
+    "elapsed_seconds": 21.8,
+    "entry_route_from_student_library_passed": true,
+    "keyboard_only_entry_to_exam_coaching_and_delete_passed": true,
+    "unbundled_questions_abstained": 5,
+    "stress_sessions_passed": 100,
+    "axe_violations_on_tested_views": 0,
+    "web_build_passed": true,
+    "web_eslint_passed": true,
+    "web_unit_tests": {"passed": 16, "failed": 0},
+    "manual_screen_reader_or_participant_test_performed": false,
+    "claim_limit": "Automated browser and keyboard acceptance; not NVDA/TalkBack or participant validation."
   },
   "qlora_candidate_acceptance_status": {
     "recorded_at_utc": "2026-11-25T12:39:36Z",

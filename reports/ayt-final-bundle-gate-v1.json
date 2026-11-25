@@ -1,0 +1,42 @@
+{
+  "schema": "ayt-final-bundle-gate-summary-v1",
+  "evaluated_at_utc": "2026-11-25T07:17:17.894144+00:00",
+  "git_commit": "3b4dd7ed55ed456160eeca0c1b6fdd2aebd8bd5f",
+  "python_version": "3.12.3",
+  "review_models": {
+    "first_pass": "deepseek-chat",
+    "second_pass": "deepseek-reasoner",
+    "answer_blind_solver": "deepseek-chat",
+    "provider_revision_pinned": false
+  },
+  "review_latency_ms": {
+    "first_pass": {"count": 18, "p50_ms": 1902.03, "p95_ms": 4748.63},
+    "second_pass": {"count": 18, "p50_ms": 1816.74, "p95_ms": 4280.16}
+  },
+  "provenance_sha256": {
+    "parent_pack": "b40ed96698f5b2866b8fcbe3f465e291359f8054bf24efdaf5a948f382175a13",
+    "output_pack": "1473534fc7b14277435a81c0c86c5367a0bb66d6cb24bb95f160c8076eb00a82",
+    "question_source": "6ec38cd1be903f51c60e4f7f8829a7a88c5da79d0a4ec2c7ae00e3e3c5aac959",
+    "meb_corpus": "6a286b9387faefad5a3f87afe536c4cf1247589e683ee218787113d8710a4440"
+  },
+  "metrics": {
+    "final_bundle_candidates": 18,
+    "first_pass_full_coverage": 14,
+    "second_pass_full_coverage": 13,
+    "two_pass_support_set_agreement": 13,
+    "answer_key_blind_solution_matches_local_key": 18,
+    "pdf_evidence_fragments_audited": 169,
+    "pdf_evidence_fragments_below_0_90_text_overlap": 0,
+    "source_grounded_coaching_enabled": 13,
+    "safe_coach_abstentions": 5
+  },
+  "limitations": [
+    "AI review is not human teacher approval.",
+    "PDF text-layer overlap validates transcription/location only, not historical correctness or visual crop quality.",
+    "Hosted model aliases were recorded, but immutable provider revisions were not available.",
+    "Local-pilot use only; student/publication permission is not granted."
+  ],
+  "human_teacher_approval": false,
+  "student_publication_allowed": false,
+  "notice": "Aggregate-only report; contains no question, answer, source quotation, learner response, or raw audio."
+}

@@ -106,8 +106,8 @@
     "kaggle_dataset_status": "ready",
     "kaggle_kernel": "muhammedcanozyasar/eristem-tts-v5-demo-full",
     "kaggle_kernel_version": 3,
-    "kaggle_kernel_status_at_last_check": "QUEUED",
-    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:09:50Z",
+    "kaggle_kernel_status_at_last_check": "RUNNING",
+    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:22:40Z",
     "generation_attempt": {
       "version": 2,
       "terminal_failure": true,
@@ -120,8 +120,14 @@
     },
     "retry": {
       "version": 3,
-      "status": "QUEUED",
-      "status_checked_at_utc": "2026-11-25T12:09:50Z",
+      "status": "RUNNING",
+      "status_checked_at_utc": "2026-11-25T12:22:40Z",
+      "status_history": [
+        {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:02:27Z"},
+        {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:09:50Z"},
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:21:05Z"},
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:22:40Z"}
+      ],
       "runner_sha256": "bb28b6442236748fb0f0ee7940579b5d28eb05180dfa40db66f050ac44dffff5",
       "preflight_tests_passed": 15,
       "runner_ruff_clean": true
@@ -490,8 +496,8 @@
     ]
   },
   "private_pilot_e2e_after_commits": {
-    "recorded_at_utc": "2026-11-25T12:15:08Z",
-    "git_commit": "e301e0137782a0c93faefddf162cbe72c4c8c427",
+    "recorded_at_utc": "2026-11-25T12:22:40Z",
+    "git_commit": "7d57cf236f74e8b9e218c734e91217a1d0694498",
     "source_status": "committed_source; private local test data not committed",
     "private_pack_sha256": "a36ffb0331cc42d4ad138a996cee722bec62cd73ac92bbb6093e349f2fd052e3",
     "question_count": 81,
@@ -500,7 +506,7 @@
     "browser": "Google Chrome 157.0.8103.38",
     "playwright_scenarios_passed": 4,
     "playwright_scenarios_failed": 0,
-    "elapsed_seconds": 21.3,
+    "elapsed_seconds": 21.4,
     "verified_unbundled_questions_abstained": 5,
     "stress_sessions_passed": 100,
     "answer_replay_rejections": 100,
@@ -511,6 +517,25 @@
     "external_processing_used": false,
     "manual_nvda_talkback_or_participant_testing_performed": false,
     "claim_limit": "Automated local E2E evidence only; not screen-reader or blind/low-vision participant validation."
+  },
+  "deepseek_source_processing_gate_verification": {
+    "recorded_at_utc": "2026-11-25T12:22:40Z",
+    "git_commit": "7d57cf236f74e8b9e218c734e91217a1d0694498",
+    "external_coach_enabled_default": false,
+    "source_processing_authorized_default": false,
+    "learner_consent_required_per_request": true,
+    "container_capability_endpoint": {"http_status": 200, "external_coach_configured": false},
+    "default_api_network": "isolated internal only",
+    "test_cases_passed": 29,
+    "ruff_touched_files_clean": true,
+    "full_api_tests_passed": 868,
+    "full_api_tests_failed": 0,
+    "full_api_tests_skipped": 0,
+    "full_api_test_duration_seconds": 100.64,
+    "warnings": ["One existing Starlette/httpx TestClient deprecation warning."],
+    "external_processing_performed_during_gate_verification": false,
+    "working_api_image_rebuilt_from_gate_commit": true,
+    "decision": "External DeepSeek coaching remains unavailable until a documented source-rights and data-processing basis is recorded, the project gate is enabled, and each learner consents."
   },
   "notice": "Aggregate-only report: no question text, answers, source quotations, learner responses, API keys, or audio are included."
 }

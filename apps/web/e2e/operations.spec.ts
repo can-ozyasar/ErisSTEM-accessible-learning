@@ -9,7 +9,7 @@ test("exam stem and individual choice use session-bound audio without saving an 
       playbackRate = 1;
       onended: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      constructor(_source: string) {}
+      constructor() {}
       play() { return Promise.resolve(); }
       pause() {}
     } });
@@ -44,7 +44,7 @@ test("showing choices reads separate audio assets in order and stop cancels the 
       playbackRate = 1;
       onended: (() => void) | null = null;
       onerror: (() => void) | null = null;
-      constructor(_source: string) {}
+      constructor() {}
       play() { state.currentAudio = this; state.audioStarts = (state.audioStarts ?? 0) + 1; return Promise.resolve(); }
       pause() {}
     } });

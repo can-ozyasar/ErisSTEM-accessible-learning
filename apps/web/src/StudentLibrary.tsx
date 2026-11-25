@@ -51,6 +51,6 @@ export function StudentLibrary({ onNavigate }: { onNavigate: (view: "history" | 
       </div>
     </div>
     <nav className="carousel-controls" aria-label="Öğrenme alanları arasında gezin"><button type="button" className="quiet-button" onClick={() => move(-1)} disabled={active === 0} aria-label="Önceki öğrenme alanı">← Önceki</button><span aria-live="off">{active + 1} / {AREAS.length}</span><button type="button" className="quiet-button" onClick={() => move(1)} disabled={active === AREAS.length - 1} aria-label="Sonraki öğrenme alanı">Sonraki →</button></nav>
-    <section className="study-card" aria-labelledby="exam-entry-title"><h2 id="exam-entry-title">Erişilebilir deneme</h2><p>Sesli ve klavyeyle soru çözme akışını deneyin. Onaylı AYT Tarih paketi kurulana kadar altı sentetik soruluk prova açılır.</p><button type="button" onClick={() => onNavigate("exam")}>Deneme alanına geç</button></section>
+    <section className="study-card" aria-labelledby="exam-entry-title"><h2 id="exam-entry-title">Erişilebilir AYT Tarih denemesi</h2><p>Soruları sesli komutlarla veya klavyeyle çöz. Oturumdaki soru sayısını ve süre seçeneklerini başlamadan önce görebilirsin.</p><button type="button" onClick={() => onNavigate("exam")}>Deneme alanına geç</button></section>
   </main>;
 }

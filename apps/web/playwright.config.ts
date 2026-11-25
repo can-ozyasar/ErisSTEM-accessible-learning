@@ -7,6 +7,11 @@ import process from "node:process";
 const testDirectory = mkdtempSync(join(tmpdir(), "eristem-learning-e2e-"));
 const executablePath = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ??
   (existsSync("/usr/bin/google-chrome") ? "/usr/bin/google-chrome" : undefined);
+const privatePilotPack = process.env.E2E_PRIVATE_PILOT_PACK;
+const privatePilotEnv = privatePilotPack ? {
+  AYT_HISTORY_EXAM_PACK: privatePilotPack,
+  AYT_HISTORY_SOURCE_ROOT: process.env.E2E_PRIVATE_PILOT_SOURCE_ROOT ?? join(process.cwd(), "../../data/meb"),
+} : {};
 
 export default defineConfig({
   testDir: "./e2e", timeout: 30_000, fullyParallel: false, workers: 1,
@@ -15,7 +20,7 @@ export default defineConfig({
   webServer: [
     { command: "../api/.venv/bin/python -m uvicorn app.main:app --app-dir ../api --host 127.0.0.1 --port 18765",
       url: "http://127.0.0.1:18765/openapi.json", reuseExistingServer: false,
-      env: { DATABASE_URL: `sqlite:///${join(testDirectory, "test.db")}`, APP_ENV: "development" } },
+      env: { DATABASE_URL: `sqlite:///${join(testDirectory, "test.db")}`, APP_ENV: "development", ...privatePilotEnv } },
     { command: "npm run dev -- --host 127.0.0.1 --port 18766 --strictPort",
       url: "http://127.0.0.1:18766", reuseExistingServer: false,
       env: { VITE_API_PROXY_TARGET: "http://127.0.0.1:18765" } },

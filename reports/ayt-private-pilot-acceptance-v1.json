@@ -645,11 +645,13 @@
       "adapter_identity_verification": {
         "current_artifact_manifest_sha256": "5e7fed7680c5fa26dbc9311050a6c38912d754fd0b92d3ff887a52b5ccab43a2",
         "paired_run_output": "data/private/kaggle-notebook-outputs/muhammedcanozyasar/eristem-tutor-behavior-paired-v2/20261121T091619Z/behavior_baseline_v1.json",
+        "paired_run_output_sha256": "2d738476254d36854308229f581d2222e467d2cf4b6c15dcd01924f455f7dba6",
         "paired_output_adapter_sha256": {
           "adapter_config.json": "4315df5700af541a929f22113b16b8a57eacf0b765eb68d23f15c913e358ccbe",
           "adapter_model.safetensors": "05bd6efdf281c51bdf727ed387aeb659e862993142e536f685eda70bf5d89fd1"
         },
         "current_verified_download_matches_both_files": true,
+        "semantic_evaluation_input_sha256_matches_paired_output": true,
         "base_model": "Qwen/Qwen3-14B",
         "base_model_revision": "40c069824f4251a91eefaf281ebe4c544efd3e18",
         "paired_run_output_matches_base_model_revision": true

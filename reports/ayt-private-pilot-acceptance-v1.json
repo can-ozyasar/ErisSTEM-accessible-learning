@@ -107,7 +107,7 @@
     "kaggle_kernel": "muhammedcanozyasar/eristem-tts-v5-demo-full",
     "kaggle_kernel_version": 3,
     "kaggle_kernel_status_at_last_check": "RUNNING",
-    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:36:43Z",
+    "kaggle_kernel_status_checked_at_utc": "2026-11-25T12:39:36Z",
     "generation_attempt": {
       "version": 2,
       "terminal_failure": true,
@@ -121,13 +121,14 @@
     "retry": {
       "version": 3,
       "status": "RUNNING",
-      "status_checked_at_utc": "2026-11-25T12:36:43Z",
+      "status_checked_at_utc": "2026-11-25T12:39:36Z",
       "status_history": [
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:02:27Z"},
         {"status": "QUEUED", "checked_at_utc": "2026-11-25T12:09:50Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:21:05Z"},
         {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:22:40Z"},
-        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:36:43Z"}
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:36:43Z"},
+        {"status": "RUNNING", "checked_at_utc": "2026-11-25T12:39:36Z"}
       ],
       "runner_sha256": "bb28b6442236748fb0f0ee7940579b5d28eb05180dfa40db66f050ac44dffff5",
       "preflight_tests_passed": 15,
@@ -539,13 +540,14 @@
     "decision": "External DeepSeek coaching remains unavailable until a documented source-rights and data-processing basis is recorded, the project gate is enabled, and each learner consents."
   },
   "qlora_candidate_acceptance_status": {
-    "recorded_at_utc": "2026-11-25T12:22:40Z",
+    "recorded_at_utc": "2026-11-25T12:39:36Z",
     "artifact_run": "private Kaggle run 2026-11-20T12:43:05Z",
     "adapter_family": "Qwen3-14B QLoRA",
     "acceptance_report_sha256": "eb746d405b20bccac42722808b9c39bc42220a788db4153531bb6212a640f3bd",
     "adapter_artifact_manifest_sha256": "5e7fed7680c5fa26dbc9311050a6c38912d754fd0b92d3ff887a52b5ccab43a2",
     "development_dataset": {
       "manifest_sha256": "eba71fa658ed9ba6e3f5070909bd79fb728664ac89da76dcfe3137ac57c21311",
+      "candidate_manifest_sha256": "82f0c3269c4b66956499989f79e017c517f4e959d47f8558c98ac127a9ff06be",
       "train_sha256": "ae30668878fda9e630a2df609d04115e09191ae46a93c83b72d0ee75c423c569",
       "dev_sha256": "07212fee8c0e8042c9948d02cd01ecdf91f43553646173b1faa3cb6ca37b01fd",
       "train_examples": 426,

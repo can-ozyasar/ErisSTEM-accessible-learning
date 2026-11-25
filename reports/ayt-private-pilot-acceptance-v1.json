@@ -489,5 +489,28 @@
       "The production DeepSeek runtime remains disabled by default; explicit learner consent and the opt-in network overlay are required."
     ]
   },
+  "private_pilot_e2e_after_commits": {
+    "recorded_at_utc": "2026-11-25T12:15:08Z",
+    "git_commit": "e301e0137782a0c93faefddf162cbe72c4c8c427",
+    "source_status": "committed_source; private local test data not committed",
+    "private_pack_sha256": "a36ffb0331cc42d4ad138a996cee722bec62cd73ac92bbb6093e349f2fd052e3",
+    "question_count": 81,
+    "playwright_version": "1.64.0",
+    "node_version": "22.23.4",
+    "browser": "Google Chrome 157.0.8103.38",
+    "playwright_scenarios_passed": 4,
+    "playwright_scenarios_failed": 0,
+    "elapsed_seconds": 21.3,
+    "verified_unbundled_questions_abstained": 5,
+    "stress_sessions_passed": 100,
+    "answer_replay_rejections": 100,
+    "idempotent_finishes": 100,
+    "keyboard_only_exam_coaching_delete_flow_passed": true,
+    "axe_violations_on_start_active_and_result_states": 0,
+    "all_test_sessions_deleted": true,
+    "external_processing_used": false,
+    "manual_nvda_talkback_or_participant_testing_performed": false,
+    "claim_limit": "Automated local E2E evidence only; not screen-reader or blind/low-vision participant validation."
+  },
   "notice": "Aggregate-only report: no question text, answers, source quotations, learner responses, API keys, or audio are included."
 }

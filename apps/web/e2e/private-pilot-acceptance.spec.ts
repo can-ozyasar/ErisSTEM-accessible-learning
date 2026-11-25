@@ -130,3 +130,68 @@ test("all private pilot questions without verified final evidence abstain safely
 
   await request.delete(`${base}/${exam.id}?revision=${exam.revision}`, { headers });
 });
+
+test("100 real-pack API sessions keep unique IDs, reject duplicate writes, and finish idempotently", async ({ request }) => {
+  test.setTimeout(120_000);
+  const packPath = process.env.E2E_PRIVATE_PILOT_PACK;
+  test.skip(!packPath, "Run with E2E_PRIVATE_PILOT_PACK to stress the local private pack.");
+  const pack = JSON.parse(readFileSync(packPath!, "utf8")) as {
+    questions: { id: string; correct_label: string; choices: string[] }[];
+  };
+  const firstQuestion = pack.questions[0];
+  const wrongIndex = firstQuestion.choices.findIndex((_, index) => "ABCDE"[index] !== firstQuestion.correct_label);
+  const base = "http://127.0.0.1:18766/api/v1/student/exams/sessions";
+  const headers = { "X-Role": "student" };
+  const ids = new Set<string>();
+
+  for (let iteration = 0; iteration < 100; iteration += 1) {
+    const createdResponse = await request.post(base, { headers, data: {
+      profile_id: "yks-reader-2026", slot_id: "ayt", arrangement_confirmed: true,
+      mode: "short", short_minutes: 5,
+    } });
+    expect(createdResponse.ok(), `create session ${iteration + 1}`).toBe(true);
+    const created = await createdResponse.json() as {
+      id: string; revision: number; questions: { id: string }[]; answers: Record<string, string>;
+    };
+    expect(ids.has(created.id)).toBe(false);
+    ids.add(created.id);
+    expect(created.questions).toHaveLength(81);
+    expect(created.answers).toEqual({});
+
+    const answerPayload = {
+      revision: created.revision, question_id: firstQuestion.id, answer: `option-${wrongIndex + 1}`,
+    };
+    const savedResponse = await request.put(`${base}/${created.id}/answer`, { headers, data: answerPayload });
+    expect(savedResponse.ok(), `save answer in session ${iteration + 1}`).toBe(true);
+    const saved = await savedResponse.json() as { revision: number; answers: Record<string, string> };
+    expect(saved.answers[firstQuestion.id]).toBe(answerPayload.answer);
+
+    const replay = await request.put(`${base}/${created.id}/answer`, { headers, data: answerPayload });
+    expect(replay.status(), `reject stale replay in session ${iteration + 1}`).toBe(409);
+
+    const finishResponse = await request.post(`${base}/${created.id}/finish`, {
+      headers, data: { revision: saved.revision },
+    });
+    expect(finishResponse.ok(), `finish session ${iteration + 1}`).toBe(true);
+    const finished = await finishResponse.json() as {
+      id: string; revision: number; state: string; answers: Record<string, string>;
+      results: { question_id: string; correct_answer: string | null; explanation: string | null }[];
+    };
+    expect(finished).toMatchObject({ id: created.id, state: "finished", answers: {} });
+    expect(finished.results).toHaveLength(81);
+    expect(new Set(finished.results.map(result => result.question_id)).size).toBe(81);
+    expect(finished.results.find(result => result.question_id === firstQuestion.id)).toMatchObject({
+      correct_answer: null, explanation: null,
+    });
+
+    const repeatedFinish = await request.post(`${base}/${created.id}/finish`, {
+      headers, data: { revision: finished.revision },
+    });
+    expect(repeatedFinish.ok(), `idempotent finish ${iteration + 1}`).toBe(true);
+    expect((await repeatedFinish.json()).results).toEqual(finished.results);
+    const deleted = await request.delete(`${base}/${created.id}?revision=${finished.revision}`, { headers });
+    expect(deleted.status(), `clean up session ${iteration + 1}`).toBe(204);
+  }
+
+  expect(ids.size).toBe(100);
+});

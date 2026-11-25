@@ -32,10 +32,10 @@ services:
       # Optional, teacher-approved authored AYT history package.  When set,
       # the API rejects incomplete or unreviewed manifests rather than mixing
       # private material with the synthetic accessibility rehearsal.
-      # 81-question local pilot: 63 license-bound questions plus 18 questions
-      # accepted by the recorded AI source-consensus gate. The manifest keeps
-      # this distinct from a human-teacher approval claim.
-      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v1.json}
+      # 81-question local pilot: 63 license-bound questions, 13 of 18 AI-reviewed
+      # questions have exact final-bundle evidence; 5 remain coach-abstention
+      # cases. AI review is not human-teacher approval or publication permission.
+      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v2.json}
       AYT_HISTORY_SOURCE_ROOT: /private/meb
       # Local-only source-crop review for the 19 Qwen dense retrieval candidates.
       # It stays outside the student exam pack until a project-owner PDF review
@@ -117,7 +117,7 @@ services:
     command: ["python", "-m", "app.exam_maintenance", "--watch"]
     environment:
       DATABASE_URL: postgresql+psycopg://eristem:eristem@db:5432/eristem
-      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v1.json}
+      AYT_HISTORY_EXAM_PACK: ${AYT_HISTORY_EXAM_PACK:-/private/ayt-history-exam/ogm-ai-reviewed-local-pilot-v2.json}
       AYT_HISTORY_SOURCE_ROOT: /private/meb
     volumes:
       - ./data/private/ayt-history-exam:/private/ayt-history-exam:ro

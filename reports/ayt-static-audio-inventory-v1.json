@@ -16,6 +16,12 @@
   "candidate_unique_texts_ready_for_synthesis": 387,
   "candidate_numeric_texts_withheld_for_pronunciation_review": 17,
   "candidate_runtime_enabled": false,
+  "candidate_runner_git_commit": "d1f4b46",
+  "candidate_runner_sha256": "fd715f62cba8f7bd370661511191dccaf8945633edde3ea54b8cd5deb61d04dc",
+  "candidate_runner_resume_unit_tests_passed": 4,
+  "candidate_runner_lint_passed": true,
+  "candidate_generation_submitted_to_kaggle": false,
+  "kaggle_cli_available": false,
   "summary": {
     "choice": {
       "missing_audio": 405

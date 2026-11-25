@@ -195,3 +195,74 @@ test("100 real-pack API sessions keep unique IDs, reject duplicate writes, and f
 
   expect(ids.size).toBe(100);
 });
+
+test("keyboard alone completes the real pilot, post-exam coaching, and data deletion", async ({ page }) => {
+  const packPath = process.env.E2E_PRIVATE_PILOT_PACK;
+  test.skip(!packPath, "Run with E2E_PRIVATE_PILOT_PACK to exercise the local private pack.");
+  const pack = JSON.parse(readFileSync(packPath!, "utf8")) as {
+    questions: { correct_label: string; evidence: unknown[] }[];
+  };
+  expect(pack.questions).toHaveLength(81);
+  expect(pack.questions[0].evidence.length).toBeGreaterThan(0);
+
+  async function tabTo(locator: import("@playwright/test").Locator, maxTabs = 160) {
+    const isFocused = async () => locator.evaluate(element => element === document.activeElement).catch(() => false);
+    for (let count = 0; count <= maxTabs; count += 1) {
+      if (await isFocused()) return;
+      await page.keyboard.press("Tab");
+      if (await isFocused()) return;
+    }
+    throw new Error(`Keyboard focus did not reach ${await locator.toString()}`);
+  }
+
+  await page.goto("/?mode=student&view=exam");
+  const confirmation = page.getByRole("checkbox");
+  await tabTo(confirmation);
+  await page.keyboard.press("Space");
+  const start = page.getByRole("button", { name: "Provayı başlat", exact: true });
+  await tabTo(start);
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Soru 1 / 81");
+
+  const firstChoice = page.getByRole("radio").nth(0);
+  await tabTo(firstChoice);
+  await page.keyboard.press("Space");
+  await expect(firstChoice).toBeChecked();
+  await expect(page.getByRole("button", { name: "Soru 1 · yanıtlı", exact: true })).toBeEnabled();
+  if (pack.questions[0].correct_label === "A") {
+    await tabTo(firstChoice);
+    await page.keyboard.press("ArrowDown");
+    await expect(page.getByRole("radio").nth(1)).toBeChecked();
+    await expect(page.getByRole("button", { name: "Soru 1 · yanıtlı", exact: true })).toBeEnabled();
+  }
+
+  const finish = page.getByRole("button", { name: "Provayı bitir", exact: true });
+  await tabTo(finish);
+  page.once("dialog", dialog => void dialog.accept());
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Prova sonuçları");
+
+  const firstResult = page.getByText("Soru 1: yanlış", { exact: true });
+  await tabTo(firstResult);
+  await page.keyboard.press("Enter");
+  await expect(firstResult.locator("xpath=.." )).toHaveAttribute("open", "");
+  const firstCoach = page.getByRole("button", { name: "Kaynakla birlikte çöz", exact: true });
+  await expect(firstCoach).toBeVisible();
+  await tabTo(firstCoach);
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Doğru yanıt:", { exact: false })).toHaveCount(0);
+
+  const learnerResponse = page.getByLabel("Soru hakkındaki düşünceniz");
+  await tabTo(learnerResponse);
+  await page.keyboard.type("İki seçeneğin tarihsel ilişkisini karıştırdım.");
+  const secondHint = page.getByRole("button", { name: "Düşüncemi paylaş ve ikinci ipucunu aç", exact: true });
+  await tabTo(secondHint);
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("Doğru yanıt:", { exact: false })).toBeVisible();
+
+  const remove = page.getByRole("button", { name: "Prova verisini sil", exact: true });
+  await tabTo(remove, 200);
+  page.once("dialog", dialog => void dialog.accept());
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Sınav düzenlemesini seçin");
+});

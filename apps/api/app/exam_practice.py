@@ -383,9 +383,11 @@ class ExamStore:
         record = self.records.get(exam_id)
         if record is None or "bank_checksum" not in record:
             raise HTTPException(404, "Prova bulunamadı")
-        if record["bank_checksum"] != self.bank_checksum():
-            if record["state"] != "finished" or record["bank_checksum"] != legacy_ai_task_checksum(self.tasks()):
-                raise HTTPException(409, "Soru bankası değişmiş; yeni prova başlatın")
+        if record["bank_checksum"] != self.bank_checksum() and (
+            record["state"] != "finished"
+            or record["bank_checksum"] != legacy_ai_task_checksum(self.tasks())
+        ):
+            raise HTTPException(409, "Soru bankası değişmiş; yeni prova başlatın")
         if record["state"] == "active" and self.now() >= record["deadline"]:
             return self.finish_record(record, "time_expired")
         return record

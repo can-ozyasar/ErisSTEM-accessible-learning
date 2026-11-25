@@ -1,8 +1,9 @@
 # Öğrenme, kalite yönetimi ve sınav provası
 
-Tarih: 9 Ekim 2026. Öğrenci, uzman, pilot ve yayın kontrolü akışları uygulamaya
-bağlandı. Gerçek uzman incelemesi veya katılımcı çalışması otomatik üretilmedi.
-Mevcut geliştirme kimlik doğrulaması nedeniyle kurulum yerel kullanıma yöneliktir.
+Son güncelleme: 25 Kasım 2026. Öğrenci, uzman, pilot ve yayın kontrolü akışları
+uygulamaya bağlandı. Gerçek uzman incelemesi veya katılımcı çalışması otomatik
+üretilmedi. Mevcut geliştirme kimlik doğrulaması nedeniyle kurulum yerel
+kullanıma yöneliktir.
 
 ## Açılacak ekranlar
 
@@ -68,12 +69,22 @@ diğer yardım/sağlık koşullarına veya bütün az gören adaylara otomatik u
 Adayın kendi onaylı düzenlemesi ve ilgili yılın kılavuzu esastır. Uygulama
 başvuru/sağlık değerlendirmesi yapmaz.
 
-Bu sürüm **altı özgün sentetik soruyla prosedür çalışmasıdır**: soru bulma,
-tekrar dinleme, atlama, geri dönme, yanıt değiştirme, gözden geçirme işareti,
-zaman yönetimi ve bitirme. Kısa 1–60 dakikalık çalışma veya seçilen profilin
-tam süresi seçilebilir; tam süre seçimi soru bankasını tam sınava dönüştürmez.
-Sorular konu/öğrenim düzeyine göre resmî LGS/YKS/EKPSS denemesi olarak
-doğrulanmış değildir; sınav puanı veya başarı tahmini üretilmez.
+Etkin yerel aday paketi 81 metin tabanlı AYT Tarih sorusundan oluşur; bir
+oturumda 81 soru gösterilir. Paket 63 lisans-kaydı bağlı yerel pilot sorusu ile
+18 AI kaynak incelemeli aday sorusu içerir. Son 18 sorunun 13'ünde öğrenciye
+gösterilen son kanıt demeti doğrulanmıştır; diğer 5 soru çözülebilir, ancak
+kaynaklı koçluk güvenli biçimde çekimser kalır. AI incelemesi insan tarih
+öğretmeni onayı değildir; paket resmî sınav veya öğretmen eşdeğerliği iddiası
+taşımaz. Kullanım kaydı yalnız yerel pilotu doğrular; harici API işlemeye veya
+genel yayıma izin vermez.
+
+Kısa 1–60 dakikalık çalışma veya seçilen YKS profilinin tam süresi seçilebilir;
+tam süre seçimi soru bankasını tam sınava dönüştürmez. Paket yalnız metin
+sorularını kapsar; görsel ve tablo gerektiren sorular dışarıda bırakılmıştır.
+Sınav sırasında doğru cevap, açıklama ve koçluk API yanıtında yer almaz. Yanlış
+soruda ilk ipucu doğru yanıtı göstermez; öğrenci gerekçe verdikten sonraki
+ikinci turda doğru seçenek ve kaynaklı açıklama açılır. Son kanıtı doğrulanmamış
+beş soruda kaynaklı çözüm/koçluk da açılmaz.
 
 Süre sunucu zamanına göre belirlenir. Aktif oturumda cevap anahtarı ve
 açıklama dönmez. Yanıtlar değiştirilebilir; kayıt sonrası doğruluk bildirilmez.
@@ -84,15 +95,41 @@ okuyucunun birebir karşılığı olarak tanıtılmaz.
 
 Oturum kimliği tahmin edilmesi güç rastgele kimliktir ve sekme depolamasında
 tutulur; öğrenme geçmişiyle veya katılımcı kimliğiyle bağlanmaz. Prova sırasında
-seçenek kimlikleri sunucuda geçici saklanır. Bitişte ham seçimler ve işaretler
-temizlenir; soru düzeyinde doğru/yanlış/boş ve çözüm bilgisi kalır. Kullanıcı
-provanın bütün sunucu verisini silebilir. Sekmeyi kapatmak sunucu verisini
-hemen silmez; bakım süreci bırakılan oturumu sonlandırır.
+seçenek kimlikleri sunucuda geçici saklanır. Bitişte genel cevap/işaret
+haritaları temizlenir; yanlış seçim, yalnız o soruya yönelik koçluk tamamlanana
+kadar ayrı tutulur ve ikinci turda silinir. Sonuç ve koç mesajı kullanıcı
+silene veya yedi günlük bakım süresi dolana kadar kalabilir. Kullanıcı provanın
+bütün sunucu verisini silebilir. Sekmeyi kapatmak sunucu verisini hemen silmez;
+bakım süreci bırakılan oturumu sonlandırır.
+
+### Ses ve cache davranışı
+
+Öğrenci sorularının kök ve A–E şık sesleri, Docker iç ağındaki Piper
+`tr_TR-dfki-medium` ile üretilip `tts_audio_cache` adlı yerel Docker volume'ünde
+içerik özetine göre saklanır. 25 Kasım 2026 ölçümünde 81 soru için 486 ses
+biriminin tamamı geçerli WAV verdi; cache'li API isteği p95'i 11,74 ms ölçüldü.
+Fine-tune edilmiş V5 sesin aktif paketle eşleşen dosyası yoktur; öğrenci bu
+sürümde Piper sesini duyar. Tarayıcı İngilizce sistem sesine sessizce düşmez;
+yerel ses hizmeti yoksa metin ekran okuyucuda kalır.
+
+Canlı koç mesajları da aynı yerel Piper servisiyle seslendirilir. Bu makinede
+TTS servisine 4 CPU birimi ayrıldığında aynı koç yanıtı için beş WAV isteğinin
+p95'i 2,31 sn ölçüldü. Bu küçük, tek cihazlı örneklem genellenebilir performans
+garantisi değildir. Cache normal `docker compose down`/yeniden başlatmada korunur;
+`docker compose down -v` ses cache'i ve PostgreSQL verisini siler. Başka
+makinede cache yoksa ilk ses üretimi daha uzun sürebilir. Ölçüm ayrıntıları
+[özel pilot kabul raporundadır](../reports/ayt-private-pilot-acceptance-v1.json).
+
+Soru metinlerini, öğrenci yanıtlarını veya kaynak kesitlerini Kaggle/DeepSeek'e
+göndermeyin: mevcut kullanım kaydı harici işlemeyi yetkilendirmiyor. DeepSeek
+varsayılan olarak kapalıdır. Kaynak izni ve öğrenciye açık rıza birlikte
+doğrulanmadan çevrim içi koçluğu etkinleştirmeyin.
 
 ## Kurulum ve bakım
 
 ```bash
 docker compose up --build -d
+docker compose ps
 ```
 
 API sağlık kontrolünden geçmeden web ve sınav bakım servisi başlamaz.
@@ -104,6 +141,26 @@ bağımlılıklarıyla `npm ci` kullanır. Web portu yalnız `127.0.0.1:5173`'te
 ham yanıtları temizler ve yedi günden eski prova kayıtlarını siler. Pilot
 kayıtlarını bu bakım silmez; araştırma süresi ve geri çekme süreci ayrı yönetilir.
 Bakım yalnız sayıları loglar; cevap veya gözlem metni yazmaz.
+
+Uygulamayı durdurup yeniden açmak için `docker compose down` ve sonra
+`docker compose up -d` kullanın; named volume'ler korunur. Güncelleme sonrası
+imajları yeniden derleyin: `docker compose up --build -d`. Sağlık durumunu
+`docker compose ps` ile kontrol edin; ses sorununda
+`docker compose logs --tail=100 api tts`, veritabanı/API sorununda
+`docker compose logs --tail=100 api db` kullanın. Yedek almadan
+`docker compose down -v` çalıştırmayın.
+
+PostgreSQL yedeğini repository dışında ve korumalı bir konuma alın:
+
+```bash
+docker compose exec -T db pg_dump -U eristem -d eristem | gpg --symmetric --cipher-algo AES256 --output /korumali/yol/eristem.sql.gpg
+```
+
+GPG kurulu olsun; örnek hedef yolunu size ait güvenli dizinle değiştirin ve
+parolayı komut satırına yazmayın. Kaynak PDF'leri ve `data/private` içeriğini
+ayrıca erişimi kısıtlı, şifreli yedekleyin; `.env`, kaynaklar, cevap anahtarları
+ve pilot kayıtlarını Git'e veya harici yedek servisine göndermeyin. Piper cache'i
+yeniden üretilebilir ve veritabanı yedeklemesinin yerine geçmez.
 
 Tek bakım geçişi (`apps/api` içinde, uygulamanın `DATABASE_URL` ortamıyla):
 
@@ -118,11 +175,19 @@ araştırması iddiası taşımaz; ilgili akışları yerelde birlikte çalışt
 
 ## Kontroller
 
-9 Ekim 2026 yerel doğrulaması: 172 API testi, 13 web birim testi ve 7
+9 Ekim 2026 temel doğrulaması: 172 API testi, 13 web birim testi ve 7
 uçtan uca tarayıcı senaryosu geçti. API Ruff denetimi, web derlemesi ve ESLint
 denetimi geçti. Docker API, web ve bakım servisleri çalıştırıldı; PostgreSQL'de
 yeni tablo ve altı ekranın açılması, ilgili API yanıtları ve tarayıcı çalışma
 hataları ayrıca kontrol edildi. Bu sonuçlar insan katılımcı doğrulaması değildir.
+25 Kasım 2026 ek doğrulaması, API testlerini geçici Python 3.12.3 ortamında
+846 geçti / 5 atlandı / 0 başarısız olarak yeniden çalıştırdı; web derlemesi,
+ESLint ve 16 web birim testi de geçti. Ruff 0.17.6 ilk taramada 79 bulgu verdi;
+canlı API'deki tek biçim bulgusu davranış korunarak düzeltildi ve ilgili 26 test
+ile tam API paketi yeniden geçti. Güncel taramada pipeline dosyalarında 50,
+testlerde 28 bulgu kaldı; pipeline dışındaki API uygulama dosyaları temiz.
+Ekimdeki Ruff sonucu tarihsel bir çalıştırmadır. Kalan farklı dosya bulguları
+bu kabul turunda otomatik toplu düzeltilmedi; ayrıntı kabul raporundadır.
 
 API testleri; yetkisiz erişim, eksik rıza, prova/gerçek katılım ayrımı, eski
 içerik kanıtı, kritik pilot engeli, yayın rolü, eşzamanlı kayıt çatışması,
@@ -134,9 +199,38 @@ yenileme sonrası devam, sonuç açma/silme, uzman düzeltme kaydı, pilot göre
 tamamlama ve rıza olmadan katılımcı oturumu açamama durumlarını kapsar.
 Test kanıtları ayrı geçici veritabanına yazılır; gerçek araştırma kanıtı sayılmaz.
 Otomatik axe taraması gerçek ekran okuyucu kullanıcı denemesinin yerine geçmez.
+25 Kasım 2026 ek doğrulamasında 81 soruluk gerçek yerel paket, 486 soru/şık ses
+rotası, aktif sınav cevap/koçluk gizliliği ve klavyeyle deneme→iki koçluk turu→
+veri silme akışı kontrol edildi. NVDA+Firefox, TalkBack+Chrome ve görme engelli
+katılımcı görevleri hâlâ bekliyor; sonuçlar kabul raporunda açıkça ayrılmıştır.
 
 ## Resmî kaynaklar
 
 - [MEB 2026 LGS kılavuzu](https://odsgm.meb.gov.tr/meb_iys_dosyalar/2026_04/69cfb9daaf8f2557696260_LGS_Basvuru_ve_Uygulama_K%C4%B1lavuzu_2026.pdf): genel açıklamalar ve 8.1.2.
 - [ÖSYM 2026 YKS kılavuzu](https://dokuman.osym.gov.tr/pdfdokuman/2026/YKS/basvuru_kilavuz06022026.pdf): sınav süreleri ve 7.11.2–7.11.3.
 - [ÖSYM 2026 EKPSS kılavuzu](https://dokuman.osym.gov.tr/pdfdokuman/2026/EKPSS/kilavuz_ekpd0402026.pdf): 1.2, 1.4 ve 3.1 süre tablosu.
+# DeepSeek coach (optional outbound access)
+
+The default Compose stack keeps the API on the isolated `internal` network.
+To use the experimental DeepSeek coach, first set `DEEPSEEK_COACH_ENABLED=true`
+and `DEEPSEEK_API_KEY` in the private `.env` file, then start the API with the
+opt-in overlay:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.deepseek.yml up -d api
+```
+
+This gives the API outbound network access but does not publish its port on the
+host. The model is still called only for a post-exam coaching turn when that
+student request carries explicit external-processing consent. Active-exam
+answers are never sent. Do not use this mode for real student data until the
+privacy notice and retention behavior have been reviewed. Return to the
+offline/default network with:
+
+```sh
+docker compose -f docker-compose.yml up -d api
+```
+
+The default offline stack remains the supported local-pilot configuration;
+DeepSeek is an optional external candidate and falls back to deterministic
+coaching on provider, parsing, or safety-check failure.

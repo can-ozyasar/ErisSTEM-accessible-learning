@@ -80,6 +80,26 @@ sonuç alanları `bekliyor` bırakılmalıdır.
 - Denemeyi yerel Docker kurulumu ve gerçek 81 soruluk yerel pilot paketiyle aç.
 - NVDA + Firefox için masaüstü; TalkBack + Chrome için Android kullan. Sürüm,
   cihaz, giriş yöntemi ve TTS/ekran okuyucu konuşma ayarını kaydet.
+- Android telefon, Docker'ın bilgisayarda yalnız `127.0.0.1:5173` adresine
+  bağladığı web uygulamasına doğrudan erişemez. Kendi, USB ile bağlanmış ve
+  `adb devices` çıktısında `device` görünen Android cihazında, bilgisayarda şu
+  geçici USB tünelini aç:
+
+  ```bash
+  adb reverse tcp:5173 tcp:5173
+  ```
+
+  Telefonda Chrome'u açıp `http://127.0.0.1:5173` adresine git. Bu yöntem web
+  portunu yerel ağa açmaz. Test bitince tüneli kapat:
+
+  ```bash
+  adb reverse --remove tcp:5173
+  ```
+
+  `adb devices` cihazı göstermiyorsa testi `0.0.0.0` veya LAN adresine bind
+  ederek geçici olarak açma; önce USB/ADB bağlantısını düzelt. Yalnız kendi
+  bilgisayarına güvenilen USB hata ayıklama izni ver ve testten sonra cihaz
+  yetkilendirmesini/USB hata ayıklamayı ihtiyacına göre kapat.
 - Önce yalnız klavye/dokunmatik ekran okuyucu hareketleriyle dene; uygulamanın
   isteğe bağlı sesli komutlarını ilk turda kapalı tut.
 - Test için bir yanıt seç, sayfayı yenile ve oturumu bitir. Yanlış yanıtlı
@@ -103,6 +123,22 @@ seçeneklerinden birini ve engelin kısa, kişisel veri içermeyen açıklaması
 kaydet. Bir hata bulunursa tarayıcı/ekran okuyucu sürümü, hangi öğeye odaklanıldığı
 ve beklenen/duyulan fark yazılır. Uygulamayı güncelledikten sonra aynı görev
 tekrar edilir. A1–A7'nin otomatik testte geçmesi manuel sütunu geçilmiş sayılmaz.
+
+### Güncel otomatik ve manuel test durumu
+
+25 Kasım 2026'da aktif 81 soruluk paketle dört Playwright uçtan uca
+senaryosu tekrar çalıştırıldı: tam soru akışı ve cevap gizliliği, kanıtsız
+koçlukta çekimserlik, 100 oturumluk yazma/bitirme stresi ve yalnız klavye ile
+deneme-koçluk-veri silme. Dördü geçti; kontrol edilen giriş, deneme, sonuç ve
+koç ekranlarında axe kritik ihlali sıfırdı. Ayrıntı [özel pilot kabul
+raporundadır](../reports/ayt-private-pilot-acceptance-v1.json).
+
+Bu makinede NVDA + Firefox ve TalkBack + Chrome manuel görevleri hâlâ
+çalıştırılmadı: Firefox komutu Snap paketinin kurulu olmadığını bildiriyor,
+NVDA Linux'ta kurulu değil ve adb devices Android cihaz göstermiyor. Orca
+46.1 ve Chrome 157 mevcut; fakat bu ortamda Orca ile konuşma/odak görevleri
+gözlenmedi ve istenen kombinasyonların yerine sayılmıyor. A1–A7 sonuçları
+bekliyor kalır; otomatik testlerin geçmesi bu durumu değiştirmez.
 
 ### Koşu kaydı şablonu
 

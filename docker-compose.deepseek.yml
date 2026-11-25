@@ -1,0 +1,8 @@
+# Opt-in network access for the post-exam DeepSeek coach.
+# The API remains unpublished on the host; without this override its internal
+# Docker network has no outbound DNS/internet access.
+services:
+  api:
+    networks:
+      internal: {}
+      edge: {}
